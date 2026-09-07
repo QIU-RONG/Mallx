@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mallx</groupId>
+        <artifactId>mallx</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>mall-server</artifactId>
+    <name>mall-server</name>
+    <description>MallX 启动模块：Spring Boot 入口，聚合所有业务模块</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-user</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-product</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-cart</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-inventory</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-order</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-payment</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-marketing</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-admin</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>com.mallx.MallXApplication</mainClass>
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>repackage</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

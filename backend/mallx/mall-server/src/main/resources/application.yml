@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: mallx-server
+
+  # PostgreSQL（默认值对应 deploy/docker-compose.yml 中的 mallx-postgres）
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mallx}
+    username: ${DB_USERNAME:mallx}
+    password: ${DB_PASSWORD:mallx123}
+
+mybatis-plus:
+  configuration:
+    # 数据库下划线字段 自动映射为 Java 驼峰属性
+    map-underscore-to-camel-case: true
+
+server:
+  port: 8080
