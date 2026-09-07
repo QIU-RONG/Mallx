@@ -2,10 +2,10 @@ spring:
   application:
     name: mallx-server
 
-  # PostgreSQL（默认值对应 deploy/docker-compose.yml 中的 mallx-postgres）
+  # PostgreSQL（默认值对应 deploy/docker-compose.yml 中的 mallx-postgres，宿主映射端口 5434）
   datasource:
     driver-class-name: org.postgresql.Driver
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:mallx}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5434}/${DB_NAME:mallx}
     username: ${DB_USERNAME:mallx}
     password: ${DB_PASSWORD:mallx123}
 

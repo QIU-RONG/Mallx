@@ -3,8 +3,11 @@
 # 停止：docker compose down
 # 清空数据重建：docker compose down -v
 #
-# 注意：宿主机 5432 若已被本机自装 PostgreSQL 占用，请把下面 ports 改为 "5433:5432"，
-#       并同步修改后端环境变量 DB_PORT（或 application.yml 默认值）。
+# 端口说明：
+#  - 宿主 5432 已被本机自装 PostgreSQL 占用；
+#  - 宿主 5433 在 Docker Desktop 层被"幽灵"转发占用（bind 冲突，勿用）；
+#  - 故统一映射到宿主 5434 -> 容器 5432。
+# 后端连接串默认 DB_PORT=5434（见 mall-server application.yml），两端保持一致。
 
 services:
   postgres:
@@ -17,7 +20,7 @@ services:
       POSTGRES_PASSWORD: mallx123
       TZ: Asia/Shanghai
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - mallx_pgdata:/var/lib/postgresql/data
     healthcheck:
