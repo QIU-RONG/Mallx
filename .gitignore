@@ -21,3 +21,7 @@ logs/
 # --- MallX 项目内部 ---
 .workbuddy/
 backend/_scaffold_backup_*/
+
+# --- 工具临时文件 ---
+.omo/
+.tmp-zen-models.json
