@@ -18,9 +18,13 @@ public enum ResultCode {
 
     UNAUTHORIZED(401, "未登录或登录已过期"),
 
-    FORBIDDEN(403, "没有权限访问");
+    FORBIDDEN(403, "没有权限访问"),
 
-    private final Integer code;
+    NOT_FOUND(404, "资源不存在"),
+
+    NOT_IMPLEMENTED(501, "功能未实现");
+
+    private final int code;
 
     private final String message;
 }

@@ -49,4 +49,6 @@ public class Result<T> {
     private static <T> Result<T> build(Integer code, String message, T data) {
         return new Result<>(code, message, data);
     }
+
+
 }

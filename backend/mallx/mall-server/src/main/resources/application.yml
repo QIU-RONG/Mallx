@@ -16,3 +16,10 @@ mybatis-plus:
 
 server:
   port: 8080
+
+# Swagger 文档路径与开关
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
