@@ -50,7 +50,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     public Page<ProductVO> pageProducts(long current, long size, Long categoryId, String keyword) {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
                 .eq(Product::getStatus, 1)                                    // C 端只看上架
-                .eq(categoryId != null, Product::getCategoryId, categoryId)   // 条件为 false 时不拼进 SQL
+                // 条件为 false 时不拼进 SQL；为 true 时用「自己 + 直接子分类」的 id 集合做 IN 查询
+                .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
                 .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
                 .orderByDesc(Product::getId);
 
@@ -69,6 +70,30 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         Page<ProductVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         voPage.setRecords(voList);
         return voPage;
+    }
+
+    /**
+     * 进阶：把 categoryId 展开成「它自己 + 它所有直接子分类」的 id 集合。
+     * 分类量很小（7 条），全量查一次在内存里配对即可 —— selectList(null) 表示无过滤条件（全表）。
+     * <p>
+     * ⚠️ null 必须在方法内部挡掉：Java 是实参先求值，
+     * 外层 {@code .in(categoryId != null, ...)} 的布尔只决定「条件要不要拼进 SQL」，
+     * 并不阻止 expandCategoryIds(null) 被调用，内部不挡就会 NPE。
+     * <p>
+     * 两层分类单层扫描足够；若将来出现三级分类，再改成用 ArrayDeque 逐层下钻。
+     */
+    private Set<Long> expandCategoryIds(Long categoryId) {
+        Set<Long> ids = new HashSet<>();
+        if (categoryId == null) {
+            return ids;                                    // ① 挡 null
+        }
+        ids.add(categoryId);                               // ② 自己也算（父分类下直接挂的商品要能查到）
+        for (Category c : categoryMapper.selectList(null)) {
+            if (categoryId.equals(c.getParentId())) {       // ③ 认亲：parentId == 我 → 是我的直接子分类
+                ids.add(c.getId());
+            }
+        }
+        return ids;
     }
 
     /** 批量补齐 categoryName / brandName，避免 N+1 */
