@@ -39,6 +39,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <mybatis-plus.version>3.5.17</mybatis-plus.version>
         <springdoc.version>3.1.1</springdoc.version>
+        <jjwt.version>0.13.0</jjwt.version>
     </properties>
 
     <!-- 统一管理各子模块坐标 -->
@@ -104,6 +105,25 @@
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
             </dependency>
+            <!-- JWT 三件套统一版本：BOM 一次锁住 api/impl/jackson，不用写三遍 -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-bom</artifactId>
+                <version>${jjwt.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <!--
+              覆盖 jackson-databind 版本：jjwt-root 在自己 POM 的 dependencyManagement 里
+              把它钉在 2.12.7.1，会盖过 Boot 经 import 引入的 jackson-bom(2.21.5)，
+              导致 databind 2.12.7.1 与 jackson-core 2.21.5 版本错位（可能启动即 NoSuchMethodError）。
+              这里用直接条目覆盖，与 Boot 4 托管的 Jackson 2 版本对齐。
+            -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson-2-bom.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -140,6 +160,12 @@
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

@@ -23,3 +23,8 @@ springdoc:
     enabled: true
   swagger-ui:
     enabled: true
+
+mallx:
+  jwt:
+    secret: ${JWT_SECR  ET:mallx-dev-secret-key-please-change-me-2026}
+    expire-minutes: 120

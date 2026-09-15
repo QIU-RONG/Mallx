@@ -121,6 +121,20 @@ curl http://localhost:8080/api/users          # 200，能看到用户列表
 
 > 这一步不是形式主义：改完之后如果 `/api/hello` 也变成 401，你就知道是**白名单**配错了，而不是业务写错了。
 
+**实测基线（2026-09-13 11:37，加 Security 之前）**
+
+| 接口 | 结果 |
+|---|---|
+| `GET /api/hello` | HTTP 200 |
+| `GET /api/products` | HTTP 200，total = 5 |
+| `GET /api/categories/tree` | HTTP 200，3 个根节点 |
+| `GET /api/products/1` | HTTP 200 |
+| `GET /api/users` | HTTP 200，total = 3（**顺带暴露了 password 字段，Day 06/07 要脱敏**） |
+| `GET /v3/api-docs` | HTTP 200 |
+| `GET /swagger-ui/index.html` | HTTP 200 |
+
+> 加完 Security 后重跑这张表：**白名单里的应全部保持 200，`/api/users` 应变成 401**。凡是白名单接口变 401 的，都是白名单配错。
+
 ---
 
 ## 3. 第 1 步：加依赖
@@ -146,7 +160,29 @@ curl http://localhost:8080/api/users          # 200，能看到用户列表
     <type>pom</type>
     <scope>import</scope>
 </dependency>
+
+<!--
+  必修项：覆盖 jackson-databind 版本
+  原因：jjwt-root（jjwt-jackson 的父 POM）在自己 POM 的 dependencyManagement 里
+  把 jackson-databind 钉在 2.12.7.1。这个 pin 会盖过 Boot 经 <scope>import</scope>
+  引入的 jackson-bom(2.21.5)，导致 databind 2.12.7.1 与 jackson-core 2.21.5 版本错位，
+  而 jackson-dataformat-yaml 2.21.5 等都在调 2.21.x 的 databind API → 启动即
+  NoSuchMethodError 的风险。
+  解法：在「我们自己的」dependencyManagement 里用「直接条目」覆盖
+  （直接条目优先于传递依赖 POM 的 dependencyManagement），与 Boot 托管的 Jackson 2 对齐。
+-->
+<dependency>
+    <groupId>com.fasterxml.jackson.core</groupId>
+    <artifactId>jackson-databind</artifactId>
+    <version>${jackson-2-bom.version}</version>
+</dependency>
 ```
+
+> **验证方法**（改完必跑）：
+> ```bash
+> bash mvnw.sh dependency:tree -pl mall-common | grep -iE "jjwt|jackson|spring-security"
+> ```
+> 期望看到：`spring-security-*:7.1.1`、`jjwt-*:0.13.0`、以及 **`jackson-databind:2.21.5`（不是 2.12.7.1）**。
 
 ### 3.2 mall-common：加 Security 与 jjwt 依赖
 
@@ -342,7 +378,25 @@ public Claims parse(String token) {
 ```
 </details>
 
-> **API 版本坑**：网上大量教程还是老写法 `Jwts.parser().setSigningKey(...).parseClaimsJws(...)`，在 0.13.0 下会**编译不过或告警**。记住新三件套：`parser()` → `verifyWith(key)` → `parseSignedClaims(token)`。
+> **API 版本坑（2026-09-13 用 javap 对 0.13.0 jar 实测）**：网上大量教程还是老写法
+> `Jwts.parser().setSigningKey(...).parseClaimsJws(...)`。实测结论：这些旧方法在 0.13.0 里
+> **全部保留、但全部标记了 `@Deprecated`** → **能编译通过，只是 IDE 会划删除线、javac 会告警**，
+> 并不会编译失败。之所以仍要用新写法，是因为废弃 API 会在将来大版本被真正移除。
+> 新三件套：`parser()` → `verifyWith(key)` → `parseSignedClaims(token)`。
+>
+> **builder 侧同理**（本文档骨架用的就是新写法）：
+>
+> | 已废弃 | 改用 | 说明 |
+> |---|---|---|
+> | `setSubject(s)` | `subject(s)` | |
+> | `setIssuedAt(d)` | `issuedAt(d)` | |
+> | `setExpiration(d)` | `expiration(d)` | |
+> | `setNotBefore(d)` | `notBefore(d)` | |
+> | `setSigningKey(k)` | `verifyWith(k)` | parser 侧 |
+> | `parseClaimsJws(s)` | `parseSignedClaims(s)` | parser 侧 |
+>
+> 命名规律：**新方法名 = claim 名，去掉 `set` 前缀**——因为这是 fluent builder（每个方法返回 `this`），
+> 不是真正的 setter。
 >
 > `signWith(key)` 会自动根据密钥长度选算法（32 字节 → HS256）。想显式指定可写 `signWith(key, Jwts.SIG.HS256)`。
 
@@ -555,10 +609,12 @@ public class AuthController {
     private final JwtProperties jwtProperties;
     private final UserService userService;
 
+    // ⚠️ Security 7.1.1 起 getAuthenticationManager() **不再声明受检异常**（6.x 时是 throws Exception），
+    //    所以这里**不需要** throws Exception。实测见下方 §7.4。
     public AuthController(AuthenticationConfiguration configuration,
                           JwtUtil jwtUtil,
                           JwtProperties jwtProperties,
-                          UserService userService) throws Exception {
+                          UserService userService) {
         // ⚠️ AuthenticationManager 不要自己 new，从 AuthenticationConfiguration 里取
         this.authenticationManager = configuration.getAuthenticationManager();
         this.jwtUtil = jwtUtil;
@@ -630,6 +686,34 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 
 > `@ResponseStatus(HttpStatus.UNAUTHORIZED)` 让 HTTP 状态码变成真 401（而不只是 body 里的 code=401）。前端拦截器靠 HTTP 状态码跳登录页，这样更规范。
 
+### 7.4 两个实测澄清（2026-09-14 补）
+
+**① `getAuthenticationManager()` 不需要 `throws Exception`**
+
+用 `javap` 对 **Spring Security 7.1.1** 的 `spring-security-config-7.1.1.jar` 实测：
+
+```
+public org.springframework.security.authentication.AuthenticationManager getAuthenticationManager();
+```
+
+签名里**没有** `throws`。所以构造器写成下面这样是**对的、能编译**：
+
+```java
+public AuthController(AuthenticationConfiguration configuration, ...) {   // 不需要 throws Exception
+    this.authenticationManager = configuration.getAuthenticationManager();
+}
+```
+
+> ⚠️ 网上大量教程（Security 5.x / 6.x 时期）都带着 `throws Exception`，那是**旧版本**的签名。在 7.1.1 上加了也不报错（多余而已），但**不能反过来认为不写就编译不过**。
+
+**② `LoginVO` 必须加 `@AllArgsConstructor`**
+
+参考实现里是 `new LoginVO(token, "Bearer", ..., nickname)` 一次传 6 个参数。如果 `LoginVO` 上只有 `@Data`，**没有无参构造以外的构造器** → 编译报 "找不到符号"。所以类上要 `@Data` + `@AllArgsConstructor` 两个注解都写。
+
+**③ `LoginVO.expiresIn` 用 `long` 而不是 `Long`**
+
+配置项 `mallx.jwt.expire-minutes` 是 `long`（永远有值），VO 里也用基本类型 `long` 更合适。数据库主键那种"可能为 null"的场景才用 `Long`。
+
 ---
 
 ## 8. 第 6 步：JWT 过滤器 + SecurityConfig（新知识点③）
@@ -695,7 +779,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             } catch (JwtException | IllegalArgumentException e) {
                 // 关键：这里【不能抛异常】！解析失败就当"没登录"，继续放行，
                 // 由后面的 EntryPoint 统一返回 401。抛出去会变成 500。
-                logger.debug("JWT 解析失败：{}", e.getMessage());
+                // ⚠️ 用字符串拼接，不要用 logger.debug("...{}", e.getMessage())
+                //    因为 SLF4J 有 debug(String, Throwable) 重载，传 String 会报
+                //    "String 无法转换为 Throwable"（2026-09-15 实测踩坑）
+                logger.debug("JWT 解析失败：" + e.getMessage());
             }
         }
 
@@ -993,6 +1080,34 @@ public OpenAPI mallxOpenAPI() {
 
 配好之后，Swagger 页面右上角会出现 **Authorize** 按钮：把登录拿到的 token 粘进去，之后所有接口调试都会自动带上 `Authorization` 头。
 
+### 本机实测记录（2026-09-15，8 项全绿）
+
+| # | 验收项 | 实测 | 结论 |
+|---|---|---|---|
+| 1 | 匿名 `GET /api/users` | 401 | ✅ |
+| 2 | 登录 `demo/demo123` | 200，token 三段、`{"alg":"HS256"}`、`sub:"1"` | ✅ |
+| 3 | 密码错误 | 401（非 500） | ✅ |
+| 4 | 带 token `GET /api/users` | 200，返回用户分页数据 | ✅ |
+| 5 | 篡改签名 | 401 | ✅ |
+| 5b | 伪造 payload、保留旧签名 | 401 | ✅ 证明验签真的生效 |
+| 6 | `/api/hello`、`/api/products` 白名单 | 200 | ✅ |
+| 7 | `/v3/api-docs`、`/swagger-ui.html` | 200 | ✅ |
+| 8 | 登录响应无 `Set-Cookie` | 无 | ✅ 无状态 |
+
+> ⚠️ **本机 PowerShell + curl.exe 两个环境坑（排查了半小时，务必记住）**
+>
+> **坑 1 —— PowerShell 会吃掉 JSON 里的双引号。**
+> 把 `curl.exe ... -d '{"username":"demo"}'` 写在 `.ps1` 脚本里，PowerShell 传参时引号会被剥掉，
+> 服务端收到的是 `username=demo`（首字符 `u`），直接抛
+> `HttpMessageNotReadableException: Unexpected character ('u'): was expecting double-quote to start property name` → 表现为**登录莫名其妙的 500**，而手工在命令行敲同一条命令却 200。
+> **解法**：JSON 写进临时文件，用 `--data-binary "@$bodyPath"` 传；或改用 `Invoke-RestMethod`。
+>
+> **坑 2 —— 终端/管道编码会伪造"乱码"。**
+> psql 输出 `nickname` 显示 `婕旂ず鐢ㄦ埛`、curl 原始输出经管道也显示乱码，看起来像 Spring 返回了坏数据。
+> 用 `encode(convert_to(nickname,'UTF8'),'hex')` 一验：`e6bc94e7a4bae794a8e688b7` = **正确的"演示用户"**。
+> 真正的乱码只存在于 Windows 控制台/管道的显示环节，**数据库和 Spring 都是好的**。
+> **结论**：遇到"中文乱码"先 hex 验证，别急着改代码；`curl.exe` 输出用 `-o 文件` + `Get-Content -Encoding utf8` 读，别直接吃管道。
+
 ---
 
 ## 11. 常见卡点速查
@@ -1005,6 +1120,8 @@ public OpenAPI mallxOpenAPI() {
 | 启动抛 `WeakKeyException: The specified key byte array is N bits` | `mallx.jwt.secret` 短于 32 字节（HS256 要求 256 位） |
 | 登录报 `There is no PasswordEncoder mapped for the id "null"` | 密码既没有 `{noop}` 也没有 `{bcrypt}` 前缀（Day 04 造的明文测试用户）→ 删掉或重新编码 |
 | 登录失败返回 500 而不是 401 | `GlobalExceptionHandler` 没加 `AuthenticationException` 的 handler |
+| 脚本里调登录接口稳定 500、报 `Unexpected character ('u')` | **不是后端 bug**：PowerShell 剥掉了 JSON 双引号。改用 `--data-binary "@file"` 或 `Invoke-RestMethod` |
+| 看到返回的中文是乱码 | 先用 `encode(convert_to(col,'UTF8'),'hex')` 验真身；多半只是 Windows 终端/管道显示问题 |
 | token 明明带了却还是 401 | ①忘了 `Bearer ` 前缀和空格 ②过滤器没 `addFilterBefore` ③filter 里解析成功但忘了 `SecurityContextHolder.setContext` |
 | 过滤器里抛异常导致 500 | 解析失败必须 catch 住（`JwtException`），当"未登录"处理 |
 | 401 返回的中文是乱码 | `response.setContentType("application/json;charset=UTF-8")` 漏了 charset |
@@ -1017,12 +1134,12 @@ public OpenAPI mallxOpenAPI() {
 
 ## 12. 本日成果自检清单
 
-- [ ] mall-common：`JwtProperties` / `JwtUtil` / `JwtAuthenticationFilter` / `RestAuthenticationEntryPoint` / `config/SecurityConfig` 全部落位
-- [ ] mall-user：`LoginUser` / `UserDetailsServiceImpl` / `LoginDTO` / `LoginVO` / `AuthController` 全部落位
-- [ ] 父 POM 加 jjwt BOM；mall-common 加 security + jjwt 三件套
-- [ ] `application.yml` 加 `mallx.jwt.*`
-- [ ] 编译通过、应用启动、第 10 章 8 项验收全绿
-- [ ] 白名单覆盖 Swagger 与 `/error`
+- [x] mall-common：`JwtProperties` / `JwtUtil` / `JwtAuthenticationFilter` / `RestAuthenticationEntryPoint` / `config/SecurityConfig` 全部落位
+- [x] mall-user：`LoginUser` / `UserDetailsServiceImpl` / `LoginDTO` / `LoginVO` / `AuthController` 全部落位
+- [x] 父 POM 加 jjwt BOM；mall-common 加 security + jjwt 三件套
+- [x] `application.yml` 加 `mallx.jwt.*`
+- [x] 编译通过、应用启动、第 10 章 8 项验收全绿（2026-09-15 实测）
+- [x] 白名单覆盖 Swagger 与 `/error`
 - [ ] 理解并口述：JWT 无状态原理 / 过滤器链顺序 / `{noop}` 与 BCrypt 的区别
 - [ ] Git 提交（建议信息：`feat: Day 06 登录鉴权 - JWT 签发校验 + Spring Security 7 过滤器链`）
 

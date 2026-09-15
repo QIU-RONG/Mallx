@@ -10,6 +10,31 @@
         <version>0.0.1-SNAPSHOT</version>
     </parent>
 
+    <dependencies>
+        <!-- Spring Security 本体：版本由 Boot 4.1.1 BOM 托管（=7.1.1），不要手写 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <!-- JWT：api 编译期要用（你代码里 import io.jsonwebtoken.*）；impl/jackson 只在运行期需要 -->
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+
     <artifactId>mall-common</artifactId>
     <name>mall-common</name>
     <description>MallX 公共模块：统一返回体、异常、工具类等</description>

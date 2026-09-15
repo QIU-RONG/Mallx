@@ -3,10 +3,14 @@ package com.mallx.common.exception;
 import com.mallx.common.api.Result;
 import com.mallx.common.api.ResultCode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import org.springframework.security.core.AuthenticationException;
 
 @Slf4j
 @RestControllerAdvice
@@ -37,5 +41,13 @@ public class GlobalExceptionHandler {
     public Result<Void> handleException(Exception e){
         log.error("系统异常",e);
         return Result.error(ResultCode.FAIL);
+    }
+
+
+    @ExceptionHandler(AuthenticationException.class)
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public Result<Void> handleAuthenticationException(AuthenticationException e){
+        log.warn("认证异常: {}",e.getMessage());
+        return Result.error(ResultCode.UNAUTHORIZED);
     }
 }

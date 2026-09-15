@@ -25,3 +25,11 @@ backend/_scaffold_backup_*/
 # --- 工具临时文件 ---
 .omo/
 .tmp-zen-models.json
+
+# --- 排查用临时产物（AI/手工调试生成，不入库） ---
+/_*.txt
+/build-check.txt
+/javap-out.txt
+
+# --- 本地学习/练习产物（非项目代码） ---
+/learning/
