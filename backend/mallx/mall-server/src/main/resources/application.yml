@@ -13,6 +13,8 @@ mybatis-plus:
   configuration:
     # 数据库下划线字段 自动映射为 Java 驼峰属性
     map-underscore-to-camel-case: true
+  # XML 映射文件位置：classpath*:（带星号）才能扫到兄弟模块 jar 里的 XML
+  mapper-locations: classpath*:mapper/**/*.xml
 
 server:
   port: 8080
@@ -26,5 +28,5 @@ springdoc:
 
 mallx:
   jwt:
-    secret: ${JWT_SECR  ET:mallx-dev-secret-key-please-change-me-2026}
+    secret: ${JWT_SECRET:mallx-dev-secret-key-please-change-me-2026}
     expire-minutes: 120

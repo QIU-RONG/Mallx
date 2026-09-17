@@ -1150,13 +1150,18 @@ public OpenAPI mallxOpenAPI() {
 今天你只做了"**认人**"。接下来立刻能吃到红利：
 
 ```text
-Day 07：商品写接口
-  POST   /api/products          新增商品   ← 现在能要求"必须登录"
+Day 07：商品写接口 + RBAC 授权   ← 详见 docs/daily/Day-07-商品写接口与RBAC.md
+  POST   /api/products          新增商品   ← 现在能要求"必须登录 + 有 product:create 权限"
   PUT    /api/products/{id}     改价/上下架
   DELETE /api/products/{id}     删除
-  顺手学会：@AuthenticationPrincipal 在 Controller 里直接拿当前用户；
-            从 token claim 里取角色，接上 Day 03 建好的 roles/permissions（RBAC）
+  顺手学会：@EnableMethodSecurity / @PreAuthorize 方法级鉴权；
+            接上 Day 03 建好的 admins/roles/permissions（RBAC）；
+            新增 mall-admin 模块承载管理员体系
 ```
+
+> ⚠️ Day 07 会踩到一个坑：容器里**只允许存在 1 个 `UserDetailsService` Bean**，
+> 第二个会让全局 `AuthenticationManager` **静默不注册**，直接把今天的登录打挂。
+> 所以管理端**不实现该接口** —— 详见 Day 07 文档第 6.3 步。
 
 再往后：购物车要挂 `user_id`、订单要记"谁下的单"——**它们现在终于有"人"可挂了**。
 

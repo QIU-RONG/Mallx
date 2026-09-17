@@ -169,3 +169,24 @@ INSERT INTO role_permissions (role_id, permission_id)
 SELECT 3, p.id FROM permissions p
 WHERE p.code LIKE 'order:%'
   AND NOT EXISTS (SELECT 1 FROM role_permissions rp WHERE rp.role_id = 3 AND rp.permission_id = p.id);
+
+-- ------------------------------------------------------------
+-- 九、序列校准（★ 必需，漏了它业务 INSERT 必然主键冲突）
+-- ------------------------------------------------------------
+-- 上面的种子数据全是"显式指定 id"插入的，而 PostgreSQL 的序列**不会因此前进** ——
+-- 序列仍停在初始值，表里却已经有 id = 1..N 的数据。
+-- 后果：业务侧第一次 INSERT 时 DEFAULT nextval(...) 吐出 2（或 1），直接撞已有主键：
+--   ERROR: duplicate key value violates unique constraint "products_pkey"
+-- 所以必须把每个序列推到「当前最大 id」，COALESCE 兜住"表为空"的极端情况。
+--
+-- 这 8 张表都是显式指定 id 插入的：categories / brands / products /
+-- product_skus / users / roles / permissions / admins。
+-- （product_images、inventories、admin_roles、role_permissions 没指定 id，无需校准。）
+SELECT setval(pg_get_serial_sequence('categories',   'id'), COALESCE((SELECT MAX(id) FROM categories),   1));
+SELECT setval(pg_get_serial_sequence('brands',       'id'), COALESCE((SELECT MAX(id) FROM brands),       1));
+SELECT setval(pg_get_serial_sequence('products',     'id'), COALESCE((SELECT MAX(id) FROM products),     1));
+SELECT setval(pg_get_serial_sequence('product_skus', 'id'), COALESCE((SELECT MAX(id) FROM product_skus), 1));
+SELECT setval(pg_get_serial_sequence('users',        'id'), COALESCE((SELECT MAX(id) FROM users),        1));
+SELECT setval(pg_get_serial_sequence('roles',        'id'), COALESCE((SELECT MAX(id) FROM roles),        1));
+SELECT setval(pg_get_serial_sequence('permissions',  'id'), COALESCE((SELECT MAX(id) FROM permissions),  1));
+SELECT setval(pg_get_serial_sequence('admins',       'id'), COALESCE((SELECT MAX(id) FROM admins),       1));

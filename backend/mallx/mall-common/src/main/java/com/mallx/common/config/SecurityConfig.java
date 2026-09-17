@@ -1,10 +1,12 @@
 package com.mallx.common.config;
 
 import com.mallx.common.security.JwtAuthenticationFilter;
+import com.mallx.common.security.RestAccessDeniedHandler;
 import com.mallx.common.security.RestAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -16,15 +18,20 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
+    private final RestAccessDeniedHandler restAccessDeniedHandler;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
-                          RestAuthenticationEntryPoint restAuthenticationEntryPoint) {
+                          RestAuthenticationEntryPoint restAuthenticationEntryPoint,
+                          RestAccessDeniedHandler restAccessDeniedHandler) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.restAuthenticationEntryPoint = restAuthenticationEntryPoint;
+        this.restAccessDeniedHandler = restAccessDeniedHandler;
+
     }
 
     @Bean
@@ -39,13 +46,15 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             // ④ 白名单 + 其余全部要登录（顺序重要：anyRequest 必须放最后）
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/hello", "/error").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/admin/login","/api/hello","/error").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
                 .anyRequest().authenticated()
             )
-            // ⑤ 未登录时返回统一 JSON 401
-            .exceptionHandling(ex -> ex.authenticationEntryPoint(restAuthenticationEntryPoint))
+            // ⑤ 认证失败返回 401、授权失败返回 403，统一 JSON（一次配全，别拆成两次调用）
+            .exceptionHandling(ex -> ex
+                .authenticationEntryPoint(restAuthenticationEntryPoint)
+                .accessDeniedHandler(restAccessDeniedHandler))
             // ⑥ 把 JWT 过滤器插在用户名密码过滤器之前
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

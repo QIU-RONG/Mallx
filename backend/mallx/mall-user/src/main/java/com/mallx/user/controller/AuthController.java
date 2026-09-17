@@ -2,13 +2,13 @@ package com.mallx.user.controller;
 
 
 import com.mallx.common.api.Result;
+import com.mallx.common.dto.LoginDTO;
 import com.mallx.common.security.JwtProperties;
 import com.mallx.common.security.JwtUtil;
-import com.mallx.user.dto.LoginDTO;
+import com.mallx.common.vo.LoginVO;
 import com.mallx.user.entity.User;
 import com.mallx.user.security.LoginUser;
 import com.mallx.user.service.UserService;
-import com.mallx.user.vo.LoginVO;
 import jakarta.validation.Valid;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;

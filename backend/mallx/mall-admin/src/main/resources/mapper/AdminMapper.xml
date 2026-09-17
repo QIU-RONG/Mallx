@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.admin.mapper.AdminMapper">
+
+    <!-- 管理员 → 角色 → 权限：穿过 admin_roles、role_permissions 两张中间表 -->
+    <select id="selectPermissionCodesByAdminId" resultType="java.lang.String">
+        SELECT DISTINCT p.code
+        FROM admin_roles ar
+                 JOIN role_permissions rp ON rp.role_id = ar.role_id
+                 JOIN permissions p        ON p.id = rp.permission_id
+        WHERE ar.admin_id = #{adminId}
+          AND p.status = 1
+    </select>
+
+    <select id="selectRoleCodesByAdminId" resultType="java.lang.String">
+        SELECT r.code
+        FROM admin_roles ar
+                 JOIN roles r ON r.id = ar.role_id
+        WHERE ar.admin_id = #{adminId}
+          AND r.status = 1
+    </select>
+
+</mapper>

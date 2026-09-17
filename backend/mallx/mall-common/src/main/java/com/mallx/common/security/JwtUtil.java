@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 
 /**
  * JWT 工具：签发 + 解析。
@@ -35,6 +36,7 @@ public class JwtUtil {
         JwtBuilder builder = Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("username", username)
+                .claim("type", "USER")
                 .issuedAt(now)
                 .notBefore(now)
                 .expiration(expiration)
@@ -50,4 +52,22 @@ public class JwtUtil {
                 .parseSignedClaims(token)
                 .getPayload();
     }
+
+    public String generateForAdmin(Long adminId, String username, List<String> permissions) {
+        Date now = new Date();
+        Date expiration = new Date(now.getTime() + props.getExpireMinutes() * 60_000L);
+
+        JwtBuilder builder =  Jwts.builder().subject(String.valueOf(adminId))
+                .claim("username",username)
+                .claim("type","ADMIN")
+                .claim("perms",permissions)
+                .issuedAt(now)
+                .notBefore(now)
+                .expiration(expiration)
+                .signWith(key);
+
+        return builder.compact();
+    }
+
+
 }

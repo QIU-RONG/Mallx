@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
+import com.mallx.product.dto.ProductCreateDTO;
+import com.mallx.product.dto.ProductUpdateDTO;
 import com.mallx.product.entity.Brand;
 import com.mallx.product.entity.Category;
 import com.mallx.product.entity.Product;
@@ -170,5 +172,42 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         vo.setImages(images.stream().map(ProductImage::getImageUrl).toList());
 
         return vo;
+    }
+
+    @Override
+    public Long createProduct(ProductCreateDTO productCreateDTO) {
+        if (categoryMapper.selectById(productCreateDTO.getCategoryId()) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "分类不存在");
+        }
+        Product product = new Product();
+        BeanUtils.copyProperties(productCreateDTO, product);
+        if(product.getStatus() == null){
+            product.setStatus(1);
+        }
+        this.save(product);
+        return product.getId();
+    }
+
+    @Override
+    public void updateProduct(Long id, ProductUpdateDTO productUpdateDTO) {
+        // ① 先确认存在，否则 updateById 会"静默成功"（影响行数 0，但接口返回 200）
+        if (this.getById(id) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        // ② copyProperties 是"无脑全拷"：dto 里没传的字段会被拷成 null
+        //    但这不会清空 DB —— MyBatis-Plus 默认 NOT_NULL 更新策略，null 字段不拼进 SET
+        Product update = new Product();
+        BeanUtils.copyProperties(productUpdateDTO, update);
+        // ③ 必须带 id，否则 updateById 不知道改哪一行
+        update.setId(id);
+        this.updateById(update);
+    }
+
+    @Override
+    public void deleteProduct(Long id) {
+        if (this.getById(id) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        this.removeById(id);
     }
 }

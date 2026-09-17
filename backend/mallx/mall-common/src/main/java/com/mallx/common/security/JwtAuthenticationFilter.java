@@ -8,6 +8,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -48,13 +51,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = Long.valueOf(claims.getSubject());
                 String username = claims.get("username", String.class);
 
+
+                List<GrantedAuthority> authorities = new ArrayList<>();
+                List<?> perms = claims.get("perms",List.class);
+                if(perms != null){
+                    for(Object p  : perms){
+                        authorities.add(new SimpleGrantedAuthority(String.valueOf(p)));
+                    }
+                }
+
                 // ② 把身份登记到 SecurityContext
                 //    三参数构造器：principal, credentials, authorities
                 //    第二位传 null 表示不保留凭证（密码），第三位权限列表 Day 07 再接 RBAC
                 //    ⚠️ 声明成 UsernamePasswordAuthenticationToken 而不是 Authentication 接口，
                 //       因为 setDetails() 在实现类上，接口 Authentication 里没有这个方法
                 UsernamePasswordAuthenticationToken authentication =
-                        new UsernamePasswordAuthenticationToken(userId, null, List.of());
+                        new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 // 附加客户端 IP、SessionId 等元信息（Day 07 做登录日志/风控时用得到）
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
