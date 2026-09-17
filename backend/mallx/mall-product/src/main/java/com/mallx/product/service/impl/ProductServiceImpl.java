@@ -7,6 +7,7 @@ import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
 import com.mallx.product.dto.ProductCreateDTO;
 import com.mallx.product.dto.ProductUpdateDTO;
+import com.mallx.product.dto.SkuCreateDTO;
 import com.mallx.product.entity.Brand;
 import com.mallx.product.entity.Category;
 import com.mallx.product.entity.Product;
@@ -23,6 +24,7 @@ import com.mallx.product.vo.ProductVO;
 import com.mallx.product.vo.SkuVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -174,18 +176,70 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return vo;
     }
 
+    /**
+     * 新建商品：商品主表 + N 个 SKU + M 张图集，三张表同一个事务。
+     * <p>
+     * 【为什么必须 @Transactional】
+     * 这三张表是「1 主 + 2 子」的关系，缺任何一半都是解释不通的脏数据：
+     * 只有商品没有 SKU → 用户点进去无货可买；只有 SKU 没有商品 → 外键直接拒绝。
+     * 任一步失败都必须整体撤销，否则库里会留下半成品。
+     * <p>
+     * 【rollbackFor 为什么写 Exception.class】
+     * 默认只对 RuntimeException / Error 回滚，抛受检异常时会静默不回滚。
+     * 显式写全，避免将来加进来一个受检异常就出漏洞。
+     */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Long createProduct(ProductCreateDTO productCreateDTO) {
+        // ① 校验分类存在 —— 不是给外键兜底，是为了给出人能看懂的提示
         if (categoryMapper.selectById(productCreateDTO.getCategoryId()) == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "分类不存在");
         }
+
+        // ② 商品主表
         Product product = new Product();
         BeanUtils.copyProperties(productCreateDTO, product);
-        if(product.getStatus() == null){
+        if (product.getStatus() == null) {
             product.setStatus(1);
         }
         this.save(product);
-        return product.getId();
+        // 主表落库后才有自增 id，下面两张子表的外键全靠它
+        Long productId = product.getId();
+
+        // ③ 图集：数组下标 i 就是 sort_order
+        List<String> images = productCreateDTO.getImages();
+        if (images != null && !images.isEmpty()) {
+            for (int i = 0; i < images.size(); i++) {
+                String url = images.get(i);
+                // 短路求值：url == null 时右边不求值，顺带挡掉 null.isBlank() 的 NPE
+                if (url == null || url.isBlank()) {
+                    continue;
+                }
+                ProductImage img = new ProductImage();
+                img.setProductId(productId);
+                img.setImageUrl(url);
+                img.setSortOrder(i);
+                productImageMapper.insert(img);
+            }
+        }
+
+        // ④ SKU：productId 必须由服务端填，绝不能用客户端传的
+        //    attributes 是 jsonb，靠 ProductSku 上的 JsonbMapTypeHandler 写进去
+        List<SkuCreateDTO> skus = productCreateDTO.getSkus();
+        if (skus != null && !skus.isEmpty()) {
+            for (SkuCreateDTO s : skus) {
+                ProductSku sku = new ProductSku();
+                BeanUtils.copyProperties(s, sku);
+                sku.setProductId(productId);
+                if (sku.getStatus() == null) {
+                    sku.setStatus(1);
+                }
+                // ★ 唯一约束冲突就发生在这一行 → 异常穿出代理 → 整个事务回滚
+                productSkuMapper.insert(sku);
+            }
+        }
+
+        return productId;
     }
 
     @Override
@@ -203,11 +257,29 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         this.updateById(update);
     }
 
+    /**
+     * 删除商品：必须先清子表，再删主表 —— 顺序与新增时**正好相反**。
+     * <p>
+     * 【为什么不能只 removeById(products)】
+     * product_skus / product_images 上都有指向 products(id) 的外键，且都是默认的
+     * NO ACTION（confdeltype='a'）：只要子表还有引用行，PG 就会直接拒绝并报
+     * "update or delete on table products violates foreign key constraint ..."。
+     * <p>
+     * 【为什么也要 @Transactional】
+     * 这三次删除是一个整体：子表删完而主表删失败 → 商品还在、规格却没了；
+     * 子表删一半就断 → 留下半清理状态。要么全删干净，要么都别动。
+     */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteProduct(Long id) {
         if (this.getById(id) == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
+        // ★ 顺序不能反：先子后主
+        productSkuMapper.delete(new LambdaQueryWrapper<ProductSku>()
+                .eq(ProductSku::getProductId, id));
+        productImageMapper.delete(new LambdaQueryWrapper<ProductImage>()
+                .eq(ProductImage::getProductId, id));
         this.removeById(id);
     }
 }
