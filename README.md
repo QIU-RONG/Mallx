@@ -26,7 +26,7 @@ MallX/
 │       ├── 01-schema.sql  建表（22 张核心表 + 全文搜索触发器）
 │       ├── 02-index.sql   索引（含 JSONB GIN / 全文 GIN / pg_trgm）
 │       └── 03-data.sql    初始化数据（分类/品牌/商品/RBAC）
-├── frontend/             # Vue 3 前端
+├── frontend/             # Vue 3 前端（暂缓；V1.0 界面由 Swagger UI 承担）
 ├── deploy/
 │   └── docker-compose.yml # Docker PostgreSQL（宿主 5434 -> 容器 5432）
 ├── docs/
@@ -74,7 +74,8 @@ GET /api/db-check   -> {code:200, data:"DB 连接成功: PostgreSQL 16.15 ..."}
 ## 版本规划
 
 ```text
-V1.0 模块化单体        （进行中：数据库设计已完成）
+V1.0 模块化单体 · 后端 API   （进行中：Day 10 / 约 22 个 Day）
+     界面由 Swagger UI 承担（/swagger-ui.html），独立前端暂缓
 V1.1 Redis + RabbitMQ
 V1.2 性能优化
 V1.3 Docker + 阿里云
