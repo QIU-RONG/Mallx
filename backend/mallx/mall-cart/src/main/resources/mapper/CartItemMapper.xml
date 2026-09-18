@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.cart.mapper.CartItemMapper">
+
+    <select id="selectSkuForCart" resultType="com.mallx.cart.vo.SkuForCartVO">
+        SELECT s.id AS sku_id,
+               s.name AS sku_name,
+               s.price,
+               s.is_deleted AS sku_deleted,
+               p.status AS product_status,
+               p.is_deleted AS product_deleted,
+               COALESCE(i.available_stock, 0) AS available_stock
+        FROM product_skus s
+                 LEFT JOIN products p ON p.id = s.product_id
+                 LEFT JOIN inventories i ON i.sku_id = s.id
+        WHERE s.id = #{skuId}
+    </select>
+
+    <!-- 购物车列表：一条 SQL 出全部展示字段（跨模块读 product_skus / products / inventories）。
+         ★ 必须 LEFT JOIN —— 否则软删/下架的项会从购物车里凭空消失。
+         ★ 故意【不】加 AND s.is_deleted = 0 / AND p.status = 1：失效判定留给 Java，
+           这样"失效项仍返回、只是不算钱"才做得到。 -->
+    <select id="selectCartView" resultType="com.mallx.cart.vo.CartItemVO">
+        SELECT c.id,
+               c.sku_id,
+               c.quantity,
+               c.selected,
+               s.product_id,
+               s.name   AS sku_name,
+               s.price,
+               COALESCE(s.image, p.main_image)  AS image,
+               p.name   AS product_name,
+               p.status AS product_status,
+               COALESCE(p.is_deleted, 0)        AS product_deleted,
+               COALESCE(s.is_deleted, 0)        AS sku_deleted,
+               COALESCE(i.available_stock, 0)   AS available_stock
+        FROM cart_items c
+                 LEFT JOIN product_skus s ON s.id = c.sku_id
+                 LEFT JOIN products     p ON p.id = s.product_id
+                 LEFT JOIN inventories  i ON i.sku_id = c.sku_id
+        WHERE c.user_id = #{userId}
+        ORDER BY c.id DESC
+    </select>
+
+</mapper>
