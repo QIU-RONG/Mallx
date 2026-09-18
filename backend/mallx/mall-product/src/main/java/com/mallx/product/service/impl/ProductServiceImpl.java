@@ -8,6 +8,7 @@ import com.mallx.common.exception.BusinessException;
 import com.mallx.product.dto.ProductCreateDTO;
 import com.mallx.product.dto.ProductUpdateDTO;
 import com.mallx.product.dto.SkuCreateDTO;
+import com.mallx.product.dto.SkuUpdateDTO;
 import com.mallx.product.entity.Brand;
 import com.mallx.product.entity.Category;
 import com.mallx.product.entity.Product;
@@ -242,32 +243,126 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return productId;
     }
 
+    /**
+     * 修改商品 —— 局部更新语义（类 PATCH），三段式：主表 → SKU 差分 → 图集。
+     * <p>
+     * 【为什么整段在一个事务里】三张表的写操作必须同生共死：SKU 差分到一半失败
+     * （比如某个 id 不属于本商品而抛异常），主表那句 UPDATE 也要跟着回滚，
+     * 否则会出现"标题改了、规格没改"的半成品状态。
+     * <p>
+     * 【集合字段的三种语义】null=不动；[]=清空；非空=以本次为准对齐。
+     */
+    @Transactional(rollbackFor = Exception.class)
     @Override
     public void updateProduct(Long id, ProductUpdateDTO productUpdateDTO) {
-        // ① 先确认存在，否则 updateById 会"静默成功"（影响行数 0，但接口返回 200）
+        // ==================== ① 主表 ====================
+        // 先确认存在，否则 updateById 会"静默成功"（影响行数 0，但接口返回 200）
         if (this.getById(id) == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
-        // ② copyProperties 是"无脑全拷"：dto 里没传的字段会被拷成 null
-        //    但这不会清空 DB —— MyBatis-Plus 默认 NOT_NULL 更新策略，null 字段不拼进 SET
+        // 局部更新下，"没传 name"合法、"传了空串"不合法 —— 这个区别 @NotBlank 表达不了
+        if (productUpdateDTO.getName() != null && productUpdateDTO.getName().isBlank()) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "商品名称不能为空");
+        }
+        // copyProperties 是"无脑全拷"：dto 里没传的字段会被拷成 null，但这不会清空 DB ——
+        // MyBatis-Plus 默认 NOT_NULL 更新策略，null 字段不拼进 SET。
+        // 另：images / skus 会被静默跳过（Product 实体没有这两个字段），不报错也不警告，
+        // 这正是下面手工处理它们的原因。
         Product update = new Product();
         BeanUtils.copyProperties(productUpdateDTO, update);
-        // ③ 必须带 id，否则 updateById 不知道改哪一行
         update.setId(id);
         this.updateById(update);
+
+        // ==================== ② SKU 差分 ====================
+        // 注意这里用 if 包住而不是提前 return —— 第 ③ 段还要往下走。
+        List<SkuUpdateDTO> skuDtos = productUpdateDTO.getSkus();
+        if (skuDtos != null) {
+            // 2.1 查出现有的并装进 Map<id, 行>，作为"还被提到过"的候选池
+            //     ★ @TableLogic 让这条 selectList 自动带上 AND is_deleted=0，
+            //       所以已软删的 SKU 不在池子里 —— PUT 不负责复活数据（那是回收站的事）
+            List<ProductSku> existing = productSkuMapper.selectList(
+                    new LambdaQueryWrapper<ProductSku>().eq(ProductSku::getProductId, id));
+            Map<Long, ProductSku> untouched = new HashMap<>();
+            for (ProductSku s : existing) {
+                untouched.put(s.getId(), s);
+            }
+
+            // 2.2 遍历本次提交的：没 id → 新增；有 id → 修改
+            for (SkuUpdateDTO dto : skuDtos) {
+                if (dto.getId() == null) {
+                    // ---- 新增规格 ----
+                    ProductSku sku = new ProductSku();
+                    BeanUtils.copyProperties(dto, sku);     // dto.id 本来就是 null，正好
+                    sku.setProductId(id);                   // ★ 归属只能服务端填，客户端传的不信
+                    if (sku.getStatus() == null) {
+                        sku.setStatus(1);
+                    }
+                    // 唯一约束冲突（sku_code 撞库）就在这里抛 → 整个事务回滚
+                    productSkuMapper.insert(sku);
+                } else {
+                    // ---- 修改规格 ----
+                    // ★ remove 而非 get：取值与"打标记为已处理"是同一步操作。
+                    //   若用 get 不删，2.3 就会把这一行也当成"没提到"而误删。
+                    ProductSku old = untouched.remove(dto.getId());
+                    if (old == null) {
+                        // 两种可能：这个 id 根本不存在，或它属于别的商品。
+                        // 一律当越权处理并拒绝 —— 这是 IDOR 防线，绝不能静默 continue：
+                        // 不校验的话，PUT /api/products/2 + 商品1的 skuId 就能改掉商品1的价格。
+                        throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                                "SKU 不属于该商品");
+                    }
+                    ProductSku sku = new ProductSku();
+                    BeanUtils.copyProperties(dto, sku);
+                    sku.setId(dto.getId());                 // 改哪一行
+                    sku.setProductId(id);                   // ★ 归属钉死，不许客户端把 SKU 挪走
+                    // 与主表同理：dto 里没传的字段是 null，不会被拼进 SET
+                    productSkuMapper.updateById(sku);
+                }
+            }
+
+            // 2.3 Map 里剩下的 = 库里存在、本次没提到的 → 软删
+            //     遍历结束后的"残余"天然就是要删的，不需要两层嵌套循环去比对。
+            //     传 [] 时 2.2 一次都不进，这里就把全部 SKU 软删 —— 清空语义是白送的。
+            for (ProductSku orphan : untouched.values()) {
+                // ★ deleteById 不是物理删：@TableLogic 会改写成
+                //   UPDATE product_skus SET is_deleted=1 WHERE id=? AND is_deleted=0
+                //   物理删会撞 fk_inventory_sku / fk_cart_sku（都是 NO ACTION）
+                productSkuMapper.deleteById(orphan.getId());
+            }
+        }
+
+        // ==================== ③ 图集 ==================== （第 5 步）
+        List<String> images = productUpdateDTO.getImages();
+        if(images != null){
+
+            productImageMapper.delete(new LambdaQueryWrapper<ProductImage>().eq(ProductImage::getProductId, id));
+            for (int i = 0; i < images.size(); i++){
+                String url = images.get(i);
+                if(url == null || url.isBlank()) continue;
+                ProductImage img = new ProductImage();
+                img.setProductId(id);
+                img.setImageUrl(url);
+                img.setSortOrder(i);
+                productImageMapper.insert(img);
+            }
+        }
     }
 
     /**
-     * 删除商品：必须先清子表，再删主表 —— 顺序与新增时**正好相反**。
+     * 删除商品：软删除主表一行，子表一行不动。
      * <p>
-     * 【为什么不能只 removeById(products)】
-     * product_skus / product_images 上都有指向 products(id) 的外键，且都是默认的
-     * NO ACTION（confdeltype='a'）：只要子表还有引用行，PG 就会直接拒绝并报
-     * "update or delete on table products violates foreign key constraint ..."。
+     * 【为什么不再删子表】子表的唯一入口是 product_id，主表被 is_deleted=1 过滤掉之后
+     * 整棵子树都不可达，不需要连锁标记。反过来做反而会制造"孤儿商品"：
+     * 商品恢复了，被标记删的 SKU 和物理删掉的图集却回不来。
      * <p>
-     * 【为什么也要 @Transactional】
-     * 这三次删除是一个整体：子表删完而主表删失败 → 商品还在、规格却没了；
-     * 子表删一半就断 → 留下半清理状态。要么全删干净，要么都别动。
+     * 【为什么外键不再是问题】@TableLogic 把 removeById 改写成了
+     * UPDATE products SET is_deleted=1 WHERE id=? AND is_deleted=0 ——
+     * 全程没有 DELETE 语句，fk_sku_product / fk_inventory_sku / fk_review_product
+     * 这些 NO ACTION 外键根本不会被触发。
+     * <p>
+     * 【为什么保留 @Transactional】单条 UPDATE 自身是原子的，但 getById 判存在 +
+     * removeById 是一对"检查—再操作"，且删商品在真实项目里总会陆续加上写日志、
+     * 清缓存、发通知等语句。留着事务边界成本≈0，省得将来补。
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -275,11 +370,6 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         if (this.getById(id) == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
-        // ★ 顺序不能反：先子后主
-        productSkuMapper.delete(new LambdaQueryWrapper<ProductSku>()
-                .eq(ProductSku::getProductId, id));
-        productImageMapper.delete(new LambdaQueryWrapper<ProductImage>()
-                .eq(ProductImage::getProductId, id));
         this.removeById(id);
     }
 }

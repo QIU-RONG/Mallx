@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS products (
     description   TEXT,
     main_image    VARCHAR(500),
     status        SMALLINT     NOT NULL DEFAULT 0,
+    is_deleted    SMALLINT     NOT NULL DEFAULT 0,      -- ★ Day 09：0=正常 1=已删除（软删除）
     search_vector TSVECTOR,
     created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -103,6 +104,7 @@ CREATE TABLE IF NOT EXISTS product_skus (
     attributes      JSONB,
     image           VARCHAR(500),
     status          SMALLINT      NOT NULL DEFAULT 1,
+    is_deleted      SMALLINT      NOT NULL DEFAULT 0,    -- ★ Day 09：0=正常 1=已删除（软删除）
     created_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at      TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_sku_product FOREIGN KEY (product_id) REFERENCES products(id)
@@ -381,3 +383,16 @@ CREATE TRIGGER trg_products_search_vector
     ON products
     FOR EACH ROW
     EXECUTE FUNCTION products_search_vector_update();
+
+-- ============================================================
+-- 十二、软删除列（Day 09 追加）
+-- 说明：上面 CREATE TABLE IF NOT EXISTS 对已存在的库不会加列，
+--       所以老库要靠这一段 ALTER 补齐；IF NOT EXISTS 保证重复执行不报错。
+-- ============================================================
+
+ALTER TABLE products     ADD COLUMN IF NOT EXISTS is_deleted SMALLINT NOT NULL DEFAULT 0;
+ALTER TABLE product_skus ADD COLUMN IF NOT EXISTS is_deleted SMALLINT NOT NULL DEFAULT 0;
+
+-- 顺带给查询加索引（列表查询会带 is_deleted = 0）
+CREATE INDEX IF NOT EXISTS idx_products_is_deleted     ON products(is_deleted);
+CREATE INDEX IF NOT EXISTS idx_product_skus_is_deleted ON product_skus(is_deleted);
