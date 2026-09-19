@@ -222,10 +222,23 @@ def main():
     say("\n[4] ★ DOES THE AUDIT HAVE TEETH?  (bypass the service, inside a ROLLED-BACK tx)")
     say("  A raw UPDATE that never goes through InventoryService should make the ledger")
     say("  disagree with the table. Everything below runs in one transaction and is rolled back.")
+    say("  ⚠️ 必须先做一次【合法】变动给账本打底：审计 SQL 里有")
+    say("     COALESCE(f.before_stock, i.available_stock) 这个回退 —— 账本为空时")
+    say("     期望值直接退化成现值，审计【永远自洽】，任何改动都测不出漂移。")
+    say("     （Day 15 发现：收官清理清空账本后，本测试必然假失败。）")
     tgt = 4
     before = rows("SELECT available_stock FROM inventories WHERE sku_id=%d" % tgt, 1)[0][0]
     raw = psql("""
 BEGIN;
+-- (1) 先做一次【合法】变动：库存与账本同时改 -> 此刻审计应当自洽
+UPDATE inventories SET available_stock = available_stock - 1 WHERE sku_id = %d;
+INSERT INTO inventory_logs (sku_id, change_quantity, before_stock, after_stock, type, reference_id)
+SELECT %d, -1, available_stock + 1, available_stock, 'ORDER_LOCK', NULL
+  FROM inventories WHERE sku_id = %d;
+SELECT 'LEGIT: available=' || available_stock || '  sku%d ledger rows='
+       || (SELECT count(*) FROM inventory_logs WHERE sku_id = %d)
+  FROM inventories WHERE sku_id = %d;
+-- (2) 再做一次【绕过服务】的裸 UPDATE：只改库存、不留流水 -> 审计必须报警
 UPDATE inventories SET available_stock = available_stock - 1 WHERE sku_id = %d;
 SELECT 'MUTATED: available is now ' || available_stock FROM inventories WHERE sku_id = %d;
 %s
@@ -238,7 +251,7 @@ SELECT 'VERDICT: ' || (COALESCE(f.before_stock, i.available_stock) + COALESCE(f.
  WHERE i.sku_id = %d;
 ROLLBACK;
 SELECT 'AFTER ROLLBACK: available is ' || available_stock FROM inventories WHERE sku_id = %d;
-""" % (tgt, tgt, AUDIT_SQL, tgt, tgt))
+""" % (tgt, tgt, tgt, tgt, tgt, tgt, tgt, tgt, AUDIT_SQL, tgt, tgt))
     for line in raw.splitlines():
         say("  %s" % line)
     chk("★ audit reported DRIFT while the bypassed write was in effect",

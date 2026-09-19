@@ -6,9 +6,9 @@ Day 14 Step 5 -- reconciliation: inventory_logs vs inventories, per SKU
     ledger_derived = first_row.before_stock + SUM(change_quantity)
     sku  available first_before   sum_chg ledger_derived  last_after  verdict
     1          100           -         -            100           -  OK
-    2           80          80        +0             80          80  OK
+    2           80           -         -             80           -  OK
     3           56           -         -             56           -  OK
-    4          143         147        -4            143         143  OK
+    4          147           -         -            147           -  OK
     5          117           -         -            117           -  OK
     6           40           -         -             40           -  OK
     7           90           -         -             90           -  OK
@@ -21,7 +21,7 @@ Day 14 Step 5 -- reconciliation: inventory_logs vs inventories, per SKU
     1    100/100/0/0                  100/100/0/0                  = baseline
     2    80/80/0/0                    80/80/0/0                    = baseline
     3    60/56/0/4                    60/56/0/4                    = baseline
-    4    150/147/0/3                  150/143/0/7                  MOVED (ledger explains)
+    4    150/147/0/3                  150/147/0/3                  = baseline
     5    120/117/0/3                  120/117/0/3                  = baseline
     6    40/40/0/0                    40/40/0/0                    = baseline
     7    90/90/0/0                    90/90/0/0                    = baseline
@@ -33,21 +33,28 @@ Day 14 Step 5 -- reconciliation: inventory_logs vs inventories, per SKU
 [4] ★ DOES THE AUDIT HAVE TEETH?  (bypass the service, inside a ROLLED-BACK tx)
   A raw UPDATE that never goes through InventoryService should make the ledger
   disagree with the table. Everything below runs in one transaction and is rolled back.
+  ⚠️ 必须先做一次【合法】变动给账本打底：审计 SQL 里有
+     COALESCE(f.before_stock, i.available_stock) 这个回退 —— 账本为空时
+     期望值直接退化成现值，审计【永远自洽】，任何改动都测不出漂移。
+     （Day 15 发现：收官清理清空账本后，本测试必然假失败。）
   BEGIN
   UPDATE 1
-  MUTATED: available is now 142
+  INSERT 0 1
+  LEGIT: available=146  sku4 ledger rows=1
+  UPDATE 1
+  MUTATED: available is now 145
   1|100|-1|0|100|-1|t|t
-  2|80|80|0|80|80|t|t
+  2|80|-1|0|80|-1|t|t
   3|56|-1|0|56|-1|t|t
-  4|142|147|-4|143|143|f|f
+  4|145|147|-1|146|146|f|f
   5|117|-1|0|117|-1|t|t
   6|40|-1|0|40|-1|t|t
   7|90|-1|0|90|-1|t|t
   VERDICT: false
   ROLLBACK
-  AFTER ROLLBACK: available is 143
-  sku4 available: 143 -> 143 (rolled back)
+  AFTER ROLLBACK: available is 147
+  sku4 available: 147 -> 147 (rolled back)
 
 ==============================================================================
-ASSERTIONS: 28 / 28 passed
+ASSERTIONS: 27 / 27 passed
 ==============================================================================
