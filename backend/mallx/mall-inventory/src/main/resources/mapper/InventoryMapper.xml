@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.inventory.mapper.InventoryMapper">
+
+    <!-- ★★ Day 12 的核心 SQL：条件扣减（原子动作）
+         判定与扣减在同一条语句里完成 —— 数据库执行 UPDATE 时会对命中行加写锁，
+         并发的第二个请求会等锁，等到了再重新求值 WHERE，此时 available_stock 已被
+         第一个请求改小，条件不再成立 → 影响行数 0 → 上层报「库存不足」。
+         ★ 减法必须由数据库做（available_stock - #{quantity}），绝不能在 Java 里
+           算好新值再 SET 全字段 —— 那就是「先查后改」，两次请求会读到同一个旧值。
+
+         ⚠️ 是 >= 不是 >：库存刚好等于购买量时要能买（Day 10 购物车踩过同一个边界）。
+         ⚠️ updated_at 必须手写：自定义 XML 的 UPDATE【不走】MetaObjectHandler，
+            漏了它这一格就永远停在旧时间。 -->
+    <update id="deductStock">
+        UPDATE inventories
+           SET available_stock = available_stock - #{quantity},
+               locked_stock    = locked_stock    + #{quantity},
+               updated_at      = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND available_stock &gt;= #{quantity}
+    </update>
+
+</mapper>
