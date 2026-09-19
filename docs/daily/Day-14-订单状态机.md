@@ -282,7 +282,7 @@ WHERE i.locked_stock <> COALESCE(l.want, 0);
 
 **实验设计**：同一张 `PENDING_PAYMENT` 订单，20 个线程**奇偶交替**发取消/支付。
 
-**主组（有守卫）11 项断言**：
+**主组（有守卫）断言要点**（脚本里最终落成 16 项，见 §9.1）：
 
 | # | 断言 |
 |---|---|
@@ -409,4 +409,117 @@ Day 13 的对照组之所以能收 12 笔钱，正是因为**把条件去掉了*
 
 ---
 
-**状态**：⬜ 第 1 步待开工（规划已就位）
+## 八、第 1 步实测：取消链路 —— 34/34 全绿
+
+**改动：2 XML + 7 Java（POM 未动）**
+
+| 模块 | 文件 | 改了什么 |
+|---|---|---|
+| mall-inventory | `InventoryMapper.xml` | +`releaseLocked`（`deductStock` 的严格逆操作，守卫仍是 `locked_stock >= #{quantity}`） |
+| | `InventoryMapper.java` | +方法签名 |
+| | `InventoryService` / `Impl` | +`releaseLocked`（**0 行 → 500**：账目不一致，与「库存不足 → 400」是两回事） |
+| mall-order | `OrderMapper.xml` | +`cancelOrder`（**首次写入 `cancelled_at`**） |
+| | `OrderMapper.java` | +方法签名 |
+| | `OrderService` / `Impl` | +`cancel`（四步）/ `markCancelled`（0 行 → 400） |
+| | `OrderController` | +`POST /api/orders/{id}/cancel` |
+
+取消放在 `OrderService` 而不是新模块 —— 它只碰 `orders` + `inventories`，而 `mall-order` 已经依赖 `mall-inventory`，**零新依赖**。
+
+**验收脚本 `backend/loadtest/day14-cancel-verify.py`（16 站 / 34 项断言）**
+
+| 站 | 实测 |
+|---|---|
+| [0] 基线 | sku4 `total=150 avail=147 locked=0 sold=3`；库内 `PENDING_PAYMENT=0`、`max_order_id=9005` |
+| [1] 匿名 | **真 HTTP 401** ← Security 过滤器写的响应，不走 `@RestControllerAdvice` |
+| [2] 登录 | demo(id=1) / intruder(id=2) 各一枚 token（内存内，不落盘） |
+| [3] 造靶子 A | `POST /api/orders` → **#9006**，`PENDING_PAYMENT` |
+| [4] ★ 下单即锁库 | `available 147→146`、`locked 0→1`、`sold 3` 不动 |
+| [5] 取消 | `HTTP 200 + code=200`，`data=null`（`Result<Void>`） |
+| [6] 终态 | `CANCELLED`、`cancelledAt` 有值、**`paidAt` 仍为 `null`** |
+| [7] ★★ 库存回补 | `available 146→147`、`locked 1→0`、`sold 3` 不动 → **与基线逐字段相等** |
+| [8] 重复取消 | `HTTP 200 + code=400`「订单状态不允许取消」，库存未被再动 |
+| [9]–[11] ★★ 写 IDOR | intruder 取消 demo 的 #9007 → `code=404`，与 `99999999` **逐字节相同**；**DB 侧佐证**：订单**仍 `PENDING_PAYMENT`**、`cancelled_at` **仍 NULL**、库存**仍锁着** |
+| [12] | demo 自己取消 #9007 → 200，库存再次回到基线 ← 证明 [11] 挡的是**归属**，不是功能坏了 |
+| [13] | 已 `PAID` 的订单取消 → `code=400`，`cancelled_at` 保持 NULL |
+| [14] | 不存在的 id → 404；`/abc` → `code=400` |
+| [15] 终局审计 | 7 个 SKU 恒等式全成立、无负库存、**业务守恒 drift = `-`（0 行）** |
+
+★ 这步的三条硬证据：
+
+1. **写 IDOR 必须用数据库佐证** —— 只断言「返回 404」证明不了「没写进去」。所以 [11] 额外查了 `orders.status` / `cancelled_at` / `inventories` 三处，全都说「没动」。
+2. **`releaseLocked` 是 `deductStock` 的严格逆操作** —— [7] 的 delta `-1/+1/0` 与 [4] 的 `+1/-1/0` 严格互为相反数，且回到基线**逐字段相等**。
+3. **对称性在数据层面也成立**：`paid_at` 与 `cancelled_at` 互斥（[6] 验前者、[13] 验后者），并在第 2 步的对照组里被打破。
+
+---
+
+## 九、第 2 步实测：取消 vs 支付抢同一个状态位
+
+**装置**：`backend/loadtest/day14-cancel-vs-pay.py` —— 自包含（`orderId` 传 `0` 时自己下单造靶子）；复用
+`day13-audit-setup.sql` 的审计触发器，记录**每一次** `inventories` 写入（含被回滚的）。
+
+### 9.1 主组（`cas`）—— 16/16 全绿
+
+20 线程（10 取消 + 10 支付，预热连接 + Barrier 同时发起）：
+
+| 观察 | 值 |
+|---|---|
+| 成功 | **取消 1、支付 0** —— 19 个输家全是 `HTTP 200 + code=400` |
+| 订单终态 | `CANCELLED`、`cancelled_at` 有值、`paid_at = False` |
+| `payments` | `+0 行`、`sum = 0` |
+| **`payments` 序列** | **`119 → 129`（烧掉 10 个 id）** ← 10 个支付线程**全都闯到了 `INSERT payments`**，却只留下 **0 行** |
+| 库存 | `d_avail = +1  d_locked = -1  d_sold = +0` |
+| **审计表** | 比赛期间**只有 1 行**（`147/0/3`）← 19 个失败事务**连审计行都被一起回滚** |
+| 业务守恒 | `drifting SKUs: -` |
+
+★ **连跑 4 轮全是取消赢** —— 不是巧合：取消的 SQL 路径更短（支付要先 `INSERT payments` 才走到 CAS），先到先得。
+但**「有且只有一个赢家」是确定的** —— 这正是 CAS 的保证：**谁赢是竞速的偶然，赢几个是设计的必然。**
+
+### 9.2 对照组（`naive`：同时摘掉 `orders` 状态条件与 `inventories` 守卫）
+
+4 处守卫（`markPaid` / `cancelOrder` / `moveLockedToSold` / `releaseLocked`）全摘 → 11/11 全绿（全是 `DAMAGE:` 断言）：
+
+| 观察 | 值 |
+|---|---|
+| 成功 | **取消 10 + 支付 10 = 20 全成功** |
+| 订单终态 | `CANCELLED`，**`paid_at` 与 `cancelled_at` 同时有值** ← 一单既已支付又已取消 |
+| 钱 | `payments` **10 行 / 69,990.00** ← 同一单收了 10 倍钱 |
+| 库存 | `avail 146→156 (+10)`、`sold 3→13 (+10)`、`locked 1→-19 (-20)` |
+| **恒等式** | **依然成立**（156 − 19 + 13 = 150） |
+| **业务守恒** | **`drifting SKUs: 4`** ← 终于破了 |
+| 审计轨迹 | 20 行：`147/0/3 → 147/-1/4 → 148/-2/4 → 148/-3/5 → … → 156/-19/13`，**一行行看得到两个方向在交替改写同一行** |
+
+★★ **同一件货凭空变成两件**：`available +10`（退回可售池）**且** `sold +10`（同时算作已售），
+`locked` 被两边各减一次变成 **-19**。算术上 `+10 −20 +10 = 0`，恒等式毫无异常 ——
+**只有业务守恒能发现它**。这与 §0.2 的发现是同一件事的两次现身。
+
+★ 机制补充（PG 的 EvalPlanQual）：READ COMMITTED 下 `UPDATE` 撞到被锁的行会**等待**，
+锁一释放就**重新求值 WHERE** —— 所以**带条件的** `UPDATE` 天然安全，**去掉条件才危险**。
+**CAS 的价值不在「用 UPDATE」，而在「UPDATE 里带条件」。**
+
+### 9.3 复原与清理
+
+| 动作 | 结果 |
+|---|---|
+| `day14-restore.sql`（按业务守恒**无条件**归位：`locked`/`sold` 从订单明细反推，`available = total − locked − sold`） | `156/-19/13 → 147/0/3`，drift 归零 |
+| `day14-cleanup.sql`（删 9008–9014 七个靶子：**20 行 payments / 7 行 order_items / 7 张 orders**） | 保留 9006/9007（第 1 步的干净 `CANCELLED` 样本）；sku4 仍 `147/0/3`、drift 0 行、7 个 SKU 全干净 |
+| 代码 `git checkout --` 还原两个 XML | 守卫计数回到 `2 + 2`，`git diff --stat` 为空 |
+
+⚠️ **不能复用 `day14-recalibrate.sql` 复原**：校准脚本只处理 `drift > 0`，而对照组把 `locked` 打成了**负数**，
+它的 `WHERE locked_stock > 0` 那一段**根本不命中**。对照组需要的是「无条件归位」。
+
+### 9.4 ★ 一个意外收获（比设计的实验更有价值）
+
+还原代码后**忘记先复原库存**就复跑了主组，于是 20 个线程**全部被 500 拒绝**：
+
+- `stock before: locked = -18`（上一轮破坏的残留）→ 所有 `locked >= 1` 守卫**全部不成立** → 0 行
+- 订单状态因此停在 `PENDING_PAYMENT` —— ④ 的 CAS 明明成功了，却被 ⑤ 的 500 **整笔回滚**
+
+这是**守卫有效性的反向铁证**：**账上根本没有锁定货的时候，两个方向都动不了它**；
+也顺手再证一次「一个 HTTP 请求写三张表」是**一个事务**。复原库存、换干净靶子复跑 → **16/16 全绿**。
+
+**运行环境**：对照组用 `--spring.datasource.hikari.maximum-pool-size=32` 启动（默认 10 会限制并发威力），跑完已改回默认。
+
+---
+
+**状态**：✅ 第 1 步（取消订单，34/34）+ ✅ 第 2 步（并发对照，主组 16/16、对照组 11/11）已完成并提交；
+⬜ 第 3 步（超时关单）、⬜ 第 4 步（`inventory_logs` 流水）、⬜ 第 5 步（端到端 + 收官）待开工。
