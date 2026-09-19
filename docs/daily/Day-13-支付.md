@@ -1504,4 +1504,220 @@ Swagger    : 19 → 20 路径（新增 /api/payments/{id}）
 
 ★ 三重验证：`local head == remote head == 8916f1e`，`git status -sb` 不再 ahead ✅。
 
+---
+
+## 十五、第 5 步 · 端到端链路 + 清理 + 收官（规划）
+
+### 15.1 这步特殊在哪：**一行业务代码都不写**
+
+前 4 步各造一块零件（库存迁移 / 支付主链路 / 并发防重 / 记录查询），
+第 5 步是**把零件串成整机**跑一遍。
+
+> 分部验证各自成立 ≠ 系统成立。
+
+跨模块事务、跨模块 Bean 注入、Security 上下文里的 `userId`、DB 的真实外键与序列 ——
+这些**只有走完整条链才会同时上场**。分步测试里每一环都绿，合起来第一次跑照样可能炸，
+炸的往往就是「接口边界」那一层（谁调谁、参数怎么来、事务在哪结束）。
+
+所以本步的产物不是 Java 文件，而是：
+**① 一条真实的 11 站链路 + ② 一次对账 + ③ 一个「重复支付」的反证 + ④ 清理 + ⑤ 收官提交**。
+
+---
+
+### 15.2 靶子（已实查，不用造数据）
+
+| 项 | 值 |
+|---|---|
+| 账号 | `demo / demo123`（`users.id=1`）；攻击者 `intruder / intruder`（`id=2`） |
+| 收货地址 | `user_addresses.id=2`（user 1 的默认地址，张三 / 13800138000） |
+| 购物车 | `cart_items.id=140`：user 1 / `sku_id=4` / qty **1** / `selected=f` ← **得先勾上** |
+| 目标 SKU | `sku_id=4` = `MATE80-BLK-512`，单价 **6999.00** |
+| 库存基线 | `150 = 147 available + 1 locked + 2 sold` |
+| 订单基线 | `#1` PAID / `#2` PENDING_PAYMENT（Day 12 遗留）/ `#9002` PAID |
+| 支付记录基线 | 2 行（`id=2`→order 9002 / `id=44`→order 1） |
+| 序列 | `orders_id_seq.last_value=9003`（下一张 = **9004**）；`payments_id_seq.last_value=104` |
+
+⚠️ `cart_items` 里那一行 `selected=f` —— **加购物车时默认 `true`，是 Day 12 的测试把它关了**。
+所以链路里要**先补一站 `PUT /api/cart/140/selected`**，否则 `POST /api/orders` 会回
+`400「请先勾选要购买的商品」`。
+
+⚠️ 另：`POST /api/orders` 的第 ⑦ 步会 `deleteSelectedCartItems` —— **下单成功 = 购物车那行消失**，
+这是预期行为不是 bug，写验收时别把它当异常。
+
+---
+
+### 15.3 链路 11 站（加 2 站「对账」共 13 项）
+
+| # | 请求 | 期望 |
+|---|---|---|
+| 0 | psql 基线快照 | orders 3 行 / payments 2 行 / `sku4 = 150/147/1/2` |
+| 1 | 匿名 `GET /api/payments` | **401**（Security 兜底，非白名单） |
+| 2 | `POST /api/auth/login` demo + intruder | 两枚 token（**不落盘**） |
+| 3 | `PUT /api/cart/140/selected` `{selected:true}` | 200，`code=0` |
+| 4 | `GET /api/cart` | `selectedQuantity=1`、`selectedAmount=6999.00` |
+| 5 | `POST /api/orders` `{addressId:2}` | 200，`data` = 新订单 id（**9004**） |
+| 6 | `GET /api/orders/{newId}` | `status=PENDING_PAYMENT`、`paidAt=null`、`items` 1 条、`payAmount=6999.00` |
+| 7 | psql 快照（下单后） | `sku4` → `available 147→146`、`locked 1→2`（**下单那刻就锁了**） |
+| 8 | `POST /api/payments` `{orderId:newId, method:"ALIPAY"}` | 200，`amount=6999.00`、`paymentNo=PAY...`、`orderNo` 有值 |
+| 9 | `GET /api/orders/{newId}` **再查** | `status=PAID`、`paidAt` **非空** |
+| 10 | `GET /api/payments` | `total=3`，`records[0]` = 刚那笔 |
+| 11 | **重复支付** `POST /api/payments` 同 orderId | `HTTP 200 + code=400`「订单状态不允许支付」 |
+| 12 | psql 对账（终局） | `sku4` → `available 146 不动`、`locked 2→1`、`sold 2→3`；恒等式成立；`payments` 每个 `order_id` ≤ 1 行 |
+| 13 | intruder 查 news 订单/支付 | `GET /api/orders/{newId}` → **404**；`GET /api/payments/{newPayId}` → **404**，且与「不存在」的响应**逐字节相同** |
+
+---
+
+### 15.4 ★ 三个观察点（这步真正的技术含量）
+
+**① `available_stock` 一生只被改一次 —— 在下单那一刻**
+
+| 时刻 | available | locked | sold |
+|---|---|---|---|
+| 下单前 | 147 | 1 | 2 |
+| **下单后** | **146** ↓ | **2** ↑ | 2 |
+| **支付后** | **146 一动没动** | **1** ↓ | **3** ↑ |
+
+支付做的是 **`locked → sold` 仓库内部搬家**，不是第二次扣减。
+这就是 `moveLockedToSold` 的 `WHERE locked_stock >= qty`（而不是 `available_stock >= qty`）的原因。
+**讲反了就会出现「支付时又扣一次库存」这种把货扣两遍的 bug。**
+
+**② 一个 HTTP 请求写三张表 —— 事务真的成环了吗**
+
+`POST /api/payments` 内部依次写了 `payments` → `orders` → `inventories`（跨 3 个模块 3 张表）。
+第 3 步已经证过「`markPaid` 0 行 → 整单回滚 → `payments` 不留痕」；
+第 5 步 #11 是**换个入口再证一次**：这次走的是 HTTP，
+观察手法依然是「`payments_id_seq` 消耗了 +1 但行数没变」—— 序列不参与回滚，是最好的留痕探针。
+
+**③ 金额从来没经过客户端的手**
+
+`PaymentCreateDTO` 里**只有 `orderId` + `method`**，客户端连表达金额的机会都没有。
+#8 的 `amount` 必须**等于** #6 查到的 `payAmount`（6999.00），这个等式由服务端保证。
+
+---
+
+### 15.5 清理清单（这步的另一半价值）
+
+| 对象 | 处置 | 理由 |
+|---|---|---|
+| `backend/loadtest/d13-s5-probe*.sql` | **删** | 本次 AI 探基线的一次性脚本 |
+| `backend/loadtest/day13-payment-concurrent.py` | **留** | 并发压测装置，Day 14+ 还会用 |
+| `day13-audit-setup/teardown.sql`、`day13-restore.sql` | **留** | 一套可复用的「审计 + 还原」装备 |
+| `day13-s4-idor-contrast.sql` | **留** | 零重启 IDOR 对照，教学价值高 |
+| 新订单 + 新支付记录 | **留** | 端到端产物，也是「一单一行 payment」的活样本 |
+| `order #2`（Day 12 遗留 PENDING） | **待定** | 顺手付掉 or 留着当「待支付」样本，收官时定 |
+| 后台拉起的 `mall-server`（8080） | **待定** | 本轮结束后是否停掉，收官时定 |
+
+---
+
+### 15.6 收官三件套
+
+1. **写实测小节** §16（链路输出 + 对账表 + 反证）
+2. **提交**：本步大概率**只有文档 + loadtest 脚本**（业务代码零改动）
+3. **push**：走 `win-git-push` 技能脚本（★ 前置检查代理 `9674`；注意脚本内部已修成 `GIT_TERMINAL_PROMPT=1`）
+4. **更新记忆**：`MEMORY.md` 补齐 Day 13 定型的坑；当日日志追加流水
+
+---
+
+## 十六、第 5 步实测：端到端链路 ✅ **34/34 全绿**
+
+### 16.1 产物（业务代码零改动）
+
+| 文件 | 说明 |
+|---|---|
+| `backend/loadtest/day13-e2e.py`（新） | 端到端链路脚本，**可重复执行**（购物车为空时自己补货） |
+| `docs/daily/Day-13-支付.md` | 本节 |
+
+运行：`python backend/loadtest/day13-e2e.py`（报告写同目录 `day13-e2e-report.txt`）
+
+### 16.2 链路实测（第二次运行，`orders/payments` 从 4/4 涨到 5/5）
+
+| 站 | 实测 |
+|---|---|
+| 0 | 基线 `sku4 = 150/146/1/3`，`orders=4 payments=4 seq=107` |
+| 1 | 匿名 `GET /api/payments` → **HTTP 401** |
+| 2 | demo(id=1) / intruder(id=2) 登录成功（token 仅存内存） |
+| 3 | 购物车为空 → 脚本自动 `POST /api/cart` 补货（`cart_items.id=141`） |
+| 4 | `PUT /api/cart/141/selected` → 200 |
+| 5 | 结算预览 `selectedQuantity=1 / selectedAmount=6999.0` |
+| 6 | `POST /api/orders {addressId:2}` → **新订单 `9005`** |
+| 7 | 详情 `PENDING_PAYMENT`、`paidAt=None`、1 条明细 |
+| **8** | **`available 146→145`、`locked 1→2`** ← ★ 锁库发生在**下单**这一刻 |
+| 8b | `GET /api/cart` → 已勾选行被订单吃掉（`items_left=0`） |
+| 9 | `POST /api/payments` → `id=108`、`amount=6999.0`、`orderNo` 有值 |
+| 10 | 订单 → **`PAID`**、`paidAt` 写入 |
+| 11 | `GET /api/payments` → `total=5`，首条即 `id=108` |
+| **12** | **`available 145 不动`、`locked 2→1`、`sold 3→4`** ← ★ 支付只做 `locked→sold` |
+| 13 | 重复支付 → `HTTP 200 + code=400`「订单状态不允许支付」；`seq 108→109` **烧掉 1 个 id 但行数没变** ⇒ 回滚成真 |
+| 14 | intruder 查 `orders/9005`、`payments/108` → `code=404`，**与 `99999999` 逐字节相同** |
+| 15 | Day 12 遗留 `order #2` → **已 PAID**（`sku5 locked 3→0 / sold 0→3`） |
+| 16 | 终局：`PENDING_PAYMENT` 归零、无重复支付、无负库存、**7 个 SKU 恒等式全 OK** |
+
+### 16.3 三个观察点全部实证
+
+**① `available_stock` 一生只被改一次** —— 表格直接读出来：
+
+| 时刻 | available | locked | sold |
+|---|---|---|---|
+| 下单前 | 146 | 1 | 3 |
+| **下单后** | **145** ↓ | **2** ↑ | 3 |
+| **支付后** | **145 没动** | **1** ↓ | **4** ↑ |
+
+**② 一个 HTTP 请求 = 一次事务**：`seq 108→109` 而 `payments` 行数不变 ——
+序列不参与回滚，是「事务真的回滚了」最硬的旁证（第 3 步用压测证过，这次换 HTTP 入口再证一次）。
+
+**③ 金额信服务端**：`payments.amount (6999.0) == orders.pay_amount (6999.0)`，
+而整个请求体里**根本没有金额字段**。
+
+### 16.4 ★ 脚本自己踩的坑：断言口径写错（不是代码错）
+
+第一次跑出 **36/38**，两条 FAIL 长这样：
+
+```
+[FAIL] intruder gets 404 for demo's order
+[PASS] foreign-404 == absent-404 (byte identical, order)
+```
+
+两条「逐字节相同」的断言**是 PASS**，说明遮罩本身没问题 —— 问题在我拿
+**HTTP 状态码**去比，而项目实测返回的是 **HTTP 200 + body 里的 `code=404`**。
+
+根因在 `GlobalExceptionHandler.handleBusinessException`：
+
+```java
+@ExceptionHandler(BusinessException.class)
+public Result<Void> handleBusinessException(BusinessException e){   // ← 返回 Result，没有 @ResponseStatus
+    return Result.error(e.getCode(), e.getMessage());
+}
+```
+
+没有 `@ResponseStatus` ⇒ 状态码保持 200，**404 只活在 body 的 `code` 里**。
+真实 HTTP 状态码只出现在 Security 层（`AuthenticationEntryPoint` 的 401、
+`AccessDeniedHandler` 的 403），因为那是**过滤器**直接写的响应，不过 `@RestControllerAdvice`。
+
+⇒ 修正后加了一条**正向对照**，把这件事钉死：
+
+```
+GET /api/orders/9005      (intruder) -> http=200 code=404  ← 业务层：伪装在 body 里
+GET /api/orders/99999999  (intruder) -> http=200 code=404  ← 逐字节相同
+GET /api/orders/9005      (匿名)     -> http=401           ← Security 层：真 HTTP 状态
+[PASS] contrast: anonymous gets a REAL HTTP 401 on the same URL
+```
+
+**这也是本次唯一的「错」** —— 错在验收脚本，不在业务代码；
+但它值得记下来：**「伪装 404」伪装的是 `code`，不是 HTTP 状态码。**
+写前端或写测试时若按 HTTP 404 判，会得到一个「接口全都 200」的错觉。
+
+⇒ 顺手把脚本改成**可重复执行**：两次跑之间的差异只有数据（`orders 4→5`），断言全部走相对量，
+绝对值写死会在第二次运行「假失败」——比真失败更费时间。
+
+### 16.5 环境与基线（Day 13 收官）
+
+```
+环境   : PG 5434 ✅ / APP 8080 ✅ / 代理 9674 ✅
+orders : #1 PAID   #2 PAID(Day12 遗留已付清)   #9002 PAID   #9004 PAID   #9005 PAID
+payments: 5 行（id 2 / 44 / 105 / 107 / 108），每个 order_id 恰好 1 行
+inventories: 7 个 SKU 恒等式全 OK，无负库存
+待支付订单 : 0
+```
+
+---
 
