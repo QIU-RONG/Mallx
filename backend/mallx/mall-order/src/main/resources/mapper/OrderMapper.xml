@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.order.mapper.OrderMapper">
+
+    <!-- ① 读收货地址：WHERE 里同时做 IDOR 校验。
+         不是自己的地址 → 查不出行 → 返回 null → 上层统一返 404。 -->
+    <select id="selectAddressForOrder" resultType="com.mallx.order.vo.AddressForOrderVO">
+        SELECT receiver_name,
+               receiver_phone,
+               province,
+               city,
+               district,
+               detail_address
+        FROM user_addresses
+        WHERE id = #{addressId}
+          AND user_id = #{userId}
+    </select>
+
+    <!-- ② 读购物车里"已勾选"的项，一条 LEFT JOIN 出下单需要的一切现场（跨 4 表）。
+         ★ 必须 LEFT JOIN —— 否则软删的 SKU / 商品会从结果里凭空消失。
+         ★ 故意【不】加 AND s.is_deleted = 0 / AND p.is_deleted = 0 / AND p.status = 1：
+           失效判定留给 Java，这样才有机会报出「哪件商品因为什么原因不能买」。
+         ★ c.selected = TRUE —— PG 的 boolean 列，直接用 TRUE 比较。 -->
+    <select id="selectSelectedCartItems" resultType="com.mallx.order.vo.OrderItemSourceVO">
+        SELECT c.id                            AS cart_item_id,
+               c.sku_id,
+               c.quantity,
+               s.product_id,
+               s.name                          AS sku_name,
+               s.price,
+               COALESCE(s.image, p.main_image) AS image,
+               p.name                          AS product_name,
+               p.status                        AS product_status,
+               COALESCE(p.is_deleted, 0)       AS product_deleted,
+               COALESCE(s.is_deleted, 0)       AS sku_deleted,
+               COALESCE(i.available_stock, 0)  AS available_stock
+        FROM cart_items c
+                 LEFT JOIN product_skus s ON s.id = c.sku_id
+                 LEFT JOIN products     p ON p.id = s.product_id
+                 LEFT JOIN inventories  i ON i.sku_id = c.sku_id
+        WHERE c.user_id = #{userId}
+          AND c.selected = TRUE
+    </select>
+
+    <!-- ③ 下单成功后清掉已勾选的购物车项（物理删除，cart_items 无 is_deleted 列）。
+         ★ 只删 selected = TRUE 的 —— 未勾选的项必须留在车里。 -->
+    <delete id="deleteSelectedCartItems">
+        DELETE
+        FROM cart_items
+        WHERE user_id = #{userId}
+          AND selected = TRUE
+    </delete>
+
+</mapper>

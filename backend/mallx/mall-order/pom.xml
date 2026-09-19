@@ -19,5 +19,12 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
+
+        <!-- 下单要锁库存：跨模块调用 mall-inventory 的 InventoryService。
+             版本由父 POM 的 dependencyManagement 托管，这里不写 version。 -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-inventory</artifactId>
+        </dependency>
     </dependencies>
 </project>
