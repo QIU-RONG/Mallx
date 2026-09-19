@@ -16,9 +16,12 @@ import java.util.List;
  *
  * <p>⚠️ 铁律：这里声明的每个方法，{@code OrderMapper.xml} 里必须有【方法名逐字符一致】的
  * 同名标签，否则 MyBatis 启动时不报错、一调用就 {@code Invalid bound statement}。
- * 现有四个（都在 XML 里）：
+ * 现有五个（都在 XML 里）：
  * {@code selectAddressForOrder} / {@code selectSelectedCartItems} / {@code deleteSelectedCartItems}
- * / {@code markPaid}。
+ * / {@code markPaid} / {@code cancelOrder}。
+ *
+ * <p>★ 后两个是「同一条边的两个方向」：都是 {@code WHERE status = 'PENDING_PAYMENT'}，
+ * 一个走向 {@code PAID}、一个走向 {@code CANCELLED}。
  *
  * <p>不加 {@code @Mapper} 注解：全局 {@code @MapperScan("com.mallx.**.mapper")} 已覆盖本包。
  */
@@ -64,4 +67,29 @@ public interface OrderMapper extends BaseMapper<Order> {
      * @return 影响行数：1 = 抢到了；0 = 已被别人先付 / 已取消（状态不是 {@code PENDING_PAYMENT}）
      */
     int markPaid(@Param("orderId") Long orderId);
+
+    /**
+     * 取消成功：CAS 推进订单状态 —— 条件 UPDATE 在本项目的第四次使用
+     * （前三次：{@code deductStock} 扣库存、{@code moveLockedToSold} 转已售、{@code markPaid} 标记已付）。
+     *
+     * <p>★★ 与 {@link #markPaid} 是<b>同一条边的两个方向</b>：同一个
+     * {@code WHERE status = 'PENDING_PAYMENT'}、同一个起点，只是一个走向 {@code PAID}、
+     * 一个走向 {@code CANCELLED}。两条出路<b>互斥</b> ——
+     * 这正是「取消与支付并发时只有一个能成功」在 SQL 层的全部保证。
+     *
+     * <p>★ 为什么不是「先查后改」：两个线程都先读到 {@code PENDING_PAYMENT}，
+     * 各自 UPDATE 一次 → <b>既收了钱又把货退回可售池</b>（同一件货凭空变两件）。
+     *
+     * <p>★ 为什么 {@code WHERE} 里【不要再带 user_id】：归属已在 Service 第一步
+     * （{@code requireOwn}）验完。带了会让「订单不存在 / 不是你的 / 状态不对」
+     * 三种 0 行原因重新糊在一起，上层就没法稳定地把它翻成「400 状态不允许取消」。
+     *
+     * <p>★ {@code cancelled_at} 是本列<b>第一次被写入</b>（此前全为 NULL）——
+     * 与 {@code paid_at} 一样由 SQL 手写，不挂自动填充：它记的是业务事实发生的那一刻，
+     * 不是「这一行被改过」。
+     *
+     * @param orderId 订单主键
+     * @return 影响行数：1 = 抢到了；0 = 已被别人先付 / 已取消（状态不是 {@code PENDING_PAYMENT}）
+     */
+    int cancelOrder(@Param("orderId") Long orderId);
 }

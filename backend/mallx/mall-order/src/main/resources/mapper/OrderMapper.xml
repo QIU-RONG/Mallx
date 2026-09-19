@@ -79,4 +79,32 @@
            AND status = 'PENDING_PAYMENT'
     </update>
 
+    <!-- ★★★ ⑤ Day 14 的核心 SQL：CAS 推进订单状态（取消成功）。
+         与 ④ markPaid 是【同一条边的两个方向】—— 同一个 WHERE、同一个起点 PENDING_PAYMENT，
+         只是一个走向 PAID、一个走向 CANCELLED。
+
+         ★ WHERE status = 'PENDING_PAYMENT' 就是 Compare-And-Set：
+           「只有现在还是待支付，才允许被我改成已取消」。
+           影响行数 1 = 抢到；0 = 已被别人付过 / 已取消 → 上层抛 400，整笔事务回滚。
+
+         ★★ 这一条 WHERE 同时挡住了三种错误：重复取消、取消已支付的订单、
+            以及最凶的「取消与支付并发」—— 两个方向抢同一个状态位，数据库保证只有一个能拿到 1 行。
+
+         ★ 为什么【不】带 user_id：归属在 Service 第一步（requireOwn）已经分流过；
+           带了会让三种 0 行原因（不存在 / 不是你的 / 状态不对）重新糊在一起。
+
+         ⚠️ status 用字面量 'CANCELLED' —— 必须与 Java 侧 OrderStatus.CANCELLED 逐字符一致。
+            orders.status 列【没有 CHECK 约束】，拼错了数据库不拦你。
+         ⚠️ cancelled_at 与 updated_at 都要手写：前者记「业务事实发生的那一刻」（不挂 fill），
+            后者是自定义 XML 的 UPDATE 不走 MetaObjectHandler 的补偿。
+            （对比：14 列里 cancelled_at 一直是 NULL，本方法是第一次写它。） -->
+    <update id="cancelOrder">
+        UPDATE orders
+           SET status       = 'CANCELLED',
+               cancelled_at = CURRENT_TIMESTAMP,
+               updated_at   = CURRENT_TIMESTAMP
+         WHERE id = #{orderId}
+           AND status = 'PENDING_PAYMENT'
+    </update>
+
 </mapper>

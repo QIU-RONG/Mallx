@@ -49,4 +49,31 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
      * @return 影响行数：1 成功，0 锁定库存不足（异常态）
      */
     int moveLockedToSold(@Param("skuId") Long skuId, @Param("quantity") int quantity);
+
+    /**
+     * 把锁定库存退还可售（取消订单 / 超时关单专用）。
+     *
+     * <p>★ 本方法是 {@code deductStock} 的<b>严格逆操作</b>：
+     * 一个 {@code available → locked}，一个 {@code locked → available}。
+     * 到此为止三个库存写点构成完整闭环，恒等式不变量保持：
+     * <pre>
+     *   deductStock       available - n , locked + n      （下单）
+     *   moveLockedToSold  locked - n    , sold + n        （支付）
+     *   releaseLocked     locked - n    , available + n   （取消 / 超时）
+     * </pre>
+     *
+     * <p>★★ 守卫是 {@code locked_stock >= quantity}，与 {@code moveLockedToSold} 相同，
+     * 而<b>不是</b> {@code available_stock >= quantity}。判据永远是「我要动的那一格够不够」——
+     * 本次要动的是 {@code locked}，所以判 {@code locked}。
+     * 若误判成 {@code available}，取消一张「从未锁定过货」的订单也能执行成功 →
+     * <b>凭空造货</b>。
+     *
+     * <p>★ 返回 0 行 = 订单说「我锁着 3 件」而库存说「我只锁着 1 件」= 服务端账目不一致，
+     * 重试无意义，必须整笔回滚（与 {@code deductStock} 的 0 行 = 用户可控的「库存不足」不同）。
+     *
+     * @param skuId    SKU 主键
+     * @param quantity 退还数量（必须 &gt; 0）
+     * @return 影响行数：1 成功，0 锁定库存不足（异常态）
+     */
+    int releaseLocked(@Param("skuId") Long skuId, @Param("quantity") int quantity);
 }

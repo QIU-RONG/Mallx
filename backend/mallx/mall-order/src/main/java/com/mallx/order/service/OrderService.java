@@ -70,4 +70,40 @@ public interface OrderService {
      * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许支付
      */
     void markPaid(Long orderId);
+
+    /**
+     * 取消订单：把「待支付」的订单推进到「已取消」，并把锁定的库存退回可售池。
+     *
+     * <p>整个方法在一个事务里完成：归属分流 → 读明细 → CAS 改状态 → 逐个 SKU 回补库存。
+     *
+     * <p>★★ 与支付链路是<b>完全对称的孪生结构</b>：同样先 {@code SELECT} 分流（404）、
+     * 同样用 {@code WHERE status = 'PENDING_PAYMENT'} 抢资格（0 行 400）、
+     * 同样用 {@code WHERE locked_stock >= n} 守卫库存（0 行 500）。
+     * 差别只在终点：支付是 {@code PAID} + {@code locked → sold}，
+     * 取消是 {@code CANCELLED} + {@code locked → available}。
+     *
+     * <p>★ 只能取消<b>自己的</b>订单：不是自己的与不存在的返回<b>同一个 404</b>——
+     * 这是<b>写操作的 IDOR</b>，比读越权危险得多（读是泄露，写是破坏）。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=404 订单不存在（含「不是你的」）
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许取消
+     */
+    void cancel(Long userId, Long orderId);
+
+    /**
+     * 取消成功：CAS 把订单从「待支付」推进到「已取消」（条件 UPDATE）。
+     *
+     * <p>★ 与 {@link #markPaid} 严格对称，连不加 {@code @Transactional} 的理由都一样：
+     * 单条 UPDATE 自身即原子，事务边界由调用方 {@code OrderServiceImpl.cancel} 持有。
+     *
+     * <p>★ 0 行报 {@code 400}：订单「已支付 / 已取消」是业务上的正常状态，刷新即可看到正确结果。
+     * （对比 {@code InventoryService.releaseLocked} 的 0 行是账目对不上，那才报 500。）
+     *
+     * <p>⚠️ 已知边界（留给后续的超时关单）：本方法把 0 行一律当错误抛出。
+     * 而<b>系统级的超时关单</b>需要把 0 行理解为「已被用户支付 / 已被取消，跳过即可」，不该报错 ——
+     * 届时要么改成返回影响行数，要么另开一个入口，不能直接复用本方法。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许取消
+     */
+    void markCancelled(Long orderId);
 }

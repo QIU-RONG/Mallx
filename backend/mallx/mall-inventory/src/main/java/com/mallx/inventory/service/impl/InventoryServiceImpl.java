@@ -58,4 +58,29 @@ public class InventoryServiceImpl implements InventoryService {
             throw new BusinessException(ResultCode.FAIL.getCode(), "库存锁定状态异常，支付已回滚");
         }
     }
+
+    /**
+     * 取消订单 / 超时关单：{@code locked → available}（{@code deductForOrder} 的逆操作）。
+     *
+     * <p>同样【故意不加】{@code @Transactional}：单条 UPDATE 自身即原子，
+     * 事务边界应由调用方（{@code OrderServiceImpl.cancel}）持有 ——
+     * 让「改订单状态 + 改 N 个 SKU 库存」共处一个事务才有意义。
+     *
+     * <p>★ 0 行与 {@code moveLockedToSold} 同类，是【服务端异常态】：
+     * 订单说「我锁定着 3 件」，库存说「我只锁着 1 件」。账对不上，重试无意义，必须整笔回滚，
+     * 所以用 {@code FAIL(500)} 而不是 {@code 400}。
+     * 与 {@code deductForOrder} 的 0 行形成三足对照：
+     * <pre>
+     *   deductForOrder   0 行 = 库存不足（用户能理解）      → 400
+     *   moveLockedToSold 0 行 = 账目不一致（服务端错）      → 500
+     *   releaseLocked    0 行 = 账目不一致（服务端错）      → 500
+     * </pre>
+     */
+    @Override
+    public void releaseLocked(Long skuId, int quantity) {
+        int rows = inventoryMapper.releaseLocked(skuId, quantity);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.FAIL.getCode(), "库存锁定状态异常，取消已回滚");
+        }
+    }
 }

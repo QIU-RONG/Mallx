@@ -39,4 +39,26 @@
            AND locked_stock &gt;= #{quantity}
     </update>
 
+    <!-- ★★ Day 14 的核心 SQL：锁定 → 可售（取消订单 / 超时关单）
+         这是 deductStock 的【严格逆操作】—— 一个 available → locked，一个 locked → available。
+
+         ★★★ available_stock 这里【要动】（它正是不动就错了的那一格）：
+             deductStock 把货从可售挪进锁定，取消就是原路挪回去。与 moveLockedToSold 刚好相反。
+
+         ★ 守卫条件仍然是 locked_stock >= #{quantity}，与 moveLockedToSold 一样，不是 available。
+             判据永远是「我要动的那一格够不够」：本次要动的是 locked，
+             所以判 locked。若错判成 available_stock >= n，就会凭空造货 ——
+             「退一件本来没被锁定的货」= 无中生有。
+             返回 0 行 = 订单与库存对不上账（被旁路改过），上层必须抛异常整笔回滚。
+
+         ⚠️ updated_at 仍要手写（自定义 XML 的 UPDATE 不走 MetaObjectHandler）。 -->
+    <update id="releaseLocked">
+        UPDATE inventories
+           SET available_stock = available_stock + #{quantity},
+               locked_stock    = locked_stock    - #{quantity},
+               updated_at      = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND locked_stock &gt;= #{quantity}
+    </update>
+
 </mapper>

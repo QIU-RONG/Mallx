@@ -184,6 +184,84 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
+    // ============================ 取消（Day 14 第 1 步） ============================
+
+    /**
+     * ★★★ 取消订单 —— 与支付链路【严格对称】的四步。
+     *
+     * <p>把两条链路并排看，取消不是新套路，是支付那条链路的镜像：
+     * <pre>
+     *              支付（PaymentServiceImpl.pay）        取消（本方法）
+     *   ① 归属      SELECT … WHERE id AND user_id       requireOwn（同一句 404 口径）
+     *   ② 明细      读 order_items（空 → 500）           同
+     *   ③ 中间产物  INSERT payments                     无（取消没有「退款单」要写）
+     *   ④ 状态 CAS  markPaid   → 0 行 400                markCancelled → 0 行 400
+     *   ⑤ 库存      moveLockedToSold → 0 行 500         releaseLocked → 0 行 500
+     *   ⑥ 事务      @Transactional 包 ④⑤                同
+     * </pre>
+     *
+     * <p>★ ④ 与「支付」的 ④ 是<b>同一个状态位的两次争夺</b>：两条 SQL 的
+     * {@code WHERE status = 'PENDING_PAYMENT'} 一模一样，只是 SET 的目标不同。
+     * 数据库的行锁 + 条件重求值保证<b>只有一个</b>能拿到 1 行 → 两条出路互斥。
+     *
+     * <p>★★ ④ 必须在 ⑤ 之前：④ 是「抢资格」。抢不到就没必要去动库存 ——
+     * 而且并发时能显著减少对 {@code inventories} 行的锁竞争
+     * （只有一个事务会走到 ⑤，其余在 ④ 就被挡下）。
+     *
+     * <p>★ ⑤ 按 {@code skuId} 升序退还，与 {@code createFromCart} 扣减时的排序规则一致。
+     * 统一锁顺序才能消灭死锁（环形等待）—— 加锁方向与解锁方向<b>不必</b>相反，
+     * 只要所有事务都按同一个顺序拿行锁即可。
+     *
+     * <p>★ 为什么 {@code cancel} 放在 {@code OrderService} 而不是新开一个服务：
+     * 取消只碰 {@code orders} + {@code inventories}，不碰 {@code payments}；
+     * 而 {@code mall-order} 本来就依赖 {@code mall-inventory}（下单时就在用 {@code deductForOrder}）。
+     * 零新依赖、也不会产生循环依赖。（对比 Day 13 支付必须新开 {@code mall-payment} 模块。）
+     */
+    @Override
+    @Transactional
+    public void cancel(Long userId, Long orderId) {
+
+        // ① 语义分流：「订单不存在」与「订单不是你的」共用同一个 404（写在 requireOwn 里）
+        //    ★ 这是【写操作的 IDOR】—— 读越权是泄露，写越权是破坏，后果更重。
+        Order order = requireOwn(userId, orderId);
+
+        // ② 读明细：要退回的是哪几个 SKU、各多少件（只认服务端数据）
+        List<OrderItem> items = orderItemMapper.selectList(
+                new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
+        if (items.isEmpty()) {
+            // 正常流程不可能发生（下单那一刻就写了明细）→ 服务端异常态，报 500
+            throw new BusinessException(ResultCode.FAIL.getCode(), "订单明细缺失");
+        }
+
+        // ③ CAS 抢资格：抢不到抛 400 → 整个事务回滚
+        //    （注意：这里【不】返回状态，因为订单状态用不上 —— 判据全在 SQL 的 WHERE 里）
+        markCancelled(order.getId());
+
+        // ④ 逐个 SKU 把 locked 退回 available（★ 按 skuId 升序，统一锁顺序）
+        List<OrderItem> ordered = new ArrayList<>(items);
+        ordered.sort(Comparator.comparing(OrderItem::getSkuId));
+        for (OrderItem item : ordered) {
+            inventoryService.releaseLocked(item.getSkuId(), item.getQuantity());
+        }
+    }
+
+    /**
+     * CAS 把订单推进到「已取消」—— 与 {@link #markPaid} 严格对称。
+     *
+     * <p>真正的内容只有一句：调 {@code OrderMapper.cancelOrder}，把 0 行翻译成人话。
+     *
+     * <p>★ 0 行报 {@code 400} 而不是 {@code 500}：订单「已支付 / 已取消」是业务上的正常状态
+     * （用户刷新页面就能看到正确结果），不是系统故障。
+     * 对比 {@code InventoryServiceImpl.releaseLocked} 的 0 行是账目对不上 —— 那才报 500。
+     */
+    @Override
+    public void markCancelled(Long orderId) {
+        int rows = orderMapper.cancelOrder(orderId);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
+        }
+    }
+
     // ============================ 查询（Day 12 第 4 步） ============================
 
     /**

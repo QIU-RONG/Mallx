@@ -27,8 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
  * <p>★ 本类刻意不挂 {@code @PreAuthorize}：C 端 token 的权限集是空的，一挂就 403。
  * 「登录才能用」由 {@code anyRequest().authenticated()} 兜住（/api/orders 不在白名单里）。
  *
- * <p>★ 三个接口都【不接收 userId 参数】—— 用户是谁只从 token 来。
- * 这是越权防线的最上游：客户端连表达「查别人的」的机会都没有。
+ * <p>★ 四个接口都【不接收 userId 参数】—— 用户是谁只从 token 来。
+ * 这是越权防线的最上游：客户端连表达「查别人的 / 改别人的」的机会都没有。
  */
 @Tag(name = "订单")
 @RestController
@@ -46,6 +46,31 @@ public class OrderController {
     public Result<Long> create(Authentication authentication, @RequestBody @Valid OrderCreateDTO dto) {
         Long userId = (Long) authentication.getPrincipal();
         return Result.ok(orderService.createFromCart(userId, dto));
+    }
+
+    /**
+     * 取消订单。
+     *
+     * <p>★ 用 {@code POST} 而不是 {@code PUT}/{@code PATCH}：
+     * <ol>
+     *   <li>本项目的写接口只有 {@code POST}（见本类与 CartController / AddressController）；</li>
+     *   <li>{@code PUT} 的语义是<b>幂等</b>（同样的请求做多少次结果都一样），
+     *       而取消<b>不幂等</b> —— 第二次调用会得到 {@code 400 订单状态不允许取消}。
+     *       用 PUT 会让调用方误以为可以安全重试。</li>
+     * </ol>
+     *
+     * <p>★ 返回 {@code Result<Void>}（data 为 null）：取消没有需要回传给前端的新对象，
+     * 前端拿到 200 后重新拉一次详情即可。
+     *
+     * <p>★ 「只能取消自己的订单」由 Service 的归属分流保证：非本人订单返回 404，
+     * 且与「订单不存在」的响应<b>逐字节相同</b>（不可区分）。
+     */
+    @Operation(summary = "取消订单（仅待支付可取消；非本人订单返回 404）")
+    @PostMapping("/{id}/cancel")
+    public Result<Void> cancel(Authentication authentication, @PathVariable Long id) {
+        Long userId = (Long) authentication.getPrincipal();
+        orderService.cancel(userId, id);
+        return Result.ok();
     }
 
     /**
