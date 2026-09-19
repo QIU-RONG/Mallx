@@ -1,0 +1,81 @@
+==============================================================================
+Day 14 Step 4 -- inventory_logs ledger (3 write points -> 3 kinds of row)
+target : http://127.0.0.1:8080   account: demo(id=1)   sku under test: 4
+==============================================================================
+
+[0] BASELINE (psql)
+  stock              sku4  total=150  available=144  locked=  0  sold=  6  identity=OK
+  inventory_logs: rows=14  high-water id=14   max_order_id=9022
+  ★ A0 = available_stock of sku4 at ledger start = 144
+  ★ ledger-relative run: only rows with id > 14 are judged below
+
+[1] login demo (token stays in memory, never on disk)
+  demo http=200 code=200 userId=1 token_len=191
+
+[2] ORDER_LOCK -- place order A (sku4 x1)
+  POST /api/orders -> order=9023 code=200
+  after order A      sku4  total=150  available=143  locked=  1  sold=  6  identity=OK
+  delta: available -1  locked +1  sold +0
+  new ledger rows:
+    id   type               change   before    after ref      at
+    15   ORDER_LOCK             -1      144      143 NULL     19:24:48.999
+
+[3] PAY_SOLD -- pay order A
+  POST /api/payments -> http=200 code=200 paymentId=193
+  after pay A        sku4  total=150  available=143  locked=  0  sold=  7  identity=OK
+  delta vs after-order: available +0  locked -1  sold +1   ★ available must NOT move
+  new ledger rows:
+    id   type               change   before    after ref      at
+    15   ORDER_LOCK             -1      144      143 NULL     19:24:48.999
+    16   PAY_SOLD               +0      143      143 9023     19:24:50.785
+
+[4] ORDER_LOCK again -- place order B (sku4 x1)
+  POST /api/orders -> order=9024 code=200
+  after order B      sku4  total=150  available=142  locked=  1  sold=  7  identity=OK
+  delta vs after-pay: available -1  locked +1  sold +0
+
+[5] CANCEL_RELEASE -- cancel order B
+  POST /api/orders/9024/cancel -> http=200 code=200
+  order B status now = CANCELLED
+  after cancel B     sku4  total=150  available=143  locked=  0  sold=  7  identity=OK
+  delta vs after-order-B: available +1  locked -1  sold +0
+
+[6] FULL LEDGER CREATED BY THIS RUN (sku4, oldest first)
+  
+    id   type               change   before    after ref      at
+    15   ORDER_LOCK             -1      144      143 NULL     19:24:48.999
+    16   PAY_SOLD               +0      143      143 9023     19:24:50.785
+    17   ORDER_LOCK             -1      143      142 NULL     19:24:52.734
+    18   CANCEL_RELEASE         +1      142      143 9024     19:24:54.372
+
+[7] ROW-LEVEL INVARIANTS (every row created by this run)
+
+[8] TYPE-LEVEL INVARIANTS
+  ORDER_LOCK=2  PAY_SOLD=1  CANCEL_RELEASE=1
+
+[9] LEDGER IS A CONTIGUOUS CHAIN (row[i].before == row[i-1].after)
+
+[10] LEDGER AUDITS THE PRESENT:  available_now == A0 + Σ(change)
+  A0 = 144   Σ(change) = -1   A0 + Σ = 143   available now = 143
+
+[11] A REJECTED OPERATION MUST WRITE NO ORPHAN ROW
+  ★ 两条被拒路径都不该往账本里留东西 —— 一条用户错误（重复取消），一条越权（IDOR）。
+    （★ 说明边界：本步能观测到的是「被拒的操作不写流水」。更深一层的
+     「UPDATE 成功但 INSERT 失败时一起回滚」在 API 上不可达 ——
+     createFromCart 的第 3 步校验与 /api/cart 的两处库存校验把所有失败都挡在
+     写流水之前；deductStock 的 0 行路径是纯竞态防线。该性质由 InventoryServiceImpl
+     的 @Transactional 保证，属代码级论证，不在本脚本的断言范围内。）
+  intruder login -> http=200 code=200 token_len=196
+  demo double-cancel order B -> http=200 code=400 {"code":400,"message":"订单状态不允许取消","data":null}
+  intruder cancel demo's order B -> http=200 code=404 {"code":404,"message":"订单不存在","data":null}
+  ledger rows: 18 -> 18
+
+[12] FINAL STATE
+  final              sku4  total=150  available=143  locked=  0  sold=  7  identity=OK
+  business conservation (locked vs PENDING_PAYMENT items) drifting SKUs = 0
+  artifacts left behind (Step 5 reconciles + cleans):
+    order #9023 PAID, order #9024 CANCELLED; sku4 sold +1
+
+==============================================================================
+ASSERTIONS: 61 / 61 passed
+==============================================================================

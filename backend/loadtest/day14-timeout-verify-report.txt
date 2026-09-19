@@ -1,0 +1,87 @@
+==============================================================================
+Day 14 Step 3 -- TIMEOUT auto-cancel (PENDING_PAYMENT -> CANCELLED, no user action)
+target : http://127.0.0.1:8080   account: demo(id=1)   threshold: 2 min
+==============================================================================
+
+[0] BASELINE (psql)
+  stock before       sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  pending orders = 0   max order id = 9007
+
+[1] LOGIN (demo)
+  HTTP 200  code=200  token=yes
+
+[2] ENSURE A SELECTED CART ITEM
+  POST /api/cart -> HTTP 200 code=200 itemId=151
+  PUT /api/cart/151/selected -> HTTP 200 code=200
+
+[3] STOCK JUST BEFORE ORDERING
+  stock pre-order    sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+
+[4] PLACE ORDER  (POST /api/orders)  -- and then WALK AWAY
+  HTTP 200  code=200  orderId=9015
+  status = PENDING_PAYMENT   paid_at = NULL
+  stock after order  sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
+  delta vs pre-order: available -1  locked +1  sold +0
+
+[6] ★ WAITING FOR THE SCHEDULER  (nobody calls cancel; we only watch)
+  threshold=2 min, budget=240 s, polling every 10 s
+  t+ 10s  still PENDING_PAYMENT
+  t+ 20s  still PENDING_PAYMENT
+  t+ 30s  still PENDING_PAYMENT
+  t+ 40s  still PENDING_PAYMENT
+  t+ 50s  still PENDING_PAYMENT
+  t+ 60s  still PENDING_PAYMENT
+  t+ 70s  still PENDING_PAYMENT
+  t+ 80s  still PENDING_PAYMENT
+  t+ 90s  still PENDING_PAYMENT
+  t+100s  still PENDING_PAYMENT
+  t+110s  still PENDING_PAYMENT
+  t+120s  still PENDING_PAYMENT
+  t+130s  still PENDING_PAYMENT
+  t+140s  still PENDING_PAYMENT
+  t+150s  status -> CANCELLED   cancelled_at = 2026-09-19 17:53:37.477773
+  elapsed since ordering: 163.8 s  (threshold 120 s)
+
+[9] FINAL STATE OF THE ORDER
+  status      = CANCELLED
+  cancelled_at= 2026-09-19 17:53:37.477773
+  paid_at     = NULL   <- must stay NULL (never paid)
+
+[12] ★★ STOCK GIVE-BACK
+  stock after timeout sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  delta vs pre-order: available +0  locked +0  sold +0
+
+[17] ★ IDEMPOTENCY -- wait one more task tick, nothing may move again
+  cancelled_at: 2026-09-19 17:53:37.477773  ->  2026-09-19 17:53:37.477773
+  stock settle       sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+
+[19] FINAL AUDIT -- arithmetic AND business conservation
+  identity broken = 0   negative = 0   drifting SKUs = 0
+
+  (kept: order #9015 is the clean CANCELLED sample; cart item was consumed by ordering)
+
+==============================================================================
+RESULT: 22 / 22 passed
+  PASS  [0] 基线恒等式成立
+  PASS  [1] demo 登录拿到 token
+  PASS  [2] 购物车有已勾选的有效项
+  PASS  [4] 下单成功返回订单 id
+  PASS  [4] 新订单是 PENDING_PAYMENT
+  PASS  [5] 下单即锁库（available-1 / locked+1 / sold 不动）
+  PASS  [6] 超时自动关单发生
+  PASS  [7] 耗时 > 阈值（真的等过，不是立刻取消）
+  PASS  [8] 耗时 <= 阈值 + 一个轮询周期 + 余量
+  PASS  [9] 终态是 CANCELLED
+  PASS  [10] cancelled_at 已写入
+  PASS  [11] paid_at 仍为 NULL（两条出路互斥）
+  PASS  [12] available 回到下单前
+  PASS  [13] locked 回到下单前
+  PASS  [14] sold 未被动过
+  PASS  [15] 逐字段与下单前完全相等
+  PASS  [16] 恒等式仍成立
+  PASS  [17] 再跑一轮 cancelled_at 不变
+  PASS  [18] 再跑一轮库存不变
+  PASS  [19] 7 个 SKU 恒等式全成立
+  PASS  [20] 无负库存
+  PASS  [21] 业务守恒 drift = 0
+==============================================================================

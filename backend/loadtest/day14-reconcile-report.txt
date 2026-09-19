@@ -1,0 +1,53 @@
+==============================================================================
+Day 14 Step 5 -- reconciliation: inventory_logs vs inventories, per SKU
+==============================================================================
+
+[0] PER-SKU RECONCILIATION
+    ledger_derived = first_row.before_stock + SUM(change_quantity)
+    sku  available first_before   sum_chg ledger_derived  last_after  verdict
+    1          100           -         -            100           -  OK
+    2           80          80        +0             80          80  OK
+    3           56           -         -             56           -  OK
+    4          143         147        -4            143         143  OK
+    5          117           -         -            117           -  OK
+    6           40           -         -             40           -  OK
+    7           90           -         -             90           -  OK
+
+[1] AUDIT ASSERTIONS (every SKU)
+  gapless-chain check: rows whose before != previous after -> 0
+
+[2] SKUs NEVER TOUCHED MUST STILL EQUAL THE SECTION 0.3 BASELINE
+    sku  baseline (t/a/l/s)           now (t/a/l/s)                verdict
+    1    100/100/0/0                  100/100/0/0                  = baseline
+    2    80/80/0/0                    80/80/0/0                    = baseline
+    3    60/56/0/4                    60/56/0/4                    = baseline
+    4    150/147/0/3                  150/143/0/7                  MOVED (ledger explains)
+    5    120/117/0/3                  120/117/0/3                  = baseline
+    6    40/40/0/0                    40/40/0/0                    = baseline
+    7    90/90/0/0                    90/90/0/0                    = baseline
+
+[3] BUSINESS CONSERVATION (locked vs PENDING_PAYMENT order items)
+  drifting SKUs = 0
+  SKUs breaking total = available + locked + sold : 0
+
+[4] ★ DOES THE AUDIT HAVE TEETH?  (bypass the service, inside a ROLLED-BACK tx)
+  A raw UPDATE that never goes through InventoryService should make the ledger
+  disagree with the table. Everything below runs in one transaction and is rolled back.
+  BEGIN
+  UPDATE 1
+  MUTATED: available is now 142
+  1|100|-1|0|100|-1|t|t
+  2|80|80|0|80|80|t|t
+  3|56|-1|0|56|-1|t|t
+  4|142|147|-4|143|143|f|f
+  5|117|-1|0|117|-1|t|t
+  6|40|-1|0|40|-1|t|t
+  7|90|-1|0|90|-1|t|t
+  VERDICT: false
+  ROLLBACK
+  AFTER ROLLBACK: available is 143
+  sku4 available: 143 -> 143 (rolled back)
+
+==============================================================================
+ASSERTIONS: 28 / 28 passed
+==============================================================================

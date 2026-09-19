@@ -1,0 +1,187 @@
+========================================================================
+Day 14 / Step 4 —— MyBatis 接 `UPDATE ... RETURNING` 最小验证报告
+生成时间：2026-09-19 18:10
+脚本：backend/loadtest/day14-returning-probe/run.sh
+结果：**17 / 17 全绿，exit=0**
+========================================================================
+
+【为什么做这个验证】
+inventory_logs 流水表要同时记 before_stock 和 after_stock。
+「更新后的库存值」只有 PostgreSQL 的 RETURNING 能一次拿到（省掉一次 SELECT，
+也避免两次往返之间的窗口）。但 Day-14 文档把「RETURNING 在 MyBatis 里能不能用」
+标为「需要实测确认」—— 这是第 4 步唯一可能推翻整体设计的点，所以先单独验掉。
+
+【怎么保证零副作用】
+全程跑在【一个不提交的事务】里，结尾 rollback。
+跑完复查 inventories：7 个 SKU 的 total = available + locked + sold 全部不变，
+locked_stock 全为 0，与 PENDING_PAYMENT 订单明细求和一致（业务守恒无漂移）。
+
+【实测确认的四件事】
+  A1. `<select resultType="java.lang.Integer">` 包住 UPDATE ... RETURNING 能正常执行
+      —— 结论：✅ 可行。（`<update>` 不行：它丢弃结果集且没有 resultType 属性）
+  A2. 返回的是【AFTER】值，不是 before 值
+      —— 证据：available_stock 由 147 改为 146，返回 146。
+  A3. WHERE 守卫命中 0 行时返回 null（不是 0，也不抛异常）
+      —— 证据：扣 999999 时 `<== Total: 0`，Java 侧拿到 null。
+      —— 原理：PG 返回的是【空结果集】（不是含 NULL 的一行），MyBatis selectOne 对 0 行返回 null。
+      —— 推论：骨架里 `if (availableAfter == null) throw ...` 判「守卫失败」正确且充分，
+              不需要再额外取影响行数。
+  A4. `flushCache="true"` 是【承重结构】，不是装饰
+      —— 见下方对照实验。
+
+【★★ 最有价值的发现：flushCache 对照实验】
+同一个 SqlSession 内，用【完全相同的参数】连调两次 releaseLocked(sku=4, qty=1)：
+
+  第 1 次：正常发 SQL，locked 1→0，返回 147。
+  第 2 次（locked 已经是 0，守卫必然不中）：
+    · flushCache="true"  → 照样发 SQL，`<== Total: 0` → 返回 null          ✅ 正确
+    · flushCache="false" → 【连 `Preparing:` 行都没有】，直接吐出上次的 147  ❌ 静默撒谎
+
+机制：MyBatis 一级缓存（本地缓存，localCacheScope 默认 SESSION）【始终开启】。
+      `<select>` 会填充它，而只有 insert/update/delete 才会刷新它。
+      不写 flushCache="true"，同参数第二次调用就命中缓存、SQL 根本不发。
+      上层会以为「退货成功」，实际库存没加回去 → 静默漏账。
+
+【什么时候这个陷阱会真的咬人（本项目具体场景）】
+order_items 表【没有】 (order_id, sku_id) 唯一约束（已查 pg_constraint 确认；
+目前 0 条重复数据，但约束层面允许）。
+即一张订单理论上可以有两行同 sku 同数量的明细 →
+循环里第二次 moveLockedToSold(sku, qty) 的缓存键与第一次完全相同 → 静默跳过 DB 写入 → 库存泄漏。
+
+【前提条件核查（决定 RETURNING 是否安全）】
+inventories 上有 `inventories_sku_id_key UNIQUE (sku_id)` → RETURNING 至多返回 1 行 →
+MyBatis selectOne 永远不会抛 TooManyResultsException。✅
+（若 sku_id 不唯一，这个写法会直接抛异常，必须先确认。）
+
+【顺带查明的配置事实】
+· application.yml 的 mybatis-plus.configuration 未设 cache-enabled → 默认 true；
+  但 XML 里没有 <cache/> 元素，二级缓存实际未启用。useCache="false" 属保险写法。
+· 一级缓存默认 localCacheScope=SESSION 且始终开启 —— 上面那个陷阱的来源。
+· map-underscore-to-camel-case: true 已开。
+· 自定义 XML 的 UPDATE 不走 MetaObjectHandler，updated_at 必须手写。
+
+========================================================================
+以下是 run.sh 的完整原始输出（含 MyBatis 打印的真实 SQL，可逐条核对）
+========================================================================
+
+SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
+SLF4J: Defaulting to no-operation (NOP) logger implementation
+SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
+Logging initialized using 'class org.apache.ibatis.logging.stdout.StdOutImpl' adapter.
+PooledDataSource forcefully closed/removed all connections.
+PooledDataSource forcefully closed/removed all connections.
+PooledDataSource forcefully closed/removed all connections.
+PooledDataSource forcefully closed/removed all connections.
+== T0: baseline ==
+Opening JDBC Connection
+Created connection 6444850.
+Setting autocommit to false on JDBC Connection [org.postgresql.jdbc.PgConnection@625732]
+==>  Preparing: SELECT available_stock || '/' || locked_stock || '/' || sold_stock FROM inventories WHERE sku_id = ?
+==> Parameters: 4(Long)
+<==    Columns: ?column?
+<==        Row: 147/0/3
+<==      Total: 1
+  sku 4 = available/locked/sold = 147/0/3
+== T1 (A1,A2): deduct 1, guard passes ==
+==>  Preparing: UPDATE inventories SET available_stock = available_stock - ?, locked_stock = locked_stock + ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND available_stock >= ? RETURNING available_stock
+==> Parameters: 1(Integer), 1(Integer), 4(Long), 1(Integer)
+<==    Columns: available_stock
+<==        Row: 146
+<==      Total: 1
+  [PASS] A1 returns a value at all  -> true
+  [PASS] A2 returns AFTER value (before-1)  -> 146
+==>  Preparing: SELECT available_stock || '/' || locked_stock || '/' || sold_stock FROM inventories WHERE sku_id = ?
+==> Parameters: 4(Long)
+<==    Columns: ?column?
+<==        Row: 146/1/3
+<==      Total: 1
+  [PASS]   available really decremented  -> 146
+  [PASS]   locked really incremented  -> 1
+  [PASS]   sold untouched  -> 3
+== T2 (A3): deduct 999999, guard fails ==
+==>  Preparing: UPDATE inventories SET available_stock = available_stock - ?, locked_stock = locked_stock + ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND available_stock >= ? RETURNING available_stock
+==> Parameters: 999999(Integer), 999999(Integer), 4(Long), 999999(Integer)
+<==      Total: 0
+  [PASS] A3 returns NULL (not 0, not exception)  -> null
+==>  Preparing: SELECT available_stock || '/' || locked_stock || '/' || sold_stock FROM inventories WHERE sku_id = ?
+==> Parameters: 4(Long)
+<==    Columns: ?column?
+<==        Row: 146/1/3
+<==      Total: 1
+  [PASS]   nothing changed  -> 146
+== T3 (A2): release 1, back to baseline ==
+==>  Preparing: UPDATE inventories SET available_stock = available_stock + ?, locked_stock = locked_stock - ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND locked_stock >= ? RETURNING available_stock
+==> Parameters: 1(Integer), 1(Integer), 4(Long), 1(Integer)
+<==    Columns: available_stock
+<==        Row: 147
+<==      Total: 1
+  [PASS] returns AFTER value == baseline  -> 147
+==>  Preparing: SELECT available_stock || '/' || locked_stock || '/' || sold_stock FROM inventories WHERE sku_id = ?
+==> Parameters: 4(Long)
+<==    Columns: ?column?
+<==        Row: 147/0/3
+<==      Total: 1
+  [PASS]   available restored  -> 147
+  [PASS]   locked restored  -> 0
+== T4 (A4): identical params twice in SAME session, flushCache=true ==
+==>  Preparing: UPDATE inventories SET available_stock = available_stock - ?, locked_stock = locked_stock + ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND available_stock >= ? RETURNING available_stock
+==> Parameters: 1(Integer), 1(Integer), 4(Long), 1(Integer)
+<==    Columns: available_stock
+<==        Row: 146
+<==      Total: 1
+==>  Preparing: UPDATE inventories SET available_stock = available_stock + ?, locked_stock = locked_stock - ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND locked_stock >= ? RETURNING available_stock
+==> Parameters: 1(Integer), 1(Integer), 4(Long), 1(Integer)
+<==    Columns: available_stock
+<==        Row: 147
+<==      Total: 1
+==>  Preparing: UPDATE inventories SET available_stock = available_stock + ?, locked_stock = locked_stock - ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND locked_stock >= ? RETURNING available_stock
+==> Parameters: 1(Integer), 1(Integer), 4(Long), 1(Integer)
+<==      Total: 0
+  [PASS] 1st release hits the DB  -> 147
+  [PASS] 2nd release returns NULL (cache was flushed)  -> null
+==>  Preparing: SELECT available_stock || '/' || locked_stock || '/' || sold_stock FROM inventories WHERE sku_id = ?
+==> Parameters: 4(Long)
+<==    Columns: ?column?
+<==        Row: 147/0/3
+<==      Total: 1
+  [PASS]   available not double-incremented  -> 147
+== T5 (A4 control): identical params twice, flushCache=FALSE ==
+==>  Preparing: UPDATE inventories SET available_stock = available_stock - ?, locked_stock = locked_stock + ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND available_stock >= ? RETURNING available_stock
+==> Parameters: 1(Integer), 1(Integer), 4(Long), 1(Integer)
+<==    Columns: available_stock
+<==        Row: 146
+<==      Total: 1
+==>  Preparing: UPDATE inventories SET available_stock = available_stock + ?, locked_stock = locked_stock - ?, updated_at = CURRENT_TIMESTAMP WHERE sku_id = ? AND locked_stock >= ? RETURNING available_stock
+==> Parameters: 1(Integer), 1(Integer), 4(Long), 1(Integer)
+<==    Columns: available_stock
+<==        Row: 147
+<==      Total: 1
+  [PASS] 1st no-flush release hits the DB  -> 147
+  2nd no-flush release returned: 147   <<< STALE CACHE HIT (returned 147 without touching the DB) - this is exactly the trap
+==>  Preparing: SELECT available_stock || '/' || locked_stock || '/' || sold_stock FROM inventories WHERE sku_id = ?
+==> Parameters: 4(Long)
+<==    Columns: ?column?
+<==        Row: 147/0/3
+<==      Total: 1
+  DB says available/locked = 147/0
+== T6: rollback ==
+Resetting autocommit to true on JDBC Connection [org.postgresql.jdbc.PgConnection@625732]
+Closing JDBC Connection [org.postgresql.jdbc.PgConnection@625732]
+Returned connection 6444850 to pool.
+Opening JDBC Connection
+Checked out connection 6444850 from pool.
+Setting autocommit to false on JDBC Connection [org.postgresql.jdbc.PgConnection@625732]
+==>  Preparing: SELECT available_stock || '/' || locked_stock || '/' || sold_stock FROM inventories WHERE sku_id = ?
+==> Parameters: 4(Long)
+<==    Columns: ?column?
+<==        Row: 147/0/3
+<==      Total: 1
+Resetting autocommit to true on JDBC Connection [org.postgresql.jdbc.PgConnection@625732]
+Closing JDBC Connection [org.postgresql.jdbc.PgConnection@625732]
+Returned connection 6444850 to pool.
+  after rollback sku 4 = 147/0/3
+  [PASS] DB restored to baseline  -> 147
+  [PASS] locked restored to baseline  -> 0
+  [PASS] sold restored to baseline  -> 3
+
+RESULT: pass=17 fail=0

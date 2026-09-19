@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="mbprobe.ProbeMapper">
+
+    <!-- The exact shape the Day 14 skeleton proposes: <select> (NOT <update>)
+         wrapping UPDATE ... RETURNING, resultType Integer, flushCache=true. -->
+    <select id="probeDeduct" resultType="java.lang.Integer" flushCache="true" useCache="false">
+        UPDATE inventories
+           SET available_stock = available_stock - #{quantity},
+               locked_stock    = locked_stock    + #{quantity},
+               updated_at      = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND available_stock &gt;= #{quantity}
+        RETURNING available_stock
+    </select>
+
+    <select id="probeRelease" resultType="java.lang.Integer" flushCache="true" useCache="false">
+        UPDATE inventories
+           SET available_stock = available_stock + #{quantity},
+               locked_stock    = locked_stock    - #{quantity},
+               updated_at      = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND locked_stock &gt;= #{quantity}
+        RETURNING available_stock
+    </select>
+
+    <!-- Control: same SQL but flushCache="false" -> should expose the local-cache trap -->
+    <select id="probeReleaseNoFlush" resultType="java.lang.Integer" useCache="false">
+        UPDATE inventories
+           SET available_stock = available_stock + #{quantity},
+               locked_stock    = locked_stock    - #{quantity},
+               updated_at      = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND locked_stock &gt;= #{quantity}
+        RETURNING available_stock
+    </select>
+
+    <!-- Snapshot as one unambiguous string so there is no Map key-case ambiguity -->
+    <select id="readStock" resultType="java.lang.String">
+        SELECT available_stock || '/' || locked_stock || '/' || sold_stock
+          FROM inventories
+         WHERE sku_id = #{skuId}
+    </select>
+
+</mapper>
