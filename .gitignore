@@ -20,6 +20,8 @@ logs/
 
 # --- MallX 项目内部 ---
 .workbuddy/
+# AI 工作区（记忆/技能/临时数据），与本机绑定，不入库
+.workbuddy-ai/
 backend/_scaffold_backup_*/
 
 # --- 工具临时文件 ---
