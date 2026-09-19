@@ -1,5 +1,9 @@
 package com.mallx.order.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mallx.common.api.PageResult;
 import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
 import com.mallx.inventory.service.InventoryService;
@@ -11,7 +15,10 @@ import com.mallx.order.mapper.OrderItemMapper;
 import com.mallx.order.mapper.OrderMapper;
 import com.mallx.order.service.OrderService;
 import com.mallx.order.vo.AddressForOrderVO;
+import com.mallx.order.vo.OrderDetailVO;
 import com.mallx.order.vo.OrderItemSourceVO;
+import com.mallx.order.vo.OrderItemVO;
+import com.mallx.order.vo.OrderVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +32,9 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class OrderServiceImpl implements OrderService {
+
+    /** 分页上限：单页最多 100 条 —— 防止 ?size=999999 一次把整张 orders 拖出来。 */
+    private static final long MAX_PAGE_SIZE = 100;
 
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
@@ -142,6 +152,120 @@ public class OrderServiceImpl implements OrderService {
         orderMapper.deleteSelectedCartItems(userId);
 
         return order.getId();
+    }
+
+    // ============================ 查询（Day 12 第 4 步） ============================
+
+    /**
+     * ★★ 分页参数夹紧 —— 这一行是本步的核心。
+     *
+     * <p>为什么不夹紧会出三种「变形」（不是「多返回几条」这么温和）：
+     * <pre>
+     * ?size=99999 → 一个人一次把整张 orders 拖走（DoS）        → Math.min 截到 100
+     * ?size=-1    → ⚠️ MyBatis-Plus 特例：size &lt; 0 = 不执行分页 = 查全表！
+     *               （见 Page#offset/FEATURE：size&lt;0 时插件直接放行原 SQL）→ Math.max 抬到 1
+     * ?page=0     → ⚠️ offset = (0-1)*size = 负数 → PG 报
+     *               "OFFSET must not be negative"             → Math.max 抬到 1
+     * </pre>
+     *
+     * <p>★ 夹紧必须在 {@code new Page<>(...)} 【之前】做 —— 构造进去的值就是最终发给 DB 的值，
+     * 之后再改 safeSize 这个局部变量毫无意义。
+     *
+     * <p>★ 另一条防线「只查自己的」写在 wrapper 的 {@code eq(userId)} 里，
+     * 和分页参数是两件独立的事：前者防越权，后者防资源滥用。
+     */
+    @Override
+    public PageResult<OrderVO> listMyOrders(Long userId, long page, long size) {
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        IPage<Order> result = orderMapper.selectPage(new Page<>(safePage, safeSize),
+                new LambdaQueryWrapper<Order>()
+                        .eq(Order::getUserId, userId)
+                        .orderByDesc(Order::getCreatedAt)
+                        // ★ 兜底排序：createdAt 精度可能相同（同一毫秒下的压测订单），
+                        //   再按 id 倒序，才能保证分页「不重不漏」而不是随机翻页。
+                        .orderByDesc(Order::getId));
+
+        // convert 只做「记录行」的转换（count 不变），返回 IPage<OrderVO>，直接交给 PageResult.of
+        return PageResult.of(result.convert(this::toOrderVO));
+    }
+
+    @Override
+    public OrderDetailVO detail(Long userId, Long orderId) {
+        Order order = requireOwn(userId, orderId);
+
+        List<OrderItem> items = orderItemMapper.selectList(
+                new LambdaQueryWrapper<OrderItem>()
+                        .eq(OrderItem::getOrderId, orderId)
+                        .orderByAsc(OrderItem::getId));
+
+        OrderDetailVO vo = new OrderDetailVO();
+        vo.setId(order.getId());
+        vo.setOrderNo(order.getOrderNo());
+        vo.setTotalAmount(order.getTotalAmount());
+        vo.setPayAmount(order.getPayAmount());
+        vo.setStatus(order.getStatus());
+        vo.setReceiverName(order.getReceiverName());
+        vo.setReceiverPhone(order.getReceiverPhone());
+        vo.setReceiverAddress(order.getReceiverAddress());
+        vo.setCreatedAt(order.getCreatedAt());
+        vo.setPaidAt(order.getPaidAt());
+        vo.setShippedAt(order.getShippedAt());
+        vo.setCompletedAt(order.getCompletedAt());
+        vo.setCancelledAt(order.getCancelledAt());
+        vo.setItems(items.stream().map(this::toItemVO).toList());
+        return vo;
+    }
+
+    /**
+     * 取「我的订单」—— 不是我的，一律伪装成不存在。
+     *
+     * <p>★★ 为什么「id 不存在」与「id 是别人的」必须返回同一个 404：
+     * 若前者 404、后者 403，攻击者只需批量遍历 id 看返回码，
+     * 就能画出一张「哪些订单真实存在」的地图（枚举攻击），再配合其它渠道拼出业务规模。
+     * 统一 404 = 两种情况在外部【不可区分】。
+     *
+     * <p>⚠️ 写法：{@code order == null} 必须先判，且 {@code equals} 由实体侧发起 ——
+     * {@code userId.equals(order.getUserId())} 在字段为 null 时同样安全，
+     * 但用实体侧更贴合「我不存在就没资格谈归属」的语义。
+     */
+    private Order requireOwn(Long userId, Long orderId) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null || !order.getUserId().equals(userId)) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        return order;
+    }
+
+    /** 订单头 → 列表行（内部分配用的字段如 userId 刻意不外泄） */
+    private OrderVO toOrderVO(Order o) {
+        OrderVO vo = new OrderVO();
+        vo.setId(o.getId());
+        vo.setOrderNo(o.getOrderNo());
+        vo.setTotalAmount(o.getTotalAmount());
+        vo.setPayAmount(o.getPayAmount());
+        vo.setStatus(o.getStatus());
+        vo.setReceiverName(o.getReceiverName());
+        vo.setReceiverPhone(o.getReceiverPhone());
+        vo.setReceiverAddress(o.getReceiverAddress());
+        vo.setCreatedAt(o.getCreatedAt());
+        return vo;
+    }
+
+    /** 明细实体 → 明细行（全是快照值，直接搬） */
+    private OrderItemVO toItemVO(OrderItem i) {
+        OrderItemVO vo = new OrderItemVO();
+        vo.setId(i.getId());
+        vo.setProductId(i.getProductId());
+        vo.setSkuId(i.getSkuId());
+        vo.setProductName(i.getProductName());
+        vo.setSkuName(i.getSkuName());
+        vo.setPrice(i.getPrice());
+        vo.setQuantity(i.getQuantity());
+        vo.setTotalAmount(i.getTotalAmount());
+        vo.setImage(i.getImage());
+        return vo;
     }
 
     /**
