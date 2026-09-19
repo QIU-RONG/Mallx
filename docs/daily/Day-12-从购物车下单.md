@@ -798,18 +798,90 @@ long safeSize = Math.min(Math.max(size, 1), 100);
 long safeCurrent = Math.max(current, 1);
 ```
 
-**第 4 步验收（8 项）**：
+### 第 4 步 ✅ 已完成（真机 11 项全绿）
 
-| # | 场景 | 期望 |
+**产出：0 个新文件，只改 3 个已有文件**（`OrderService` / `OrderServiceImpl` / `OrderController`）+ 1 处全局异常处理修复。
+
+> 基础设施全是现成的，**一行 POM、一条 SQL 都不用加**：
+> `PageResult` 已在 `mall-common/api`；`MybatisPlusConfig` 已注册 `PaginationInnerInterceptor(POSTGRE_SQL)`；
+> `mybatis-plus-jsqlparser` 已在父 POM 传递依赖里（第 142/147 行）。
+> ⚠️ 若分页插件没注册，`selectPage` **不报错** —— 只是 `total=0` 且返回**全部**记录。静默失效，最难查。
+
+**★★ 本步的灵魂：分页参数不夹紧会「变形」，不是「多返回几条」**
+
+| 输入 | 不夹紧的真实后果 | 夹紧写法 |
 |---|---|---|
-| 1 | 匿名 `GET /api/orders` | 401 |
-| 2 | `GET /api/orders` | 只返回自己的订单，按时间倒序 |
-| 3 | `GET /api/orders?page=1&size=2` | `records` 长度 ≤2，`total` 是**全部**订单数 |
-| 4 | `GET /api/orders?page=999` | `records` 为空数组，不报错 |
-| 5 | `GET /api/orders?size=99999` | 被夹到 100，**不是**一次拖全表 |
-| 6 | `GET /api/orders/{自己的id}` | 订单头 + 明细齐全 |
-| 7 | `GET /api/orders/{别人的id}`（造靶子） | `code=404`「订单不存在」 |
-| 8 | `GET /api/orders/99999` | `code=404` |
+| `?size=99999` | 一个人一次把整张 `orders` 拖走（DoS） | `Math.min(size, 100)` |
+| `?size=-1` | ⚠️ **MyBatis-Plus 特例：`size < 0` = 不执行分页 = 查全表** | `Math.max(size, 1)` |
+| `?page=0` | ⚠️ `offset = (0-1)*size` 为负 → PG 抛 `OFFSET must not be negative` | `Math.max(page, 1)` |
+
+★ 夹紧必须写在 `new Page<>(...)` **之前** —— 构造进去的值才是最终发给 DB 的值。
+
+**11 项验收（真机 curl + 查库，全绿）**
+
+| # | 请求 | 实际 |
+|---|---|---|
+| 1 | 匿名 `GET /api/orders` | ✅ `http=401 code=401 未登录或登录已过期` |
+| 2 | `GET /api/orders` | ✅ `total=2 current=1 size=10 n=2`；顺序 `id=2(10:41:29) → id=1(10:40:56)` 倒序；`hasUserId=False` |
+| 3 | `?page=1&size=1` | ✅ `total=2`（**全部**）`current=1 size=1 n=1 ids=2` |
+| 4 | `?page=999` | ✅ `code=200 current=999 n=0`（空数组，不报错） |
+| 5 | `?size=99999` | ✅ `size=100 n=2`（被夹到 100） |
+| 6 | `GET /api/orders/1` | ✅ `items=2` 快照齐全（`Apple iPhone 17 Pro / 原色钛金属 512GB / 12499.00 ×2`、`Huawei Mate 80 Pro / 曜金黑 512GB / 6999.00 ×1`）；`paidAt=[]` |
+| 7 | `GET /api/orders/9001`（**别人的**） | ✅ `code=404 订单不存在` |
+| 8 | `GET /api/orders/99999` | ✅ `code=404 订单不存在` |
+| 9 | 🆕 `?page=0` | ✅ `code=200 current=1 size=10 n=2` —— 被夹到 1，**没有**负 offset 报错 |
+| 10 | 🆕 `?size=-1` | ✅ `code=200 size=1 n=1` —— 挡住了 MP 的「负数 = 查全部」 |
+| 11 | 🆕 `GET /api/orders/abc` | ✅ `code=400 参数 id 格式不正确`（修复前是 `code=500`） |
+
+**★ 4 项关键证据（比「11 项都过了」更值钱）**
+
+1. **越权防线是真的**：demo（`users.id=1`）的列表 `total=2`，而库里 `orders` 共 **3** 行（第 3 行 `id=9001` 属于 `users.id=2`）
+   → `eq(userId)` 生效：别人的订单**根本进不了结果集**，不是「查出来再过滤掉」。
+2. **VO 不外泄内部字段**：列表行 `hasUserId=False` —— `OrderVO` 刻意不含 `userId`（同 Day 11 `AddressVO` 的规矩）。
+3. **夹紧真的生效**：`?size=99999` → 响应 `size=100`；`?size=-1` → 响应 `size=1` 且 `n=1`
+   （**若没夹紧，MP 会返回全部 2 条**，第 10 项就是靠 `n=1` 而不是 `n=2` 证明的）。
+4. **IDOR 的 404 伪装**：`/9001`（别人的订单，**真实存在**）与 `/99999`（**不存在**）返回**完全一样**的
+   `code=404 订单不存在` → 外部无法区分「不属于我」和「根本不存在」，枚举攻击拿不到有效信息。
+
+**验收用的靶子**（`users.id=2` 是 Day 12 第 2 步就保留的 `intruder`；第 5 步收尾时清）：
+
+```sql
+INSERT INTO orders (id, order_no, user_id, total_amount, pay_amount, status,
+                    receiver_name, receiver_phone, receiver_address, created_at, updated_at)
+VALUES (9001, 'MX-TARGET-9001', 2, 100.00, 100.00, 'PENDING_PAYMENT',
+        'VICTIM', '13800000099', 'SOMEWHERE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+-- ⚠️ 显式给 id 插入后必须校准序列，否则下一次自然插入撞主键
+SELECT setval(pg_get_serial_sequence('orders','id'), (SELECT MAX(id) FROM orders));
+```
+
+Swagger 路径 **17 → 18**（新增 path 是 `/api/orders/{id}`；`/api/orders` 的 GET 与 POST 共用一个 path，不另计）。
+
+---
+
+#### 第 4 步附带修复：`GET /api/orders/abc` 从 500 变 400
+
+**现象**：路径变量要 `Long`，传 `abc` → Spring 抛 `MethodArgumentTypeMismatchException`
+→ 它是 `Exception` 的子类且没有更具体的 handler → 被 `GlobalExceptionHandler.handleException(Exception)`
+兜走 → 客户端收到 **`200 + code=500 系统繁忙`**。
+
+**为什么必须修**：把「**调用方传错参数**」误报成「**服务端故障**」，
+排障时会被日志里的「系统异常」带偏（明明是自己传错）；对前端也不友好。
+
+**修法**（`mall-common/.../exception/GlobalExceptionHandler.java`）：
+
+```java
+@ExceptionHandler(MethodArgumentTypeMismatchException.class)
+public Result<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e){
+    log.warn("参数类型不匹配: name={}, value={}", e.getName(), e.getValue());
+    return Result.error(ResultCode.VALIDATE_FAILED.getCode(), "参数 " + e.getName() + " 格式不正确");
+}
+```
+
+- 新增 import `org.springframework.web.method.annotation.MethodArgumentTypeMismatchException`
+- **返回 HTTP 200 + code=400，不是 HTTP 400** —— 遵循项目约定「参数类失败统一看 body 的 code」，
+  前端只判一处；`Security` 层的真实 401/403 是唯一例外（那是过滤器直接写的响应）
+- 顺带修正方法名拼写：`handleVaildException` → `handleValidException`
+- ⚠️ 同类问题还有 `HttpMessageNotReadableException`（请求体 JSON 语法错）也会被兜成 500，本步未动
 
 ---
 
