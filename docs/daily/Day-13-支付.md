@@ -1227,4 +1227,262 @@ inventories: sku3 60/56/0/4   sku4 150/147/1/2   sku5 120/117/3/0   恒等式全
 应用        : 默认连接池重启，/api/payments 在线
 ```
 
+---
+
+## 十二、第 4 步 · 支付记录查询（规划）
+
+### 12.1 一句话战场：`payments` 表【没有 user_id】
+
+```sql
+payments : id, payment_no, order_id, amount, method, status, paid_at, created_at, updated_at   -- 9 列，没有 user_id
+orders   : id, user_id, ...                                                                     -- 归属在这张表上
+```
+
+⇒ 「只查我自己的支付记录」这句话，在 `payments` 上**无处可写** ——
+归属条件必须**跨表落到 `orders.user_id`**。这是本步唯一的新知识点，也是唯一真正的坑。
+
+⚠️ 由这一点还引出一条安全事实：**支付记录的越权泄漏比订单更严重** ——
+它一次暴露「买了什么价、用的什么方式、什么时候付的」。所以这个接口的归属校验
+不是「顺手加一下」，而是本步的主体。
+
+### 12.2 三种方案
+
+| 方案 | 做法 | 分页 | 越权条件放哪 | 代价 |
+|---|---|---|---|---|
+| **A. XML JOIN（推荐）** | `payments p INNER JOIN orders o ON o.id=p.order_id WHERE o.user_id=#{userId}`；Mapper 方法**首参 `IPage`** | DB 真分页（MP 插件改写 SQL） | **SQL 的 WHERE 里** | 新写一个 XML 文件 |
+| B. 两段式（Java join） | 先 `orderMapper.selectList(eq(userId))` 拿订单 id+orderNo → 再 `in(Payment::getOrderId, ids)` | DB 真分页 | Java 组装 | 订单多了 `IN` 列表爆炸；两次查询；`orderNo` 要手工 map |
+| C. 子查询 `inSql` | `.inSql(Payment::getOrderId, "SELECT id FROM orders WHERE user_id=" + userId)` | DB 真分页 | SQL 里（但是拼字符串） | 拼字符串习惯差；`IN` 语义在订单多时同样退化 |
+
+**选 A**，三个理由：
+1. 一条 SQL 同时拿到 `payments` 全部字段 + `orders.order_no`（`PaymentVO` 正好有这个字段，直接复用，**不用新建 VO**）；
+2. 分页在数据库层完成（不是查全表再内存切）；
+3. 越权条件**天然进 WHERE** —— 与 Day 12 的 `selectAddressForOrder` 完全同构，查不到就是 null，上层统一 404。
+
+### 12.3 文件清单（1 新 + 6 改）
+
+| 文件 | 类型 | 要点 |
+|---|---|---|
+| `mall-payment/.../vo/PaymentVO.java` | 改 | **加 `@NoArgsConstructor`** ← 见 12.5 坑① |
+| `mall-payment/.../mapper/PaymentMapper.java` | 改 | +2 方法，**首参必须是 `IPage`** |
+| `mall-payment/src/main/resources/mapper/PaymentMapper.xml` | **新** | ⚠️ 目录要新建（现在整个 `resources/` 都不存在） |
+| `mall-payment/.../service/PaymentService.java` | 改 | +2 签名 |
+| `mall-payment/.../service/impl/PaymentServiceImpl.java` | 改 | +2 实现 + `MAX_PAGE_SIZE` 常量 |
+| `mall-payment/.../controller/PaymentController.java` | 改 | +2 个 `@GetMapping` |
+| `mall-payment/pom.xml` | — | **不用动**（`mall-common`/`mall-order` 已在） |
+
+### 12.4 六个决定
+
+1. **INNER JOIN，不是 LEFT JOIN** —— `payments.order_id` 是 `NOT NULL` + 外键，行行都能在 `orders` 找到；LEFT JOIN 在这里是错的心智模型（还会让 count 变松）。**这是全项目第一个真正的 JOIN 查询**（Day 12 的 `selectSelectedCartItems` 是 4 表 LEFT JOIN，动机不同）。
+2. **列名显式列出，禁止 `p.*`** —— 将来 `payments` 加一列敏感字段（如 `channel_trade_no`），`p.*` 会**当场泄漏**；显式列 = 出参白名单。
+3. **详情接口的归属条件同样写进 SQL** —— `WHERE p.id=#{id} AND o.user_id=#{userId}`。禁止「先 `selectById` 再 Java 比」：`payments` 根本没有 `user_id` 可比，硬比就得再查一次订单，白多一次往返。
+4. **404 的两种原因不可区分**（id 不存在 / 是别人的）—— 同 Day 12 的 `requireOwn`，防枚举攻击。
+5. **分页夹紧照抄 `listMyOrders`** —— `Math.max(page, 1)` + `Math.min(Math.max(size, 1), 100)`。理由与三种静默变形（`size=-1` 查全表 / `size=0` 空列表 / `size=99999` 全表拖走）见 §10 ... `listMyOrders` 的 Javadoc。`MAX_PAGE_SIZE` 在本模块再定义一份（跨模块抽公共常量属于重构，不塞进本步）。
+6. **不过滤 `status`** —— V1.0 只有 `SUCCESS`；真实业务里失败 / 退款记录**也要展示**，所以先别写 `WHERE status='SUCCESS'`，那是把未来的自己坑住。
+
+### 12.5 两个坑（都是「编译通过、运行才炸」）
+
+**坑① `PaymentVO` 没有无参构造 → MyBatis 反射建对象失败**
+
+`@Data` + `@AllArgsConstructor` ⇒ Lombok **不再生成无参构造** ⇒ 使用 `resultType="com.mallx.payment.vo.PaymentVO"` 时，
+MyBatis 在 `DefaultObjectFactory.create()` 里 `getDeclaredConstructor()` 直接抛 `NoSuchMethodException`。
+症状：
+
+```
+ReflectionException: Error instantiating class com.mallx.payment.vo.PaymentVO
+    with invalid types () or values (). Cause: java.lang.NoSuchMethodException: ...<init>()
+```
+
+修法：类上加 `@NoArgsConstructor`（与 `@AllArgsConstructor` 共存，第 2 步那句 `new PaymentVO(...)` 照旧可用）。
+★ 顺手要改 `PaymentVO` 的 Javadoc —— 现在写的是「一旦有它，Lombok 就不再生成无参构造 → 不能 `new PaymentVO()` 再 setter」，加了注解后这句话就**讲反了**。
+
+**坑② XML 必须放 `src/main/resources/mapper/`，而该目录现在不存在**
+
+`mall-payment/src/main/resources/` 目前**整个目录都没有**（第 1~3 步这张表只写不读，没写过 XML）。
+放 `src/main/java` 下 Maven **不复制**；`mapper-locations: classpath*:mapper/**/*.xml` 靠 `classpath*` 才能扫到 jar 内的 XML。
+症状：
+
+```
+Invalid bound statement (not found): com.mallx.payment.mapper.PaymentMapper.selectMyPayments
+```
+
+（外加铁律③：接口方法名与 XML `id` 必须**逐字符一致**，差一个 `s` 就报上面这个错。）
+
+### 12.6 验收 8 项（靶子现成，不用造数据）
+
+| 账号 | 现状 |
+|---|---|
+| `demo / demo123`（users.id=**1**） | 3 张订单、**2 条支付记录**：`id=2`→order 9002（24998 元）、`id=44`→order 1（31997 元） |
+| `intruder / intruder`（users.id=**2**） | **0 张订单、0 条支付记录** ← 天然攻击者账号（Day 12 建的） |
+
+| # | 请求 | 期望 |
+|---|---|---|
+| 1 | `GET /api/payments`（demo） | `total=2`，`records[0].id=44`（**倒序**），且每行 `orderNo` **有值**（JOIN 生效） |
+| 2 | `GET /api/payments`（**intruder**） | `total=0`、`records=[]` ← ★ **本步最重要的一条：只查自己的** |
+| 3 | `GET /api/payments?size=99999`（demo） | 回显 `size=100`（夹紧） |
+| 4 | `GET /api/payments?size=0`（demo） | 回显 `size=1`、返回 **1 条**（不是空列表） |
+| 5 | `GET /api/payments/44`（demo） | 200，返回 `id=44 / orderNo=MX...060` |
+| 6 | `GET /api/payments/44`（**intruder**） | **404「支付记录不存在」**（同一条记录、两个身份、两种结果 = IDOR 铁证） |
+| 7 | `GET /api/payments/999999`（demo） | 404 **同款消息**（与 #6 不可区分） |
+| 8 | 任意接口不带 token | **401** |
+
+★ #5 + #6 是同一条 `payments` 记录 `id=44`：demo 看得到、intruder 看不到 ——
+这比任何文字说明都有力。
+
+### 12.7 零重启负向对照实测（psql 直连，7 组）
+
+脚本 `backend/loadtest/day13-s4-idor-contrast.sql`，把「带 / 不带归属条件」的 SQL 并排跑一遍 ——
+**结果集自己会说话**（同一份数据、同一条记录，只是 WHERE 差一个条件）：
+
+| # | SQL | 身份 | 结果 |
+|---|---|---|---|
+| ① | 带 `o.user_id=1` 的列表 | demo | **2 行**（`id=44` 在前，倒序 ✅） |
+| ② | 带 `o.user_id=2` 的列表 | intruder | **0 行** ✅ |
+| ③ | **漏掉**归属条件的列表 | 任何登录用户 | **2 行全泄漏**（31997 WECHAT + 24998 ALIPAY） |
+| ④ | 详情**只按** `p.id=44` | intruder | **1 行泄漏**（31997 元那张单） |
+| ⑤ | 详情带 `AND o.user_id=2` | intruder | **0 行** ✅ |
+| ⑥ | 详情带 `AND o.user_id=1` | demo | **1 行** ✅ |
+| ⑦ | `INNER JOIN` vs `LEFT JOIN` 的 count | — | 2 / 2（本数据集不分叉） |
+
+★ ③④ 就是「少写一行 WHERE 的代价」：泄漏的不是订单号，而是**金额 + 支付方式 + 支付时间**。
+★ ⑤⑥ 打的是**同一条 `payments.id=44`**：demo 看得到、intruder 看不到 —— IDOR 伪装的可观测形态。
+★ ⑦ 要诚实：本数据集上 INNER 与 LEFT 结果相同，**不是**因为 LEFT 也对，而是外键
+  `fk_payment_order` 保证了 payments 里不存在孤儿行。用 INNER 是把「这个前提当前成立」
+  写进 SQL，而不是靠运气。
+
+⚠️ 顺手记一个工具坑：psql 的 `\echo '中文'` 在 docker exec 通道里会显示成 `?`
+（`PGCLIENTENCODING` 管不到 `\echo` 的客户端输出），**但 `SELECT` 的结果集中文完全正常**
+—— 别因此以为数据坏了，标签改用英文即可。
+
+---
+
+## 十三、第 4 步 · 骨架与自检（自己敲，AI 只审）
+
+### 13.1 接口契约（三处必须逐字符对上，否则 `Invalid bound statement`）
+
+**`PaymentMapper.java`**（+2 方法，★ **首参必须是 `IPage`**，否则分页插件不拦、静默查全表）：
+
+```java
+IPage<PaymentVO> selectMyPayments(IPage<PaymentVO> page, @Param("userId") Long userId);
+
+PaymentVO selectMyPaymentById(@Param("paymentId") Long paymentId,
+                              @Param("userId") Long userId);
+```
+
+**`PaymentMapper.xml`**（新建 `mall-payment/src/main/resources/mapper/PaymentMapper.xml`）：
+`namespace` = 上面那个接口全限定名，两个 `id` 与方法名**逐字符一致**；
+`resultType` = `com.mallx.payment.vo.PaymentVO`（不是实体 `Payment` —— 因为要带 `order_no`）。
+
+**`PaymentService.java`**（+2 签名）：
+
+```java
+PageResult<PaymentVO> listMyPayments(Long userId, long page, long size);
+
+PaymentVO detailMyPayment(Long userId, Long paymentId);
+```
+
+**`PaymentController.java`**（+2 个 `@GetMapping`，路径与 `POST /api/payments` 不冲突）：
+
+```java
+@GetMapping            → Result<PageResult<PaymentVO>> list(Authentication, page, size)   // 带 defaultValue
+@GetMapping("/{id}")   → Result<PaymentVO>            detail(Authentication, @PathVariable Long id)
+```
+
+### 13.2 三处「填空点」（本步的全部智力都在这里）
+
+| 填空点 | 写在哪 | 判断标准 |
+|---|---|---|
+| ① 分页夹紧 | `listMyPayments` 第一二行 | `size` 那一行才是救命的，`page` 那行是规范化（见 `listMyOrders` Javadoc） |
+| ② 归属条件 | **XML 的 WHERE 里**，不是 Java 的 `if` | 详情那句要写成 `WHERE p.id = #{paymentId} AND o.user_id = #{userId}` |
+| ③ 404 分支 | `detailMyPayment` | `vo == null` → `BusinessException(NOT_FOUND, "支付记录不存在")`；**两种 null 原因共用同一句消息** |
+
+### 13.3 敲完的自检（编译前扫一遍）
+
+- [ ] `PaymentVO` 加了 `@NoArgsConstructor`（否则运行期 `NoSuchMethodException`）
+- [ ] XML 在 `src/main/resources/mapper/` 下，且 `resources/` 目录是新建的
+- [ ] `IPage` 的 import 是 `com.baomidou.mybatisplus.core.metadata.IPage`（不是 `extension` 里的 `Page` 张冠李戴）
+- [ ] XML 列名与 VO 字段靠 `map-underscore-to-camel-case` 对齐：`payment_no→paymentNo`、`order_no→orderNo`、`paid_at→paidAt`
+- [ ] 列**显式列出**，没写 `p.*`
+- [ ] `ORDER BY p.id DESC`（不带排序的分页是随机翻页）
+- [ ] `PaymentMapper.xml` 里**没有** `--` 形式的注释（XML 铁律④，会 `SAXParseException`）
+- [ ] 改完 `PaymentVO` 的 Javadoc（原来那句「不能 `new PaymentVO()` 再 setter」现在讲反了）
+
+### 13.4 你敲完，我会照 §12.6 的 8 项跑一遍
+
+外加两条我会额外查的：
+- `GET /api/payments?size=-1` —— 夹紧后应返回 1 条（**不夹紧会返回全表**）
+- `payment_no` 有没有在列表里被 `p.*` 之外的别名写错（对齐失败时 MyBatis 不报错，只是字段为 `null` —— **静默**）
+
+---
+
+## 十四、第 4 步实测：支付记录查询（分页夹紧 + IDOR）✅
+
+### 14.1 产出（1 新 + 6 改，POM 未动）
+
+| 文件 | 类型 | 要点 |
+|---|---|---|
+| `mall-payment/src/main/resources/mapper/PaymentMapper.xml` | **新** | 目录一并新建（此前 `resources/` 整个不存在） |
+| `mall-payment/.../vo/PaymentVO.java` | 改 | **+`@NoArgsConstructor`**（坑①）+ 改「无参构造」那段 Javadoc（原话讲反了） |
+| `mall-payment/.../mapper/PaymentMapper.java` | 改 | +2 方法（首参 `IPage`）+3 import；类头 Javadoc 从「本表不需要 XML」改成「查询必须写 XML」 |
+| `mall-payment/.../service/PaymentService.java` | 改 | +2 签名 |
+| `mall-payment/.../service/impl/PaymentServiceImpl.java` | 改 | +`MAX_PAGE_SIZE` +2 实现 +3 import |
+| `mall-payment/.../controller/PaymentController.java` | 改 | +2 个 `@GetMapping`（`GET /api/payments`、`GET /api/payments/{id}`） |
+
+**一次编译通过（BUILD SUCCESS，26 s）**；`target/classes/mapper/PaymentMapper.xml` 已生成。
+
+### 14.2 十一项验收（真机 curl，全绿）
+
+| # | 请求 | 实测 |
+|---|---|---|
+| 1 | 匿名 `GET /api/payments` | `http=401 code=401 未登录或登录已过期` |
+| 2 | demo 列表 | `total=2`、`records[0].id=44`（**倒序**）、**8 个字段全映射**（`paymentNo/orderId/orderNo/amount/method/status/paidAt`）|
+| 3 | **intruder 列表** | `total=0 records=[]` ← ★ **越权防线生效**（库里 payments 明明有 2 行）|
+| 4 | `?size=99999` | 回显 `size=100` |
+| 5 | `?size=0` | 回显 `size=1`、返回 **1 条**（不是空列表）|
+| 6 | `?size=-1` | 回显 `size=1`、返回 **1 条**（★ 不夹紧时这里会**返回全表**）|
+| 7 | `?page=0` | `current=1 n=2`（MP 自保，无需干预）|
+| 8 | demo `GET /api/payments/44` | 200 → `id=44 / orderNo=MX202609191040569691060 / 31997.00 / WECHAT` |
+| 9 | **intruder `GET /api/payments/44`** | `code=404 支付记录不存在` |
+| 10 | demo `GET /api/payments/999999` | `code=404 支付记录不存在` |
+| 11 | demo `GET /api/payments/abc` | `code=400 参数 id 格式不正确` |
+
+★★ **#9 与 #10 的响应逐字节相同**（脚本内实比 `body9 == body10` → `True`）：
+
+```json
+{"code":404,"message":"支付记录不存在","data":null}
+```
+
+「id 不存在」与「id 是别人的」在外部**完全不可区分** → 枚举攻击筛不出一条真实记录。
+
+★ **#3 的证据结构**：库里 `payments` 有 2 行（`id=2` → order 9002、`id=44` → order 1，都属 users.id=1），
+intruder 拿到 `total=0`。这与 Day 12 订单列表「demo 看到 `total=2` 而库里有 3 行」是**同一种证据**：
+**分母里被减掉的那一行，就是越权防线存在的证明。**
+
+### 14.3 三条技术佐证
+
+1. **JOIN 的 count 正确**：`total=2`（不是 0 也不是全表）→ 分页插件对**自定义 XML** 生成的
+   count 是对的（`SELECT COUNT(*) FROM payments p INNER JOIN orders o ...`，自动去掉 `ORDER BY`）。
+2. **字段映射零静默失败**：`o.order_no → orderNo` 是本查询唯一来自 `orders` 的列，实测有值；
+   `payment_no → paymentNo`、`paid_at → paidAt` 也都有值 → `map-underscore-to-camel-case` 生效。
+   ⚠️ 这类错**不报警**，字段只会是 `null`，所以必须**逐字段肉眼确认**，不能只看 `code=200`。
+3. **启动日志干净**：`ERROR count = 0`、`Invalid bound statement count = 0`。
+   日志里 3 处 `Exception` 命中全是 `GlobalExceptionHandler` 的 **WARN** 常规记录，
+   恰好对应验收 #9 / #10（业务 404）与 #11（参数类型不匹配）—— 是预期行为，不是故障。
+
+### 14.4 两个坑的验证结果（都没炸）
+
+- **坑①（`PaymentVO` 无参构造）**：写代码时就加了 `@NoArgsConstructor`，所以这次**没机会亲眼看见**
+  `ReflectionException`。它的证据是**反过来的** —— 删掉那个注解，第 2 项立刻 500。★ 留作自证题。
+- **坑②（XML 位置）**：`target/classes/mapper/PaymentMapper.xml` 存在 → `classpath*:mapper/**/*.xml`
+  确实扫到了 jar 内的新 XML；`Invalid bound statement` 计数为 0。
+
+### 14.5 环境与基线
+
+```
+orders     : #1 PAID(31997)   #2 PENDING_PAYMENT(19497)   #9002 PAID(24998)
+payments   : 2 行（id=2 → order 9002 / id=44 → order 1）
+users      : demo(id=1) / intruder(id=2)
+Swagger    : 19 → 20 路径（新增 /api/payments/{id}）
+启动       : Tomcat started on port 8080 + Global AuthenticationManager ... userDetailsServiceImpl ✅
+```
+
 
