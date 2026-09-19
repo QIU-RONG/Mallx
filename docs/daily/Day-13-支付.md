@@ -1485,4 +1485,23 @@ Swagger    : 19 → 20 路径（新增 /api/payments/{id}）
 启动       : Tomcat started on port 8080 + Global AuthenticationManager ... userDetailsServiceImpl ✅
 ```
 
+### 14.6 收尾发现：push 静默失败的真凶是 `GIT_TERMINAL_PROMPT=0`
+
+提交后照例 push（代理 `9674=True`）→ 又是 `rc=128` 且 stdout/stderr **全空**。逐项对照后定位：
+
+| 方式 | `GIT_TERMINAL_PROMPT` | 结果 |
+|---|---|---|
+| PS `git push --dry-run` | 显式 `1` / `0` | ❌ 两种都 `rc=128` 零输出 |
+| Python `subprocess.run(...)` | 继承会话的 `0` | ❌ `rc=128` 零输出 |
+| **Python `subprocess.run(...)`** | **显式 `"1"`** | ✅ `rc=0`，`ae9f2c4..8916f1e  main -> main` |
+
+⇒ 会话环境注入了 **`GIT_TERMINAL_PROMPT=0`**，**连 Python 也救不了**；必须显式覆盖成 `1`。
+
+★ 更隐蔽的一层：`win-git-push/scripts/push.py` 里**自己主动写死**了 `env["GIT_TERMINAL_PROMPT"] = "0"`
+（Day 12 加的，当时误以为「禁止交互」更安全）——
+所以「用 Python 就稳」这条经验**一直带着一个隐藏前提**在生效，直到这次才暴露。
+→ 已把脚本改成 `"1"`，并同步更新 `SKILL.md`（顶部「两个坑」→「三个坑」+ 六行对照表 + 三步排查顺序）。
+
+★ 三重验证：`local head == remote head == 8916f1e`，`git status -sb` 不再 ahead ✅。
+
 
