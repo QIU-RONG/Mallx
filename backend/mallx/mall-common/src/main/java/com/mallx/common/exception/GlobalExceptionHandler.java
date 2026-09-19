@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @Slf4j
 @RestControllerAdvice
@@ -34,11 +35,32 @@ public class GlobalExceptionHandler {
 
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public Result<Void> handleVaildException(MethodArgumentNotValidException e){
+    public Result<Void> handleValidException(MethodArgumentNotValidException e){
         FieldError fieldError = e.getBindingResult().getFieldError();
         String message = fieldError != null ? fieldError.getDefaultMessage() : "参数校验失败";
         log.warn("参数校验失败: {}",message);
         return Result.error(ResultCode.VALIDATE_FAILED.getCode(),message);
+    }
+
+    /**
+     * 路径变量 / 查询参数【类型不匹配】：如 {@code GET /api/orders/abc}（id 要 Long，给了字符串）。
+     * <p>
+     * 【为什么必须单独接一个】
+     * Spring 在这种情况抛的是 {@link MethodArgumentTypeMismatchException}，
+     * 它是 Exception 的子类但没有更具体的孪生 handler —— 会被下面的
+     * {@link #handleException(Exception)} 兜走，客户端收到 200 + code=500
+     * 「系统繁忙」，把「调用方传错参数」误报成「服务端故障」，排障时会被带偏。
+     * <p>
+     * 【为什么返回 200 而不是 HTTP 400】
+     * 遵循项目约定：参数类失败统一走「HTTP 200 + body 里的 code」，
+     * 前端只需判 code 一处，不用同时处理 HTTP 状态码和业务码两套体系。
+     * （Security 层的真实 401/403 是唯一例外，那是过滤器写的响应。）
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public Result<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e){
+        log.warn("参数类型不匹配: name={}, value={}", e.getName(), e.getValue());
+        return Result.error(ResultCode.VALIDATE_FAILED.getCode(),
+                "参数 " + e.getName() + " 格式不正确");
     }
 
     @ExceptionHandler(Exception.class)
