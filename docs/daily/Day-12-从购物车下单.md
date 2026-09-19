@@ -809,11 +809,26 @@ long safeCurrent = Math.max(current, 1);
 
 **★★ 本步的灵魂：分页参数不夹紧会「变形」，不是「多返回几条」**
 
-| 输入 | 不夹紧的真实后果 | 夹紧写法 |
-|---|---|---|
-| `?size=99999` | 一个人一次把整张 `orders` 拖走（DoS） | `Math.min(size, 100)` |
-| `?size=-1` | ⚠️ **MyBatis-Plus 特例：`size < 0` = 不执行分页 = 查全表** | `Math.max(size, 1)` |
-| `?page=0` | ⚠️ `offset = (0-1)*size` 为负 → PG 抛 `OFFSET must not be negative` | `Math.max(page, 1)` |
+下表左右两列是**同一套代码、同一份数据实跑出来的**（做法：先提交 → 删掉夹紧那一行 → 重编译重启 → 测 → `git checkout --` 还原 → 重编译重启复跑确认）：
+
+| 输入 | 不夹紧（实测） | 夹紧后（实测） | 危险性 |
+|---|---|---|---|
+| `?size=-1` | `size=-1`、**`n=2`（返回全部）** | `size=1`、`n=1` | ★★★ MP 特例：`size < 0` = **不执行分页 = 查全表** |
+| `?size=0` | `size=0`、**`n=0`（空列表）但 `total=2`** | `size=1`、`n=1` | ★★ 静默失效：用户会以为「我没有订单」 |
+| `?size=99999` | `size=99999`（**未被截断**） | `size=100` | ★★ 数据一多即全量拖走（DoS） |
+| `?page=0` | `current=1`、`n=2`（**安然无恙**） | `current=1`、`n=2` | 无 —— MP 自己兜住了 |
+| `?page=-5` | `current=1`、`n=2`（**安然无恙**） | — | 无 |
+
+**★ 实测推翻了一条流行说法**（我原先也是这么讲的，被自己跑出来的数据打脸）：
+
+> 错：「`?page=0` 会让 `offset = (0-1)*size` 为负 → PG 抛 `OFFSET must not be negative`」
+
+**不会。** MyBatis-Plus 有两层保护：
+1. `Page` 的构造函数里 `if (current > 1) this.current = current;` —— 否则**保持默认值 1**；
+2. `Page#offset()` 对 `current <= 1` 直接返回 `0`。
+
+所以 `Math.max(page, 1)` 只是**防御性规范化**（让语义明确、不依赖框架实现细节被改动），
+真正救命的是 `Math.max(size, 1)` 与 `Math.min(size, 100)` **那一行** —— 别把两行的分量讲成一样重。
 
 ★ 夹紧必须写在 `new Page<>(...)` **之前** —— 构造进去的值才是最终发给 DB 的值。
 
@@ -954,13 +969,16 @@ public Result<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e){
 - [x] `mall-order`：`Order` / `OrderItem` 实体 + 两个 Mapper(+XML)
 - [x] `mall-order`：`OrderCreateDTO` + 5 个 VO + `OrderStatus`
 - [x] `mall-order`：`OrderService`(+Impl)，`createFromCart` ★ 全部重点
-- [~] `mall-order`：`OrderController` —— 第 2 步已上 `POST /api/orders`，列表/详情在第 4 步
+- [x] `mall-order`：`OrderController` 3 个接口（`POST /api/orders` + `GET /api/orders` + `GET /api/orders/{id}`）
 - [x] 第 3 步并发压测证明「不超卖」（**12/12 断言全绿**）+ 对照实验证明「先查后改会超卖」（20 单成交 / 库存只扣 2 件）
 - [x] 一车多单实验：1 件商品开出 **7 张单**（订单侧缺幂等，与超卖性质不同）
 - [x] 压测装置入库：`backend/loadtest/` 4 个文件（setup / cleanup / 两个压测脚本）
-- [~] 3 个接口在 Swagger UI 里可调（路径 16 → **17**，`POST /api/orders` 已在列）
+- [x] 第 4 步订单列表（`size` 夹紧 1..100）+ 详情（IDOR 404），**11 项全绿**
+- [x] 第 4 步反例实验：删掉夹紧后实测 `size=-1` 返回全表 / `size=0` 返回空列表（**并推翻了「page=0 会负 offset 报错」的说法**）
+- [x] 附带修复：`MethodArgumentTypeMismatchException` → `code=400`（原先被兜底吞成 500）
+- [x] 接口在 Swagger UI 里可调（路径数 16 → **17 → 18**）
 - [ ] 端到端 10 项全绿
-- [~] git 提交：第 1、2 步已提（`37c24d5` / `cd651e1` / `5a7b445`），第 3 步的脚本 + 文档待提
+- [~] git 提交：第 1–4 步已提（`37c24d5` / `cd651e1` / `5a7b445` / `25cd0a5` / `84265b0` / `ec8c3af` / `1afc36d` / `3848dc3`）
 
 ---
 
