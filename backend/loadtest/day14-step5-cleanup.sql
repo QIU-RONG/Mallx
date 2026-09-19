@@ -77,6 +77,8 @@ SELECT sku_id, total_stock, available_stock, locked_stock, sold_stock,
        (total_stock = available_stock + locked_stock + sold_stock) AS identity_ok
 FROM inventories ORDER BY sku_id;
 
+-- ★ sold 口径：Day 15 起是 {PAID, SHIPPED, COMPLETED}，不再是 PAID 一个 ——
+--   发货/收货都【不动】sold，但会把订单挪出 PAID，只认 PAID 会报【假漂移】。
 \echo '=== AFTER: 业务守恒（drift 必须 0 行） ==='
 SELECT i.sku_id,
        i.locked_stock - COALESCE(l.want, 0) AS drift_locked,
@@ -87,6 +89,6 @@ LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want FROM order_items oi
            WHERE o.status = 'PENDING_PAYMENT' GROUP BY oi.sku_id) l ON l.sku_id = i.sku_id
 LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want FROM order_items oi
            JOIN orders o ON o.id = oi.order_id
-           WHERE o.status = 'PAID' GROUP BY oi.sku_id) s ON s.sku_id = i.sku_id
+           WHERE o.status IN ('PAID', 'SHIPPED', 'COMPLETED') GROUP BY oi.sku_id) s ON s.sku_id = i.sku_id
 WHERE i.locked_stock <> COALESCE(l.want, 0) OR i.sold_stock <> COALESCE(s.want, 0)
 ORDER BY i.sku_id;

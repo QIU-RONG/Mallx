@@ -349,13 +349,15 @@ def main():
     neg = one("SELECT coalesce(string_agg(sku_id::text, ','), '-') FROM inventories "
               "WHERE available_stock < 0 OR locked_stock < 0 OR sold_stock < 0")
     # ★ 业务守恒：本次校准之后它必须【一直是】0 行
+    #   sold 口径：Day 15 起是 {PAID, SHIPPED, COMPLETED} —— 发货/收货不动 sold，
+    #   但会把订单挪出 PAID，只认 PAID 会报【假漂移】。
     drift = one("SELECT coalesce(string_agg(t.sku_id::text, ','), '-') FROM ("
                 " SELECT i.sku_id FROM inventories i"
                 " LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want FROM order_items oi"
                 "            JOIN orders o ON o.id=oi.order_id WHERE o.status='PENDING_PAYMENT'"
                 "            GROUP BY oi.sku_id) l ON l.sku_id=i.sku_id"
                 " LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want FROM order_items oi"
-                "            JOIN orders o ON o.id=oi.order_id WHERE o.status='PAID'"
+                "            JOIN orders o ON o.id=oi.order_id WHERE o.status IN ('PAID','SHIPPED','COMPLETED')"
                 "            GROUP BY oi.sku_id) s ON s.sku_id=i.sku_id"
                 " WHERE i.locked_stock <> coalesce(l.want,0) OR i.sold_stock <> coalesce(s.want,0)"
                 ") t")

@@ -23,13 +23,13 @@ PATH A -- place, then CANCEL (goods return to the shelf)
 ------------------------------------------------------------------------------
 
 [2] PATH A / place order A (sku4 x1)
-  POST /api/orders -> order=9027 code=200 {"code":200,"message":"success","data":9027}
+  POST /api/orders -> order=9030 code=200 {"code":200,"message":"success","data":9030}
   order A status = PENDING_PAYMENT
   after place A        sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
   delta vs start: available -1  locked +1  sold +0
 
 [3] PATH A / cancel order A
-  POST /api/orders/9027/cancel -> http=200 code=200
+  POST /api/orders/9030/cancel -> http=200 code=200
   order A status now = CANCELLED
   after cancel A       sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
   delta vs after-place: available +1  locked -1  sold +0
@@ -42,13 +42,13 @@ PATH B -- place, then PAY (goods leave for good)
 ------------------------------------------------------------------------------
 
 [4] PATH B / place order B (sku4 x1)
-  POST /api/orders -> order=9028 code=200 {"code":200,"message":"success","data":9028}
+  POST /api/orders -> order=9031 code=200 {"code":200,"message":"success","data":9031}
   order B status = PENDING_PAYMENT
   after place B        sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
   delta vs start: available -1  locked +1  sold +0
 
 [5] PATH B / pay order B
-  POST /api/payments -> http=200 code=200 paymentId=195
+  POST /api/payments -> http=200 code=200 paymentId=197
   order B status now = PAID
   after pay B          sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
   delta vs after-place: available +0  locked -1  sold +1   ★ available must NOT move
@@ -70,10 +70,10 @@ PATH B -- place, then PAY (goods leave for good)
 [7] LEDGER AUDIT OVER BOTH PATHS (4 rows, one contiguous chain)
 ==============================================================================
     id   type               change   before    after ref      at
-    23   ORDER_LOCK             -1      147      146 NULL     19:41:43.647
-    24   CANCEL_RELEASE         +1      146      147 9027     19:41:46.981
-    25   ORDER_LOCK             -1      147      146 NULL     19:41:50.609
-    26   PAY_SOLD               +0      146      146 9028     19:41:54.067
+    29   ORDER_LOCK             -1      147      146 NULL     20:07:05.355
+    30   CANCEL_RELEASE         +1      146      147 9030     20:07:08.849
+    31   ORDER_LOCK             -1      147      146 NULL     20:07:12.729
+    32   PAY_SOLD               +0      146      146 9031     20:07:16.255
   A0 = 147   Σ(change) = -1   A0 + Σ = 146   available now = 146
 
 [8] BUSINESS CONSERVATION (locked == Σ PENDING_PAYMENT units)
@@ -82,7 +82,7 @@ PATH B -- place, then PAY (goods leave for good)
 ==============================================================================
 [9] CLEANUP -- remove this run's artifacts, restore the baseline
 ==============================================================================
-  orders to delete: [9027, 9028]
+  orders to delete: [9030, 9031]
   ledger rows to delete: id > 0
   sku4 restored to: locked=0 sold=3 available=total-3-0
 

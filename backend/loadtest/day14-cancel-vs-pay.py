@@ -184,7 +184,9 @@ def audit_rows(sku_ids):
 
 
 def conservation_drift():
-    """业务守恒：locked 应 == Σ(未支付明细)，sold 应 == Σ(已支付明细)。
+    """业务守恒：locked 应 == Σ(未支付明细)，sold 应 == Σ(已售出去的明细)。
+    ★ sold 口径：Day 15 起是 {PAID, SHIPPED, COMPLETED} —— 发货/收货都不动 sold，
+      但会把订单挪出 PAID，只认 PAID 会报【假漂移】（详见 Day-15 文档 §0.2）。
     返回漂移的 SKU 列表（正常应为空）。"""
     out = psql(
         "SELECT coalesce(string_agg(t.sku_id::text, ','), '-') FROM ("
@@ -193,7 +195,7 @@ def conservation_drift():
         "            JOIN orders o ON o.id=oi.order_id WHERE o.status='PENDING_PAYMENT'"
         "            GROUP BY oi.sku_id) l ON l.sku_id=i.sku_id"
         " LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want FROM order_items oi"
-        "            JOIN orders o ON o.id=oi.order_id WHERE o.status='PAID'"
+        "            JOIN orders o ON o.id=oi.order_id WHERE o.status IN ('PAID','SHIPPED','COMPLETED')"
         "            GROUP BY oi.sku_id) s ON s.sku_id=i.sku_id"
         " WHERE i.locked_stock <> coalesce(l.want,0)"
         "    OR i.sold_stock <> coalesce(s.want,0)"

@@ -3,7 +3,9 @@
 --
 -- 依据：
 --   locked 应 == SUM(PENDING_PAYMENT 订单的 order_items.quantity)
---   sold   应 == SUM(PAID            订单的 order_items.quantity)
+--   sold   应 == SUM(PAID / SHIPPED / COMPLETED 订单的 order_items.quantity)
+--               ★ Day 15 起口径升级：发货/收货都【不动】sold，但会把订单挪出 PAID，
+--                 只认 PAID 会报【假漂移】（详见 Day-15 文档 §0.2）。
 --
 -- 口径（Day-14 文档 §0.3）：
 --   多出的（drift > 0）→ 退回 available   （有依据：本就不该被占/被卖）
@@ -32,7 +34,7 @@ LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want
            WHERE o.status = 'PENDING_PAYMENT' GROUP BY oi.sku_id) l ON l.sku_id = i.sku_id
 LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want
            FROM order_items oi JOIN orders o ON o.id = oi.order_id
-           WHERE o.status = 'PAID' GROUP BY oi.sku_id) s ON s.sku_id = i.sku_id
+           WHERE o.status IN ('PAID', 'SHIPPED', 'COMPLETED') GROUP BY oi.sku_id) s ON s.sku_id = i.sku_id
 WHERE i.locked_stock <> COALESCE(l.want, 0) OR i.sold_stock <> COALESCE(s.want, 0)
 ORDER BY i.sku_id;
 
@@ -42,7 +44,7 @@ BEGIN;
 WITH want_sold AS (
     SELECT oi.sku_id, sum(oi.quantity) AS want
     FROM order_items oi JOIN orders o ON o.id = oi.order_id
-    WHERE o.status = 'PAID' GROUP BY oi.sku_id
+    WHERE o.status IN ('PAID', 'SHIPPED', 'COMPLETED') GROUP BY oi.sku_id
 )
 UPDATE inventories i
 SET available_stock = i.available_stock + (i.sold_stock - w.want),
@@ -60,7 +62,7 @@ SET available_stock = i.available_stock + i.sold_stock,
 WHERE i.sold_stock > 0
   AND NOT EXISTS (
       SELECT 1 FROM order_items oi JOIN orders o ON o.id = oi.order_id
-      WHERE oi.sku_id = i.sku_id AND o.status = 'PAID');
+      WHERE oi.sku_id = i.sku_id AND o.status IN ('PAID', 'SHIPPED', 'COMPLETED'));
 
 -- 2) locked 归位：无待支付订单时，locked 全属「无主锁定」→ 退回 available
 UPDATE inventories i
@@ -87,7 +89,7 @@ LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want
            WHERE o.status = 'PENDING_PAYMENT' GROUP BY oi.sku_id) l ON l.sku_id = i.sku_id
 LEFT JOIN (SELECT oi.sku_id, sum(oi.quantity) AS want
            FROM order_items oi JOIN orders o ON o.id = oi.order_id
-           WHERE o.status = 'PAID' GROUP BY oi.sku_id) s ON s.sku_id = i.sku_id
+           WHERE o.status IN ('PAID', 'SHIPPED', 'COMPLETED') GROUP BY oi.sku_id) s ON s.sku_id = i.sku_id
 WHERE i.locked_stock <> COALESCE(l.want, 0) OR i.sold_stock <> COALESCE(s.want, 0)
 ORDER BY i.sku_id;
 

@@ -492,11 +492,14 @@ def main():
             SELECT count(*) FROM l FULL OUTER JOIN p ON l.sku_id = p.sku_id
              WHERE COALESCE(l.locked_stock,0) <> COALESCE(p.q,0)
         """).strip()
+        # ★ sold 口径：Day 15 起是 {PAID, SHIPPED, COMPLETED}，不再是 PAID 一个。
+        #   发货/收货都不动 sold，但会把订单挪出 PAID —— 只认 PAID 会报【假漂移】。
+        #   详见 docs/daily/Day-15-发货与确认收货.md §0.2。
         drift_sold = one("""
             WITH s AS (SELECT sku_id, sold_stock FROM inventories WHERE sold_stock <> 0),
                  p AS (SELECT oi.sku_id, SUM(oi.quantity) q FROM order_items oi
                          JOIN orders o ON o.id = oi.order_id
-                        WHERE o.status='PAID' GROUP BY oi.sku_id)
+                        WHERE o.status IN ('PAID','SHIPPED','COMPLETED') GROUP BY oi.sku_id)
             SELECT count(*) FROM s FULL OUTER JOIN p ON s.sku_id = p.sku_id
              WHERE COALESCE(s.sold_stock,0) <> COALESCE(p.q,0)
         """).strip()
