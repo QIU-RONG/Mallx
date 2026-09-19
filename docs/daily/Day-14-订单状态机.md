@@ -511,8 +511,231 @@ Day 13 的对照组之所以能收 12 笔钱，正是因为**把条件去掉了*
 
 ---
 
-**状态**：✅ 第 1 步（取消订单，34/34）+ ✅ 第 2 步（并发对照，主组 16/16、对照组 11/11）已完成并提交；
-⬜ 第 3 步（超时关单）、⬜ 第 4 步（`inventory_logs` 流水）、⬜ 第 5 步（端到端 + 收官）待开工。
+## 十、第 3 步实测：超时关单 —— 22/22 全绿
+
+**改动：1 新类 + 2 改（POM 未动）**
+
+| 模块 | 文件 | 改了什么 |
+|---|---|---|
+| mall-server | `MallXApplication.java` | +`@EnableScheduling` |
+| mall-order | `task/OrderTimeoutTask.java` | **新**：`@Scheduled(fixedDelay = 60_000)`，阈值 2 分钟 |
+| | `OrderService` / `Impl` | +`cancelTimeoutOrders(int minutes)`（**系统视角**，不带 `user_id`） |
+| | `service/impl/OrderCancelExecutor.java` | **新**：单笔取消提成独立 Bean |
+| | `OrderMapper.java` / `.xml` | +`selectTimeoutOrderIds` |
+
+**验收脚本 `backend/loadtest/day14-timeout-verify.py`（22 项断言）**
+
+| 站 | 实测 |
+|---|---|
+| [0] 基线 | sku4 `total=150 avail=147 locked=0 sold=3`；`PENDING_PAYMENT=0`、`max_order_id=9007` |
+| [4] 下单后**走开** | `POST /api/orders` → **#9015**，`PENDING_PAYMENT`、`paid_at = NULL` |
+| | 下单即锁库：`available 147→146`、`locked 0→1`、`sold 3` 不动 |
+| [6] ★ 只观察，不调取消 | `t+10s … t+140s` 一直是 `PENDING_PAYMENT` |
+| | **`t+150s` → `CANCELLED`**，`cancelled_at = 2026-09-19 17:53:37.477773` |
+| | 实测耗时 **163.8 s**（阈值 120 s）—— 真的等过，不是立刻取消 |
+| [9] 终态 | `CANCELLED`、`cancelled_at` 有值、**`paid_at` 仍为 NULL** |
+| [12] ★★ 库存回补 | `146/1/3 → 147/0/3`，**与下单前逐字段完全相等** |
+| [17] ★ 幂等 | 再等一个任务周期，`cancelled_at` 与库存**都没再动** |
+| [19] 终局审计 | 恒等式全成立、无负库存、**业务守恒 drift = 0** |
+
+★ 应用日志佐证（不是只看接口返回）：
+`[scheduling-1] ... 超时关单：扫到 1 张，取消 1 张`
+
+★ 这步的三个真难点，以及各自的解法：
+
+1. **定时任务没有 `SecurityContext`** —— 不能取 `(Long) authentication.getPrincipal()`。
+   所以拆成两个入口：`cancel(userId, orderId)`（用户视角，带归属校验）与
+   `cancelTimeoutOrders(minutes)`（系统视角，**不带** `user_id` 条件）。
+   ★ 这不是「省代码」，是**权限模型的分层**：混成一个方法，要么越权要么取消不了。
+2. **批量循环不能整体一个事务** —— 一张订单失败不该让另外 99 张一起回滚。
+   逐单走自己的事务；而**自调用会让 `@Transactional` 失效**（本类调本类不走代理），
+   所以单笔逻辑**提成独立 Bean** `OrderCancelExecutor`。
+3. **与支付的竞态** —— 不需要新代码，第 ④ 条 CAS 兜住；定时任务只是「多了一个竞争者」。
+
+---
+
+## 十一、第 4 步实测：`inventory_logs` 流水 —— 61/61 全绿
+
+**改动：3 新 + 4 改（零 DDL，表 Day 03 就建好了）**
+
+| 模块 | 文件 | 改了什么 |
+|---|---|---|
+| mall-inventory | `common/InventoryLogType.java` | **新**：`ORDER_LOCK` / `PAY_SOLD` / `CANCEL_RELEASE` |
+| | `entity/InventoryLog.java` | **新**：8 字段 |
+| | `mapper/InventoryLogMapper.java` | **新**：空 `BaseMapper` |
+| | `mapper/InventoryMapper.java` | 三方法返回类型 `int` → `Integer` |
+| | `mapper/InventoryMapper.xml` | 三处 `<update>` → `<select … RETURNING available_stock>` |
+| | `service/InventoryService.java` | 后两个方法 +`orderId` |
+| | `service/impl/InventoryServiceImpl.java` | 三处写流水；**三个方法都补 `@Transactional`** |
+| mall-order / mall-payment | `OrderCancelExecutor` / `PaymentServiceImpl` | 传 `orderId` |
+
+### 11.1 口径（§六 两个决策的落地）
+
+| 列 | 取值 |
+|---|---|
+| `before_stock` / `after_stock` | **`available_stock`**（决策 ①；指 `total` 则三行同值，没有信息量） |
+| `change_quantity` | **带符号**，且**恒等于 `after - before`** |
+| `reference_id` | 订单 id；**`ORDER_LOCK` 写 NULL**（见下） |
+
+由此得到三条可直接断言的铁律：
+
+| type | 写点 | change | reference_id |
+|---|---|---|---|
+| `ORDER_LOCK` | `deductStock` | `-n` | **NULL** |
+| `PAY_SOLD` | `moveLockedToSold` | **`0`** | 订单 id |
+| `CANCEL_RELEASE` | `releaseLocked` | `+n` | 订单 id |
+
+★★ **`PAY_SOLD` 的 `change` 恒为 0 不是「没记到东西」，它就是断言本身**：
+`moveLockedToSold` 绝不能碰 `available_stock`，一旦这条流水不为 0，
+就说明支付动了 `available` —— 也就是同一件货被扣了两遍（Day 13 那场事故）。
+
+★ **`ORDER_LOCK` 的 `reference_id` 只能是 NULL**，这是**流程顺序**决定的：
+下单是「先扣库存（⑤）、后插订单（⑥）」，走到扣库存时订单还不存在，没有 id 可记。
+★ 这是**文档没提到的第三个决策**，写代码时才发现。
+
+★ `before` 是**算出来的**（`after - change`），不是单独查的 —— 于是恒等式
+`change == after - before` **由构造保证**，写不歪，也不用多查一次 SELECT（正是 §六 否掉的方案 A/B）。
+
+### 11.2 前置验证：`RETURNING` 在 MyBatis 里到底能不能用
+
+文档 §六 把这一条标成「**需要实测确认**」，而它是第 4 步唯一可能推翻整体设计的点，
+所以先单独验掉：`backend/loadtest/day14-returning-probe/`（**17/17**，零副作用，事务内回滚）。
+
+| 结论 | 证据 |
+|---|---|
+| `<select resultType="java.lang.Integer">` 包 `UPDATE … RETURNING` 可行 | 正常返回 |
+| 返回的是 **AFTER** 值 | before `147` → 返回 `146` |
+| 守卫命中 0 行 → 返回 **`null`**（不是 0、不抛异常） | `<== Total: 0`，Java 侧拿到 `null` |
+| `flushCache="true"` **必需** | 见下 |
+
+★★ **`flushCache` 对照实验（最有价值的一条）**：同一 SqlSession 内用**完全相同的参数**
+连调两次 `releaseLocked(sku=4, qty=1)`：
+
+- `flushCache="true"` → 第二次照样发 SQL，`Total: 0` → 返回 `null` ✅
+- `flushCache="false"` → **连 `Preparing:` 行都没有**，直接吐出上次的 `147` ❌
+
+机制：MyBatis **一级缓存**（`localCacheScope` 默认 `SESSION`）**始终开启**，
+`<select>` 会填充它，而只有 `insert/update/delete` 才刷新它。
+★ 本项目真的会踩到：`order_items` 没有 `(order_id, sku_id)` 唯一约束，
+一张订单可以有两行同 SKU 同数量的明细 → 循环里第二次调用的缓存键完全相同 → **静默漏写库存**。
+**所以 `flushCache="true"` 是承重结构，不是保险写法。**
+
+★ 前提条件也核了：`inventories_sku_id_key UNIQUE (sku_id)` → `RETURNING` 至多 1 行 →
+`selectOne` 永不抛 `TooManyResultsException`。
+
+### 11.3 验收脚本 `backend/loadtest/day14-ledger-verify.py`（61 项断言）
+
+连跑三次，每次 4 行，**链首尾相接无断点**：
+
+```
+ id   type               change   before    after ref      at
+ 15   ORDER_LOCK             -1      144      143 NULL     19:24:48.999
+ 16   PAY_SOLD               +0      143      143 9023     19:24:50.785
+ 17   ORDER_LOCK             -1      143      142 NULL     19:24:52.734
+ 18   CANCEL_RELEASE         +1      142      143 9024     19:24:54.372
+```
+
+| 断言组 | 结果 |
+|---|---|
+| 链连续（`row[i].before == row[i-1].after`） | ✅ 无断点 |
+| 账本对账：`A0 + Σ(change) == available 现值` | ✅ `144 + (-1) = 143` |
+| **`PAY_SOLD` 的 change 恒为 0** | ✅ |
+| **`ORDER_LOCK` 的 `reference_id` 为 NULL** | ✅ |
+| **被拒操作不写流水**：重复取消 → 400、intruder 越权取消 → 404 | ✅ 账本 14 → 14 行不变 |
+| 应用日志 | 无 `ERROR`、无 `Invalid bound statement`，只有预期内业务 `WARN` |
+
+★ 脚本写成**「账本相对」**而非「假设空表」：开局记 `max(id)` 高水位 + `A0`，
+只对自己新建的行做断言 → **可重复跑**。
+
+★ **`@Transactional` 的理由变了，注释也要跟着变**：旧注释写「单条 UPDATE 自身即原子，
+所以故意不加」—— 加了流水后每条路径变成 UPDATE + INSERT **两条**语句，这条理由**失效**。
+所以是把理由**重写**，而不是直接删注解（否则以后有人照着旧注释把事务去掉）。
+传播行为保持 `REQUIRED`，**绝不能改 `REQUIRES_NEW`**。
+
+### 11.4 ★ 写这一步时踩到的两个认知错误（都记下来）
+
+1. **以为 `/api/cart` 的 `add` 不校验库存** —— 只看了方法尾部就下结论，实际第 47 行就是
+   `if (merged > sku.getAvailableStock()) throw`。加上 `updateQuantity` 与
+   `createFromCart` 第 ③ 步，**三层校验把「超量下单」彻底堵死**：
+   `deductStock` 返回 `null` 的路径在 API 上**不可达**，是**纯竞态防线**
+   （`OrderServiceImpl` 第 112 行的注释也正是这么写的）。
+   → **教训：读方法要看全，别只看尾部就推断行为。**
+2. **断言 `|Σ ORDER_LOCK| == Σ CANCEL_RELEASE` 是错的** —— 本轮 A 单是**支付**掉的，
+   它的锁定没被 release 而是变成 `sold` 了，两边本来就不该相等。
+   正确口径：`Σ(ORDER_LOCK) + Σ(CANCEL_RELEASE) == available_now - A0`（`PAY_SOLD` 贡献 0）。
+
+---
+
+## 十二、第 5 步实测：流水对账 + 收官 —— 28/28 全绿
+
+**验收脚本 `backend/loadtest/day14-reconcile.py`（28 项断言）**
+
+### 12.1 逐 SKU 对账：账本能不能解释现值
+
+审计口径：`available_now == 账本首行 before_stock + Σ(change)`
+（与 `available_now == 账本末行 after_stock` 互校），外加「链无断点」。
+
+```
+sku  available  first_before  sum_chg  ledger_derived  last_after  verdict
+  1        100             -        -             100           -  OK
+  2         80            80       +0              80          80  OK
+  3         56             -        -              56           -  OK
+  4        143           147       -4             143         143  OK
+  5        117             -        -             117           -  OK
+  6         40             -        -              40           -  OK
+  7         90             -        -              90           -  OK
+```
+
+- sku4 的 §0.3 基线是 `150/147/0/3`，实测跑到 `150/143/0/7` ——
+  账本给出的 `-4`（available）**正好对上 4 张 PAID 单**，位移**有据可查**。
+- 其余 6 个 SKU **没有流水行**，且**逐字段等于基线** → 证明实验没误伤它们。
+- 链无断点、业务守恒 drift = 0、恒等式全成立。
+
+### 12.2 ★★ 给审计「装上牙齿」的证明
+
+在**一个会回滚的事务里**绕过应用直接
+`UPDATE inventories SET available_stock = available_stock - 1`（模拟旁路写入），
+审计立刻把 sku4 标成 DRIFT：
+
+```
+4|142|147|-4|143|143|f|f      ← last_after(143) ≠ available(142)，Σ 推导也 ≠
+VERDICT: false
+ROLLBACK → AFTER ROLLBACK: available is 143
+```
+
+★ **这条才是账本存在的意义**：任何走 `InventoryService` 的改动都会留痕、两边自然相等；
+只有**绕过应用**的裸 SQL 才会让账本与现值分叉 —— 而这正是 §0.2 发现的那类漂移。
+零副作用（事务内回滚，实测 `143 → 143`）。
+
+### 12.3 收官清理（`day14-step5-cleanup.sql`）
+
+| 删除 | 数量 |
+|---|---|
+| `orders` #9016 ~ #9024 | 9 张（4 PAID + 5 CANCELLED） |
+| `payments` | 4 行（对应那 4 张 PAID 单） |
+| `order_items` | 9 行 |
+| `inventory_logs` | 18 行（本次第 4 步实验的全部流水） |
+| `inventories` sku4 | `143/0/7` → `150/147/0/3` |
+
+★★ **为什么流水也要一起删 —— 本次清理唯一需要讲清楚的判断**：
+流水记录的是「库存发生过什么」。既然现在要把库存**倒回**基线，账本就必须跟着倒；
+否则账本说「末值 143」而表里是 147，12.1 的审计会直接报 DRIFT —— **那就是账本在说谎**。
+「只倒库存、不倒账本」= 亲手制造一次假漂移，**比不清理更糟**。
+
+★ 删前已 `pg_dump --data-only` 备份四张表（安全网）；脚本**幂等**（重复执行 DELETE 全为 0 行）。
+★ `available` 不硬编码，写成 `total_stock - locked - sold`，**恒等式由构造保证**。
+★ 删订单必须按外键顺序（`payments` / `order_items` → `orders`）；
+`inventory_logs.reference_id` **没有外键**，所以数据库不会帮你级联，必须手工清。
+
+**清理结果**：7 个 SKU 逐字段等于 §0.3 基线、恒等式全成立、**drift = 0 行**；
+订单表只剩 8 张历史单（3 CANCELLED + 5 PAID），`payments` 剩 5 行，流水归零。
+
+---
+
+**状态**：✅ 第 1 步（取消订单，34/34）+ ✅ 第 2 步（并发对照，主组 16/16、对照组 11/11）
++ ✅ 第 3 步（超时关单，22/22）+ ✅ 第 4 步（`inventory_logs` 流水，61/61；前置 `RETURNING` 探针 17/17）
++ ✅ 第 5 步（流水对账 28/28 + 收官清理）全部完成并提交。
+**Day 14 收官**：库存三个写点全部留痕，且账本可反向审计现值。
 
 ---
 
