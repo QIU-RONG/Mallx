@@ -29,4 +29,24 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
      * @return 影响行数：1 成功，0 库存不足
      */
     int deductStock(@Param("skuId") Long skuId, @Param("quantity") int quantity);
+
+    /**
+     * 把锁定库存转为已售（支付成功专用）。
+     *
+     * <p>★ 与 {@code deductStock} 是同一招的第二次使用：判定条件 {@code locked_stock >= quantity}
+     * 写在 WHERE 里，由数据库在同一条语句内完成「判断 + 转移」，返回<b>影响行数</b>作为答案。
+     *
+     * <p>★★ 特别注意：<b>{@code available_stock} 一动不动</b>。
+     * 这件货在下单那一刻就已经从「可售」挪进「锁定」了，支付只是把它从「锁定」挪到「已售」——
+     * 再动一次 available 就等于把同一件货扣两遍。
+     *
+     * <p>条件里的 {@code locked_stock >= quantity} 是守卫：确保不会把「本来没锁定的货」卖掉。
+     * 正常流程永远满足；一旦返回 0，说明订单与库存已经对不上账（数据被旁路改过），
+     * 必须整笔事务回滚而不是继续。
+     *
+     * @param skuId    SKU 主键
+     * @param quantity 转移数量（必须 &gt; 0）
+     * @return 影响行数：1 成功，0 锁定库存不足（异常态）
+     */
+    int moveLockedToSold(@Param("skuId") Long skuId, @Param("quantity") int quantity);
 }

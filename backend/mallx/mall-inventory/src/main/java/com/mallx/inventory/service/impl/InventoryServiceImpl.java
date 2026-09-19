@@ -39,4 +39,23 @@ public class InventoryServiceImpl implements InventoryService {
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "库存不足");
         }
     }
+
+    /**
+     * 支付成功：{@code locked → sold}。
+     *
+     * <p>同样【故意不加】{@code @Transactional}：单条 UPDATE 自身即原子，
+     * 事务边界应由调用方（PaymentService.pay）持有 ——
+     * 让「插支付单 + 改订单状态 + 改 N 个 SKU 库存」共处一个事务才有意义。
+     *
+     * <p>★ 0 行是【服务端异常态】，不是用户错误：订单说「我锁定着 3 件」，库存说「我只锁着 1 件」。
+     * 这种账对不上不可能靠重试解决，必须整笔回滚，所以用 {@code FAIL(500)} 而不是 {@code 400}。
+     * （对比 {@code deductForOrder} 的 0 行 = 「库存不足」，那是正常的用户可理解结果。）
+     */
+    @Override
+    public void moveLockedToSold(Long skuId, int quantity) {
+        int rows = inventoryMapper.moveLockedToSold(skuId, quantity);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.FAIL.getCode(), "库存锁定状态异常，支付已回滚");
+        }
+    }
 }

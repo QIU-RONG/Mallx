@@ -22,4 +22,21 @@
            AND available_stock &gt;= #{quantity}
     </update>
 
+    <!-- ★★ Day 13 的核心 SQL：锁定 → 已售（支付成功）
+         与 deductStock 同一招：判定 + 转移在同一条语句里完成，返回影响行数作为答案。
+
+         ★★★ available_stock 一动不动！这件货在下单那一刻就已经从 available 挪进 locked，
+             支付只是 locked → sold。再动一次 available 就等于把同一件货扣两遍。
+         ★ locked_stock >= #{quantity} 是守卫：正常流程永远满足；返回 0 行说明订单与库存
+           已经对不上账（被旁路改过），上层必须抛异常让整笔事务回滚。
+         ⚠️ updated_at 仍要手写（自定义 XML 的 UPDATE 不走 MetaObjectHandler）。 -->
+    <update id="moveLockedToSold">
+        UPDATE inventories
+           SET locked_stock = locked_stock - #{quantity},
+               sold_stock   = sold_stock   + #{quantity},
+               updated_at   = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND locked_stock &gt;= #{quantity}
+    </update>
+
 </mapper>
