@@ -52,4 +52,31 @@
           AND selected = TRUE
     </delete>
 
+    <!-- ★★★ ④ Day 13 的核心 SQL：CAS 推进订单状态（支付成功）。
+         WHERE status = 'PENDING_PAYMENT' 就是 Compare-And-Set：
+         「只有现在还是待支付，才允许被我改成已支付」—— 数据库替我们做原子比较。
+         影响行数 1 = 抢到；0 = 已被别人付过 / 已取消 → 上层抛 400，整笔事务回滚。
+
+         ★ orders 表没有 version 列 —— 状态字段自己就是「版本号」，
+           这就是本方法不需要任何乐观锁工具的原因。
+
+         ★ 为什么【不】带 user_id：归属在 Service 第一步已经分流过；
+           带了会让三种 0 行原因（不存在 / 不是你的 / 状态不对）重新糊在一起。
+
+         ⚠️ status 用字面量而不是 #{status}：让「一条 SQL 自己就把语义说清楚」，
+            读的人不用回 Service 看传了什么。代价是状态值升级时要改这里。
+            （与 deductStock / moveLockedToSold 的纯参数写法风格不同，两种都对。）
+         ⚠️ updated_at 必须手写：自定义 XML 的 UPDATE【不走】MetaObjectHandler，
+            漏了它这一格就永远停在旧时间。
+         ⚠️ paid_at 也手写（不挂 fill）—— 它记的是「业务事实发生的那一刻」，
+            不是「这一行被改过」。 -->
+    <update id="markPaid">
+        UPDATE orders
+           SET status     = 'PAID',
+               paid_at    = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = #{orderId}
+           AND status = 'PENDING_PAYMENT'
+    </update>
+
 </mapper>

@@ -154,6 +154,36 @@ public class OrderServiceImpl implements OrderService {
         return order.getId();
     }
 
+    // ============================ 支付（Day 13 第 2 步） ============================
+
+    /**
+     * ★★ CAS 推进订单状态 —— 本方法的全部内容就是「调一条条件 UPDATE，看影响行数」。
+     *
+     * <p>真正的逻辑在 SQL 的 {@code WHERE status = 'PENDING_PAYMENT'} 里（见 OrderMapper.xml）。
+     * Java 侧只负责一件事：<b>把 0 行翻译成用户看得懂的话</b>。
+     *
+     * <p>★ 0 行报 {@code 400} 而不是 {@code 500}：订单「已支付 / 已取消」是业务上的正常状态，
+     * 不是系统故障 —— 用户刷新页面就能看到正确状态。
+     * （对比 {@code InventoryServiceImpl.moveLockedToSold} 的 0 行是账目对不上，那才报 500。）
+     *
+     * <p>★ 0 行也<b>不是</b> {@code 404}：订单是否存在已由调用方（PaymentService.pay）
+     * 第一步查过，走到这里说明订单一定存在且属于当前用户 ——
+     * 所以这里可以安心地说「状态不允许」，不必再含糊其辞。
+     *
+     * <p>★ 【故意不加】{@code @Transactional}：与 {@code InventoryServiceImpl} 同一个理由 ——
+     * 单条 UPDATE 自身即原子，事务边界应由调用方 {@code PaymentServiceImpl.pay} 持有，
+     * 好让「插支付单 + 改订单状态 + 改 N 个 SKU」共处一个事务。
+     * （若将来加了，默认传播 REQUIRED 也会加入外层事务，行为一致；
+     *   但绝不能用 REQUIRES_NEW —— 那等于在支付流程里自己偷偷提交。）
+     */
+    @Override
+    public void markPaid(Long orderId) {
+        int rows = orderMapper.markPaid(orderId);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许支付");
+        }
+    }
+
     // ============================ 查询（Day 12 第 4 步） ============================
 
     /**

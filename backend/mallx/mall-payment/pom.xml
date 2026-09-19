@@ -19,5 +19,21 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
+
+        <!-- ★ 方向只能是 payment → order，绝不能反过来（order → payment 会循环依赖，构建直接失败）。
+             这正是「支付接口只能挂 PaymentController、不能挂 OrderController」的原因：
+             支付要写 orders 表，所以依赖方向天然是 payment 依赖 order。 -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-order</artifactId>
+        </dependency>
+
+        <!-- 支付要调 InventoryService.moveLockedToSold（locked → sold）。
+             ⚠️ mall-order 已经传递带出了 mall-inventory，但「自己用到的依赖要自己声明」
+                （直接依赖原则）—— 将来 order 去掉对 inventory 的依赖时，payment 不会莫名编译失败。 -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-inventory</artifactId>
+        </dependency>
     </dependencies>
 </project>

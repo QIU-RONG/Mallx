@@ -50,4 +50,24 @@ public interface OrderService {
      * @throws com.mallx.common.exception.BusinessException code=404 订单不存在
      */
     OrderDetailVO detail(Long userId, Long orderId);
+
+    /**
+     * 支付成功：把订单从「待支付」推进到「已支付」（CAS 条件 UPDATE）。
+     *
+     * <p>★ 条件 UPDATE 而不是「先查后改」—— 并发下两个线程都会先读到
+     * {@code PENDING_PAYMENT}，各自 UPDATE 一次就收了<b>两笔钱</b>。
+     * 把状态判断放进 {@code WHERE}，由数据库做原子比较，只有一个人能拿到 1 行。
+     *
+     * <p>★ 不加 {@code @Transactional}：单条 UPDATE 自身即原子，
+     * 事务边界由调用方（{@code PaymentServiceImpl.pay}）持有 ——
+     * 让「插支付单 + 改订单状态 + 改 N 个 SKU 库存」共处一个事务才有意义。
+     *
+     * <p>★ 状态不对时抛业务异常（HTTP 200 + body.code=400）。
+     * 这里是 400 而不是 500 —— 「订单已经付过了」是用户可理解的正常结果，
+     * 刷新一下就能看到正确状态；对比 {@link com.mallx.inventory.service.InventoryService#moveLockedToSold}
+     * 的 0 行是「服务端账目不一致」，那才报 500。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许支付
+     */
+    void markPaid(Long orderId);
 }
