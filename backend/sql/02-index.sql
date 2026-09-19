@@ -12,6 +12,15 @@
 -- ------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON user_addresses(user_id);
 
+-- 部分唯一索引：把「每个用户最多一条默认地址」这条业务规则下推到数据库。
+--   ① WHERE 只对 is_default = true 的行生效 —— 普通地址（false）可以有任意多条；
+--   ② user_addresses 没有其它 UNIQUE 约束，所以「两条默认」全靠代码纪律守住，
+--      任何绕过 Service 的写入（脚本、批量导入、写错的 SQL）都会静默产生脏数据；
+--   ③ 有了它，第二条默认直接撞 23505，脏数据根本落不了库；
+--   ④ 与 Service 的「先清后置（同一事务）」不冲突：同一事务内先 UPDATE 清掉旧的，再置新的。
+CREATE UNIQUE INDEX IF NOT EXISTS uk_user_addresses_default
+    ON user_addresses(user_id) WHERE is_default = true;
+
 -- ------------------------------------------------------------
 -- 二、商品索引
 -- ------------------------------------------------------------
