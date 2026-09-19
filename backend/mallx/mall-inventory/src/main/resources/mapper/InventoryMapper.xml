@@ -3,41 +3,77 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.mallx.inventory.mapper.InventoryMapper">
 
+    <!-- ==========================================================================
+         ★★ Day 14 起，本文件三个语句从 <update> 改成 <select>，并在 SQL 末尾加 RETURNING。
+         原因：inventory_logs 流水要同时记 before_stock 和 after_stock，
+               「改成了多少」只有 RETURNING 能一条语句拿到。
+
+         ★ 为什么必须是 <select>：<update> 会把结果集丢掉，而且它没有 resultType 属性，
+           没法接 RETURNING。用 <select> 包住一条 UPDATE，MyBatis 就把 RETURNING 的
+           结果集当普通查询结果映射。
+
+         ★★ 为什么必须写 flushCache="true"（★ 实测踩过，不是保险写法）：
+           MyBatis 一级缓存（本地缓存，localCacheScope 默认 SESSION）始终开启；
+           <select> 会填充它，而只有 insert/update/delete 才会刷新它。
+           不写这个属性，同一事务内用相同参数调第二次会直接命中缓存、SQL 根本不发，
+           上层以为改成功了、实际数据库没动。
+           实测对照（同一 SqlSession，相同参数连调两次 releaseLocked）：
+             flushCache="true"  → 第二次照样发 SQL，Total: 0，返回 null            OK
+             flushCache="false" → 第二次连 Preparing 行都没有，直接返回陈旧的 147  危险
+           本项目真的会踩到：order_items 没有 (order_id, sku_id) 唯一约束，
+           一张订单可以有两行同 SKU 同数量的明细，循环里第二次调用的缓存键完全相同。
+           useCache="false" 是顺手关掉二级缓存，属保险，不是关键。
+
+         ★★ 返回语义（配合 Java 侧 Integer 返回类型）：
+           非 null = 成功，值就是【改完之后】的 available_stock
+           null    = 守卫不成立（0 行），RETURNING 空手而归，MyBatis selectOne 返回 null
+
+         ⚠️ updated_at 必须手写：自定义 XML 的 UPDATE 不走 MetaObjectHandler，
+            漏了它这一格就永远停在旧时间。
+         ⚠️ 减法必须由数据库做（available_stock - #{quantity}），绝不能在 Java 里算好新值
+            再 SET 全字段，那就是「先查后改」，两次请求会读到同一个旧值。
+         ⚠️ 是 >= 不是 >：库存刚好等于购买量时要能买（Day 10 购物车踩过同一个边界）。
+         ========================================================================== -->
+
     <!-- ★★ Day 12 的核心 SQL：条件扣减（原子动作）
          判定与扣减在同一条语句里完成 —— 数据库执行 UPDATE 时会对命中行加写锁，
          并发的第二个请求会等锁，等到了再重新求值 WHERE，此时 available_stock 已被
-         第一个请求改小，条件不再成立 → 影响行数 0 → 上层报「库存不足」。
-         ★ 减法必须由数据库做（available_stock - #{quantity}），绝不能在 Java 里
-           算好新值再 SET 全字段 —— 那就是「先查后改」，两次请求会读到同一个旧值。
+         第一个请求改小，条件不再成立 → 0 行 → 上层报「库存不足」。
 
-         ⚠️ 是 >= 不是 >：库存刚好等于购买量时要能买（Day 10 购物车踩过同一个边界）。
-         ⚠️ updated_at 必须手写：自定义 XML 的 UPDATE【不走】MetaObjectHandler，
-            漏了它这一格就永远停在旧时间。 -->
-    <update id="deductStock">
+         ★ 流水口径：type=ORDER_LOCK，change=-n，before=返回值+n，after=返回值。
+           reference_id 只能写 NULL（下单是「先扣库存、后插订单」，此刻订单还不存在）。 -->
+    <select id="deductStock" resultType="java.lang.Integer" flushCache="true" useCache="false">
         UPDATE inventories
            SET available_stock = available_stock - #{quantity},
                locked_stock    = locked_stock    + #{quantity},
                updated_at      = CURRENT_TIMESTAMP
          WHERE sku_id = #{skuId}
            AND available_stock &gt;= #{quantity}
-    </update>
+        RETURNING available_stock
+    </select>
 
     <!-- ★★ Day 13 的核心 SQL：锁定 → 已售（支付成功）
-         与 deductStock 同一招：判定 + 转移在同一条语句里完成，返回影响行数作为答案。
+         与 deductStock 同一招：判定 + 转移在同一条语句里完成。
 
          ★★★ available_stock 一动不动！这件货在下单那一刻就已经从 available 挪进 locked，
              支付只是 locked → sold。再动一次 available 就等于把同一件货扣两遍。
-         ★ locked_stock >= #{quantity} 是守卫：正常流程永远满足；返回 0 行说明订单与库存
-           已经对不上账（被旁路改过），上层必须抛异常让整笔事务回滚。
-         ⚠️ updated_at 仍要手写（自定义 XML 的 UPDATE 不走 MetaObjectHandler）。 -->
-    <update id="moveLockedToSold">
+
+         ★ 正因为 available 不动，本语句 RETURNING 出来的值 = 转移前的值，
+           对应流水 change 恒为 0、before == after。这不是「没记到东西」：
+           「PAY_SOLD 的 change 必须是 0」本身就是一条可直接断言的铁律 ——
+           哪天它不为 0，就说明支付动了 available，Day 13 的事故又回来了。
+
+         ★ locked_stock >= #{quantity} 是守卫：正常流程永远满足；返回 null 说明订单与库存
+           已经对不上账（被旁路改过），上层必须抛异常让整笔事务回滚。 -->
+    <select id="moveLockedToSold" resultType="java.lang.Integer" flushCache="true" useCache="false">
         UPDATE inventories
            SET locked_stock = locked_stock - #{quantity},
                sold_stock   = sold_stock   + #{quantity},
                updated_at   = CURRENT_TIMESTAMP
          WHERE sku_id = #{skuId}
            AND locked_stock &gt;= #{quantity}
-    </update>
+        RETURNING available_stock
+    </select>
 
     <!-- ★★ Day 14 的核心 SQL：锁定 → 可售（取消订单 / 超时关单）
          这是 deductStock 的【严格逆操作】—— 一个 available → locked，一个 locked → available。
@@ -46,19 +82,20 @@
              deductStock 把货从可售挪进锁定，取消就是原路挪回去。与 moveLockedToSold 刚好相反。
 
          ★ 守卫条件仍然是 locked_stock >= #{quantity}，与 moveLockedToSold 一样，不是 available。
-             判据永远是「我要动的那一格够不够」：本次要动的是 locked，
-             所以判 locked。若错判成 available_stock >= n，就会凭空造货 ——
+             判据永远是「我要动的那一格够不够」：本次要动的是 locked，所以判 locked。
+             若错判成 available_stock >= n，就会凭空造货 ——
              「退一件本来没被锁定的货」= 无中生有。
-             返回 0 行 = 订单与库存对不上账（被旁路改过），上层必须抛异常整笔回滚。
+             返回 null = 订单与库存对不上账（被旁路改过），上层必须抛异常整笔回滚。
 
-         ⚠️ updated_at 仍要手写（自定义 XML 的 UPDATE 不走 MetaObjectHandler）。 -->
-    <update id="releaseLocked">
+         ★ 流水口径：type=CANCEL_RELEASE，change=+n，before=返回值-n，after=返回值。 -->
+    <select id="releaseLocked" resultType="java.lang.Integer" flushCache="true" useCache="false">
         UPDATE inventories
            SET available_stock = available_stock + #{quantity},
                locked_stock    = locked_stock    - #{quantity},
                updated_at      = CURRENT_TIMESTAMP
          WHERE sku_id = #{skuId}
            AND locked_stock &gt;= #{quantity}
-    </update>
+        RETURNING available_stock
+    </select>
 
 </mapper>

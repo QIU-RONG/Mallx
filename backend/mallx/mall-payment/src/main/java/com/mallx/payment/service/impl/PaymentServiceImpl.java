@@ -148,7 +148,8 @@ public class PaymentServiceImpl implements PaymentService {
         //    ★ 用 moveLockedToSold 而不是 deductForOrder —— 后者会动 available，
         //      等于把同一件货扣两遍（available 在下单那一刻就已经被扣过了）。
         for (OrderItem item : items) {
-            inventoryService.moveLockedToSold(item.getSkuId(), item.getQuantity());
+            // ★ 传 order.getId()：写进流水 inventory_logs.reference_id
+            inventoryService.moveLockedToSold(item.getSkuId(), item.getQuantity(), order.getId());
         }
 
         // ⑥ 组装返回（因为 ③ 的回填，这里 id / paymentNo / paidAt 都是真值）
