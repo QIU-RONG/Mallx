@@ -26,11 +26,14 @@ public interface OrderService {
      * <p>★ 只查 {@code user_id = 当前用户} 的行 —— 越权防线写死在 SQL 条件里，
      * 不接受任何来自客户端的「查谁」参数。
      *
-     * <p>★ 分页参数由本方法负责夹紧，不合法值不会报错：
+     * <p>★ 分页参数由本方法负责夹紧（实测依据见实现类的注释）：
      * <ul>
-     *   <li>{@code page < 1} → 当成 1（否则 offset 为负，PG 直接抛错）</li>
-     *   <li>{@code size < 1} → 当成 1（★ 关键：MyBatis-Plus 把 size 视作负数解读为「不分页、查全部」）</li>
-     *   <li>{@code size > 100} → 截到 100（防止一次把整张表拖出来）</li>
+     *   <li>{@code size < 1} → 当成 1。
+     *       ★ 关键是 {@code size < 0}：MyBatis-Plus 把它解读为「不执行分页、查全部」；
+     *       而 {@code size = 0} 会返回【空列表】但 total 不变（用户会以为没订单）。</li>
+     *   <li>{@code size > 100} → 截到 100（防止一次把整张表拖出来）。</li>
+     *   <li>{@code page < 1} → 归一到 1。属防御性规范化 ——
+     *       MyBatis-Plus 自身已对 {@code current <= 1} 做了保护，不会因负 offset 报错。</li>
      * </ul>
      *
      * @param page 页码，从 1 开始

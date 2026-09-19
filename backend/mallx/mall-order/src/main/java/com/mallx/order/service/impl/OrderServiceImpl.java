@@ -159,14 +159,25 @@ public class OrderServiceImpl implements OrderService {
     /**
      * ★★ 分页参数夹紧 —— 这一行是本步的核心。
      *
-     * <p>为什么不夹紧会出三种「变形」（不是「多返回几条」这么温和）：
+     * <p>为什么要夹紧：不夹紧时 {@code size} 方向会出现【静默变形】（下面全是实测值，不是推理）：
      * <pre>
-     * ?size=99999 → 一个人一次把整张 orders 拖走（DoS）        → Math.min 截到 100
-     * ?size=-1    → ⚠️ MyBatis-Plus 特例：size &lt; 0 = 不执行分页 = 查全表！
-     *               （见 Page#offset/FEATURE：size&lt;0 时插件直接放行原 SQL）→ Math.max 抬到 1
-     * ?page=0     → ⚠️ offset = (0-1)*size = 负数 → PG 报
-     *               "OFFSET must not be negative"             → Math.max 抬到 1
+     * ?size=-1     → ⚠️ MyBatis-Plus 特例：size &lt; 0 表示「不执行分页」= 查全表！
+     *                实测：响应 size=-1，返回全部 2 条（夹紧后只有 1 条）
+     * ?size=0      → ⚠️ 实测：返回【空列表】（n=0）但 total 仍是 2
+     *                —— 用户会以为「我没有订单」，比报错更难发现
+     * ?size=99999  → ⚠️ 实测：size 原样回显 99999、未被截断 → LIMIT 99999，
+     *                一个人一次把整张 orders 拖走（DoS）
      * </pre>
+     *
+     * <p>★ 实测【推翻】了一条流行说法：{@code ?page=0} / {@code ?page=-5} 并【不会】造成
+     * 负 offset 报错。MyBatis-Plus 有两层保护：
+     * <ol>
+     *   <li>{@code Page} 的构造函数里 {@code if (current > 1) this.current = current;} —— 否则保持默认 1；</li>
+     *   <li>{@code Page#offset()} 对 {@code current <= 1} 直接返回 0。</li>
+     * </ol>
+     * 实测：{@code ?page=0} → {@code current=1}、{@code n=2}，与不传参完全一致。
+     * 所以 {@code Math.max(page, 1)} 是【防御性规范化】（让语义明确），
+     * 真正在救命的只有 {@code size} 那一行 —— 别把两行的分量讲成一样重。
      *
      * <p>★ 夹紧必须在 {@code new Page<>(...)} 【之前】做 —— 构造进去的值就是最终发给 DB 的值，
      * 之后再改 safeSize 这个局部变量毫无意义。
