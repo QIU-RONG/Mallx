@@ -858,7 +858,7 @@ long safeCurrent = Math.max(current, 1);
 4. **IDOR 的 404 伪装**：`/9001`（别人的订单，**真实存在**）与 `/99999`（**不存在**）返回**完全一样**的
    `code=404 订单不存在` → 外部无法区分「不属于我」和「根本不存在」，枚举攻击拿不到有效信息。
 
-**验收用的靶子**（`users.id=2` 是 Day 12 第 2 步就保留的 `intruder`；第 5 步收尾时清）：
+**验收用的靶子**（`users.id=2` 是 Day 12 第 2 步就保留的 `intruder`；**第 5 步收尾已清掉** → `DELETE 1`）：
 
 ```sql
 INSERT INTO orders (id, order_no, user_id, total_amount, pay_amount, status,
@@ -900,34 +900,60 @@ public Result<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e){
 
 ---
 
-### 第 5 步：端到端 + 提交
+### 第 5 步：端到端 + 提交 ✅ 已完成（2026-09-19 11:43）
 
 一条完整业务链路，从空车开始：
 
 ```
 ① 建地址 → ② 加购 2 个 SKU → ③ 取消勾选其中 1 个
 → ④ 下单 → ⑤ 查列表 → ⑥ 查详情 → ⑦ 查库对账（订单/明细/库存/购物车）
-→ ⑧ 再下一次单（车里已空）→ 400
+→ ⑧ 再下一次单（车里已无勾选项）→ 400
 ```
 
-**验收 10 项**，最后清理夹具 + 提交。
+**起跑基线**：`orders=3`（含 IDOR 靶子 `#9001`）/ `order_items=3` / `cart_items=0` / `addresses=1`；
+`sku3 = 60/58/2/0`、`sku4 = 150/147/2/1`。
+
+**实测 11 项全绿**（curl 真机 + psql 查库）。四条最硬的观测：
+
+| 观测 | 实测值 | 证明了什么 |
+|---|---|---|
+| 新订单 | `id=9002`、`MX202609191143449448789`、`24998.00`（=12499×2）、`paid_at` 空 | 下单链路完整，金额算对 |
+| `sku3` 库存 | `58 → 56`，`locked 2 → 4` | 勾选项被真实扣减 |
+| `sku4` 库存 | `147 / 2 / 1` **一个数没动** | 未勾选项完全不参与下单 |
+| `cart_items` | 只剩 `id=140`（sku4，`selected=f`） | 只清勾选行，未勾选的留着 |
+| 默认地址 | 新建后 `id=1` 变 `f`、`id=2` 变 `t` | Day 11 的「唯一默认」跨行不变式没被打破 |
+
+另外 `order_items#9002` 是**快照**（`Apple iPhone 17 Pro / 原色钛金属 512GB / 12499.00 / qty=2`），
+7 个 SKU 恒等式全部 `t`、负库存 0 行。
+
+**清掉的夹具**：只有 `orders#9001`（`MX-TARGET-9001`，属 `users.id=2` 的手工靶子）。
+地址 2、购物车残留行、订单 9002 都是**真实用户流程的产物**，保留作 Day 13 支付的样本。
+
+> ⚠️ 一个无害残留：靶子夹具插入 `id=9001` 时做过 `setval(MAX(id))` 校准，
+> 所以真实订单从 **9002** 续号，id `3..9000` 成为空号。
+> 这不是 bug —— 序列值 = `MAX(id)` 正是「显式 id 必须校准序列」那条规则的正确结果（见「坑预判」）。
 
 ---
 
-## 5. 端到端验收清单（第 5 步）
+## 5. 端到端验收清单（第 5 步）—— 11 项全绿 ✅
 
-| # | 步骤 | 期望 |
-|---|---|---|
-| 1 | 匿名 `POST /api/orders` | 401 |
-| 2 | 建地址 | 200 |
-| 3 | 加购 SKU-A ×2、SKU-B ×1 | 200 |
-| 4 | 把 SKU-B 取消勾选 | 200 |
-| 5 | `POST /api/orders {addressId}` | 200，返回订单 id |
-| 6 | 查库 `order_items` | **只有 1 行**（SKU-A），`quantity=2`，名字/价格是快照 |
-| 7 | 查库 `inventories` | SKU-A `available -= 2 / locked += 2`；**SKU-B 一个数没动** |
-| 8 | 查库 `cart_items` | SKU-A 已删、**SKU-B 仍在**（未勾选不清） |
-| 9 | `GET /api/orders` + 详情 | 金额一致、明细 1 条、`status=PENDING_PAYMENT` |
-| 10 | 再次 `POST /api/orders` | `code=400`「请先勾选要购买的商品」 |
+| # | 步骤 | 期望 | 实测 |
+|---|---|---|---|
+| 1 | 匿名 `POST /api/orders` | 401 | ✅ `401 未登录或登录已过期` |
+| 2 | 建地址 | 200 | ✅ `addrId=2`（同时把旧地址的 `is_default` 摘掉） |
+| 3 | 加购 SKU-A = sku3 ×2、SKU-B = sku4 ×1 | 200 | ✅ 购物车 2 行（cartItemId 139 / 140） |
+| 4 | 把 SKU-B 取消勾选 | 200 | ✅ `PUT /api/cart/140/selected {"selected":false}` |
+| 5 | `POST /api/orders {addressId}` | 200，返回订单 id | ✅ `orderId=9002` |
+| 6 | 查库 `order_items` | **只有 1 行**（SKU-A），`quantity=2`，名字/价格是快照 | ✅ `#87`：`Apple iPhone 17 Pro / 原色钛金属 512GB / 12499.00 / 2 / 24998.00` |
+| 7 | 查库 `inventories` | SKU-A `available -= 2 / locked += 2`；**SKU-B 一个数没动** | ✅ sku3 `58→56`、`2→4`；sku4 恒为 `147/2/1` |
+| 8 | 查库 `cart_items` | SKU-A 已删、**SKU-B 仍在**（未勾选不清） | ✅ 只剩 `140`（sku4，`selected=f`） |
+| 9 | `GET /api/orders` + 详情 | 金额一致、明细 1 条、`status=PENDING_PAYMENT` | ✅ 列表 `total=3`、首条 `9002`；详情 `items=1`、`pay=24998.00` |
+| 10 | 再次 `POST /api/orders` | `code=400`「请先勾选要购买的商品」 | ✅ 同左（勾选行已被清，未勾选行不算数） |
+| 11 | 途中 `GET /api/orders/9001`（他人的单） | `code=404` | ✅ `订单不存在` |
+
+> ★ 实测又确认了一个顺序细节：`createFromCart` 里**地址校验排在购物车校验之前** ——
+> 所以第 1 项（空车下单）必须**同时给一个合法 `addressId`** 才会走到 `400 请先勾选`；
+> 两个错误同时存在时先报哪个由代码顺序决定，写测试时别想当然。
 
 ---
 
@@ -977,17 +1003,21 @@ public Result<Void> handleTypeMismatch(MethodArgumentTypeMismatchException e){
 - [x] 第 4 步反例实验：删掉夹紧后实测 `size=-1` 返回全表 / `size=0` 返回空列表（**并推翻了「page=0 会负 offset 报错」的说法**）
 - [x] 附带修复：`MethodArgumentTypeMismatchException` → `code=400`（原先被兜底吞成 500）
 - [x] 接口在 Swagger UI 里可调（路径数 16 → **17 → 18**）
-- [ ] 端到端 10 项全绿
-- [~] git 提交：第 1–4 步已提（`37c24d5` / `cd651e1` / `5a7b445` / `25cd0a5` / `84265b0` / `ec8c3af` / `1afc36d` / `3848dc3`）
+- [x] **第 5 步端到端 11 项全绿**（建地址→加购→取消勾选→下单→列表→详情→查库对账→空勾选再下 400）
+- [x] 夹具清理：靶子 `orders#9001` 已删；最终 `orders=3`（1 / 2 / 9002）、`order_items=4`、7 个 SKU 恒等式全 `t`
+- [x] git 提交：Day 12 分 6 批 **11 笔**，全部落在 `main`
+      （第 1–2 步 3 笔 `37c24d5` `cd651e1` `5a7b445`；第 3 步 2 笔 `25cd0a5` `84265b0`；
+      第 4 步 5 笔 `ec8c3af` `1afc36d` `3848dc3` `095f886` `c61ed20`；第 5 步文档 1 笔）
+- [ ] `git push origin main`（本地 `ahead 20`，由用户在终端执行）
 
 ---
 
 ## 附：与里程碑的关系
 
 ```
-Day 10 购物车 ✅  →  Day 11 收货地址 ✅  →  ★ Day 12 下单（今天）
+Day 10 购物车 ✅  →  Day 11 收货地址 ✅  →  Day 12 下单 ✅
                                               ↓
-                                       Day 13 支付（locked → sold）
+                                    ★ Day 13 支付（locked → sold）← 下一步
                                               ↓
                                        Day 14 订单状态流转 / 取消 / 超时关单
                                               ↓
