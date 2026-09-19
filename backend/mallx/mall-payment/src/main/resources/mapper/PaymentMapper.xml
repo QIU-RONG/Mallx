@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.payment.mapper.PaymentMapper">
+
+    <!-- ★★★ Day 13 第 4 步的核心 SQL：我的支付记录（分页）
+         payments 表【没有 user_id】⇒ 归属条件只能落到 orders.user_id 上（靠 INNER JOIN 带出来）。
+         ⚠️ 漏写 WHERE o.user_id 就等于把全站支付记录（金额 + 支付方式 + 支付时间）公开出去。
+
+         ★ INNER JOIN 不是 LEFT JOIN：payments.order_id 是 NOT NULL + 外键 fk_payment_order，
+           行行都找得到父行 ⇒ 用 INNER 才是正确的心智模型（LEFT 会让 count 变松）。
+         ★ 列名显式列出、禁止 p.* —— 将来 payments 加一列敏感字段（如 channel_trade_no）
+           会被 p.* 当场泄漏；显式列 = 出参白名单。
+         ★ ORDER BY p.id DESC 不能省：不带排序的分页是「随机翻页」。
+           （分页插件会为这条 SELECT 自动跑 count 并追加 LIMIT/OFFSET；count 时自动去掉 ORDER BY。）
+         ★ 列 → 字段靠 map-underscore-to-camel-case 自动映射：
+           payment_no → paymentNo、order_id → orderId、paid_at → paidAt；
+           o.order_no → orderNo 是本查询唯一来自 orders 的列。 -->
+    <select id="selectMyPayments" resultType="com.mallx.payment.vo.PaymentVO">
+        SELECT p.id,
+               p.payment_no,
+               p.order_id,
+               o.order_no,
+               p.amount,
+               p.method,
+               p.status,
+               p.paid_at
+        FROM payments p
+                 INNER JOIN orders o ON o.id = p.order_id
+        WHERE o.user_id = #{userId}
+        ORDER BY p.id DESC
+    </select>
+
+    <!-- ★★ 支付记录详情：归属条件同样进 SQL。
+         查不到 = ① id 不存在 或 ② 是别人的 —— 两种情况在外部【不可区分】，由 Service 统一报 404。
+         ★ 单行查询不需要 ORDER BY。 -->
+    <select id="selectMyPaymentById" resultType="com.mallx.payment.vo.PaymentVO">
+        SELECT p.id,
+               p.payment_no,
+               p.order_id,
+               o.order_no,
+               p.amount,
+               p.method,
+               p.status,
+               p.paid_at
+        FROM payments p
+                 INNER JOIN orders o ON o.id = p.order_id
+        WHERE p.id = #{paymentId}
+          AND o.user_id = #{userId}
+    </select>
+
+</mapper>

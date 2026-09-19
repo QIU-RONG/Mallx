@@ -1,6 +1,9 @@
 package com.mallx.payment.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mallx.common.api.PageResult;
 import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
 import com.mallx.inventory.service.InventoryService;
@@ -57,6 +60,15 @@ public class PaymentServiceImpl implements PaymentService {
      */
     private static final Set<String> ALLOWED_METHODS =
             Set.of(PaymentMethod.ALIPAY, PaymentMethod.WECHAT, PaymentMethod.BALANCE);
+
+    /**
+     * 分页上限：单页最多 100 条 —— 与 {@code OrderServiceImpl.MAX_PAGE_SIZE} 同一个值。
+     *
+     * <p>★ 为什么不抽到 mall-common 做成公共常量：那是一次跨模块重构（牵动 order / payment
+     * 两个模块的既有代码），与本步「新增查询接口」无关。两处各留一份、注释互相指明，
+     * 等真有第三个模块需要时再抽。
+     */
+    private static final long MAX_PAGE_SIZE = 100;
 
     private final PaymentMapper paymentMapper;        // mall-payment
     private final OrderMapper orderMapper;            // mall-order
@@ -143,6 +155,58 @@ public class PaymentServiceImpl implements PaymentService {
         return new PaymentVO(payment.getId(), payment.getPaymentNo(), order.getId(),
                 order.getOrderNo(), payment.getAmount(), payment.getMethod(),
                 payment.getStatus(), payment.getPaidAt());
+    }
+
+    // ============================ 查询（Day 13 第 4 步） ============================
+
+    /**
+     * ★★ 分页参数夹紧 —— 与 {@code OrderServiceImpl.listMyOrders} 完全同款。
+     *
+     * <p>★ 夹紧必须在 {@code new Page<>(...)} <b>之前</b>做：
+     * 构造进去的值就是最终发给 DB 的值，之后再改局部变量毫无意义。
+     *
+     * <p>★ 两行的分量不一样（Day 12 实测结论，别讲成一样重）：
+     * <pre>
+     * size = -1     → MP 特例：size &lt; 0 表示「不执行分页」= 查全表！      → 第一行救命
+     * size = 0      → 返回【空列表】但 total 正常（以为没数据，比报错更难发现）→ 第一行救命
+     * size = 99999  → LIMIT 99999，一个人一次拖走整张表（DoS）            → 第二行救命
+     * page = 0 / -5 → MP 双层兜住（Page 构造仅 current &gt; 1 时赋值；
+     *                 offset() 对 current &lt;= 1 直接返 0）→ 实测安然无恙，
+     *                 Math.max(page, 1) 只是「防御性规范化」
+     * </pre>
+     *
+     * <p>★ 越权防线（{@code WHERE o.user_id = #{userId}}）写在 XML 里，与本方法的夹紧是
+     * <b>两件独立的事</b>：前者防越权，后者防资源滥用。
+     */
+    @Override
+    public PageResult<PaymentVO> listMyPayments(Long userId, long page, long size) {
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        // ★ 首参传 IPage，分页插件才会改写这条自定义 SQL；漏传 = 不报错、静默查全表
+        IPage<PaymentVO> result =
+                paymentMapper.selectMyPayments(new Page<>(safePage, safeSize), userId);
+
+        // SELECT 已经把 payments 的列与 orders.order_no 一次带回来，不需要再 convert
+        return PageResult.of(result);
+    }
+
+    /**
+     * ★ 支付记录详情 —— 归属校验在 SQL 里（{@code AND o.user_id = #{userId}}），
+     * Java 侧只负责把 {@code null} 翻译成 404。
+     *
+     * <p>★★ 两种 null 原因（id 不存在 / 记录属于别人）<b>必须共用同一句消息</b>：
+     * 可区分就等于可枚举 —— 攻击者遍历 id 看返回码，就能画出「哪些支付记录真实存在」的地图。
+     *
+     * <p>★ 报 404 而不是 403：403 等于承认「这条记录真实存在，只是不给你看」。
+     */
+    @Override
+    public PaymentVO detailMyPayment(Long userId, Long paymentId) {
+        PaymentVO vo = paymentMapper.selectMyPaymentById(paymentId, userId);
+        if (vo == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "支付记录不存在");
+        }
+        return vo;
     }
 
     /**
