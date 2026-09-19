@@ -394,7 +394,13 @@ Day 13 的对照组之所以能收 12 笔钱，正是因为**把条件去掉了*
 3. **流水审计**：`inventory_logs` 累加值 vs `inventories` 现值，逐 SKU 对上
 4. **清理**：临时探针 SQL 删除；靶子订单与库存按 §0.3 口径复原
 5. **文档**：补实测小节
-6. **提交 + push**（走 `win-git-push` 技能脚本，★ 脚本内已修为 `GIT_TERMINAL_PROMPT=1`）
+6. **提交 + push** —— ⚠️ **已修正**：文档原先写的 `win-git-push` 技能脚本**已不存在**
+   （`.workbuddy/` 下只剩 memory）。且实测确认 **AI 会话内无法 push**：
+   `GIT_TERMINAL_PROMPT=0` 被会话注入（覆盖成 `1` 也没用），
+   而 Git Credential Manager **本机没有缓存 github.com 凭据** → 会弹 GUI 等人点 → **永久挂起**。
+   `gh` 已装但未登录，环境里也没有 `GH_TOKEN`。网络与 9674 代理均正常。
+   → **提交由 AI 完成，push 必须由用户在自己的终端执行 `git push origin main`。**
+   （快速失败自查：`GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never git push`）
 7. **更新记忆**：`MEMORY.md` 补 Day 14 定型的坑；当日日志追加流水
 
 ---
