@@ -307,7 +307,7 @@ public class AddressSaveDTO {
 | **2** ✅ | DTO/VO/Service 接口 + 列表 & 详情 & 新增 | `dto/AddressSaveDTO.java`、`vo/AddressVO.java`、`service/AddressService.java`、`impl/AddressServiceImpl.java`、`controller/AddressController.java` | 8 项 |
 | **3** ✅ | 修改 + 删除（含默认补位） | 上表原地扩展 | 8 项 |
 | **4** ✅ | ★ 设为默认（事务互斥） | 上表原地扩展 + `backend/sql/02-index.sql`（新增部分唯一索引） | 5 项常规 + 3 组实验 |
-| **5** | 端到端验收 + Swagger 确认 + git 提交 | — | 10 项 |
+| **5** ✅ | 端到端验收 + Swagger 确认 + git 提交 | — | 11 项 |
 
 ### 第 1 步冒烟清单（必须真机跑）
 
@@ -626,6 +626,46 @@ DELETE FROM users WHERE id = 2;
 | 10 | `DELETE` 当前默认地址 | 200 → 列表里剩下的那条**自动变成默认** |
 | 11 | 删除最后一条后再 `DELETE` 同 id | 404 |
 
+### ★ 第 5 步实测记录（2026-09-19 09:57，真机跑）
+
+先把 demo 的地址清空，让链路从「空地址簿」开始，**11 项全绿**：
+
+| # | 请求 | 实际 |
+|---|---|---|
+| 1 | `POST /api/auth/login`（demo） | ✅ `code=200`，token 191 字符 |
+| 2 | 匿名 `GET /api/addresses` | ✅ `http=401 未登录或登录已过期` |
+| 3 | `POST` 第 1 条（不传 `isDefault`） | ✅ `id=7`，列表 `#7:def=True`（**首条自动默认**） |
+| 4 | `POST` 第 2 条（不传 `isDefault`） | ✅ `id=8`，`#7:def=True  #8:def=False` |
+| 5 | `GET` 列表 | ✅ 返回顺序 `[#7, #8]`（**默认排最前**） |
+| 6 | `PUT /8/default`（无 body） | ✅ `code=200` → `#8:def=True  #7:def=False` |
+| 7 | 复查默认条数 | ✅ **恰好 1** |
+| 8 | `POST` 手机号 `12345` | ✅ `code=400 手机号格式不正确` |
+| 9 | **IDOR × 4**：`GET` / `PUT` / `PUT .../default` / `DELETE` 打 `/9001` | ✅ 四次全 `code=404 地址不存在` |
+| 10 | `DELETE /8`（当前默认） | ✅ `code=200` → 列表 `#7:def=True`（**自动补位**） |
+| 11 | `DELETE /7`（最后一条，也是默认） | ✅ `code=200` → 列表变空，**`next == null` 未 NPE**；再删同 id → `code=404` |
+
+**查库实锤**（不看接口自报）：
+
+```
+  id  | user_id | receiver_name |  city   | is_default
+ 9001 |       2 | VICTIM        | CHENGDU | t          ← IDOR 那四下分毫未动
+```
+
+第 11 项一次覆盖两个边界：**「删掉最后一条地址」（补位时 `next == null`）** 和 **「已删除的 id 再删一次」**。
+
+#### 收尾清理与最终基线
+
+```sql
+DELETE FROM user_addresses WHERE user_id = 2;   -- 清 IDOR 靶子
+DELETE FROM users WHERE id = 2;                 -- 清靶子的父行
+```
+
+- 最终基线：**`users=1 | user_addresses=0 | cart_items=0 | products=5`**
+  （序列 `users_id_seq=2`、`user_addresses_id_seq=8` —— 跳号但不撞主键）
+- `uk_user_addresses_default` **保留**：它是 schema 的一部分，不是测试夹具
+- Swagger `/v3/api-docs` **16 个路径**（新增 `/api/addresses`、`/api/addresses/{id}`、`/api/addresses/{id}/default`）
+- git：`b302104 feat(address)` + `a928b85 docs`，工作区干净
+
 ---
 
 ## 6. 坑预判
@@ -644,12 +684,13 @@ DELETE FROM users WHERE id = 2;
 
 ## 7. 延伸思考（不强制做）
 
-1. **数据库层兜底**：PG 的部分唯一索引可以做到「每个用户最多一条默认」：
+1. ~~**数据库层兜底**~~ → **已在第 4 步实现 ✅**：PG 的部分唯一索引把「每个用户最多一条默认」下推到数据库：
    ```sql
-   CREATE UNIQUE INDEX uk_addr_user_default ON user_addresses(user_id) WHERE is_default;
+   CREATE UNIQUE INDEX IF NOT EXISTS uk_user_addresses_default
+       ON user_addresses(user_id) WHERE is_default = true;
    ```
+   已同步进 `backend/sql/02-index.sql`。实测（见 §4 第 4 步记录）：**在脏数据上建索引会直接失败** —— `could not create unique index ... Key (user_id)=(1) is duplicated`；建好后手工造第二条默认撞 **23505**。
    这是 PG 特色能力（SQL Server / MySQL 没有），代价是「先清后置」的顺序一旦写反就会撞 23505。
-   想练的话，等第 4 步做完全绿，再单独开源文件加上去复测。
 
 2. **并发的真实后果**：拿两个终端同时 `PUT .../default`，看会不会出两条默认。
    这能让你亲手感受到「事务 ≠ 锁」。
@@ -661,12 +702,14 @@ DELETE FROM users WHERE id = 2;
 
 ## 8. 今日产出
 
-- [ ] `entity/UserAddress.java`
-- [ ] `mapper/UserAddressMapper.java`
-- [ ] `dto/AddressSaveDTO.java`
-- [ ] `vo/AddressVO.java`
-- [ ] `service/AddressService.java` + `impl/AddressServiceImpl.java`
-- [ ] `controller/AddressController.java`
-- [ ] 6 个接口在 Swagger UI 里可调
-- [ ] 端到端 11 项全绿
-- [ ] git 提交（`feat(address): ...`）
+- [x] `entity/UserAddress.java`
+- [x] `mapper/UserAddressMapper.java`
+- [x] `dto/AddressSaveDTO.java`
+- [x] `vo/AddressVO.java`
+- [x] `service/AddressService.java` + `impl/AddressServiceImpl.java`
+- [x] `controller/AddressController.java`
+- [x] `backend/sql/02-index.sql` 新增部分唯一索引 `uk_user_addresses_default`
+- [x] 6 个接口在 Swagger UI 里可调（`/v3/api-docs` 16 个路径）
+- [x] 端到端 11 项全绿
+- [x] git 提交（`b302104 feat(address): ...` + `a928b85 docs: ...`）
+- [ ] ⬜ 用户终端 `git push origin main`（AI 会话无凭据，本地已 `ahead 8`）
