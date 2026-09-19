@@ -19,6 +19,7 @@ import com.mallx.order.vo.OrderDetailVO;
 import com.mallx.order.vo.OrderItemSourceVO;
 import com.mallx.order.vo.OrderItemVO;
 import com.mallx.order.vo.OrderVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
+@Slf4j
 @Service
 public class OrderServiceImpl implements OrderService {
 
@@ -40,12 +42,27 @@ public class OrderServiceImpl implements OrderService {
     private final OrderItemMapper orderItemMapper;
     private final InventoryService inventoryService;
 
+    /**
+     * ★ 单笔取消逻辑的持有者（Day 14 第 3 步）。
+     *
+     * <p>为什么必须是一个<b>独立 Bean</b>，而不是本类的私有方法：
+     * 批量入口 {@link #cancelTimeoutOrders} 要「逐单一个事务」，
+     * 若它调本类的单笔方法 —— 自调用不走 Spring 代理 → {@code @Transactional}
+     * <b>静默失效</b> → 整批共用一个事务，第 37 张单失败会把前 36 张一起回滚。
+     *
+     * <p>★ 依赖方向是单向的：{@code OrderServiceImpl → OrderCancelExecutor → OrderMapper}。
+     * 反过来让 Executor 依赖 OrderService 会形成循环依赖（Spring Boot 默认禁止，启动失败）。
+     */
+    private final OrderCancelExecutor cancelExecutor;
+
     public OrderServiceImpl(OrderMapper orderMapper,
                             OrderItemMapper orderItemMapper,
-                            InventoryService inventoryService) {
+                            InventoryService inventoryService,
+                            OrderCancelExecutor cancelExecutor) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
         this.inventoryService = inventoryService;
+        this.cancelExecutor = cancelExecutor;
     }
 
     /**
@@ -184,20 +201,20 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
-    // ============================ 取消（Day 14 第 1 步） ============================
+    // ============== 取消（Day 14 第 1 步 + 第 3 步超时关单） ==============
 
     /**
-     * ★★★ 取消订单 —— 与支付链路【严格对称】的四步。
+     * ★★★ 取消订单（<b>用户视角</b>）—— 与支付链路【严格对称】的四步。
      *
      * <p>把两条链路并排看，取消不是新套路，是支付那条链路的镜像：
      * <pre>
      *              支付（PaymentServiceImpl.pay）        取消（本方法）
      *   ① 归属      SELECT … WHERE id AND user_id       requireOwn（同一句 404 口径）
-     *   ② 明细      读 order_items（空 → 500）           同
+     *   ② 明细      读 order_items（空 → 500）           同（搬进 cancelOne）
      *   ③ 中间产物  INSERT payments                     无（取消没有「退款单」要写）
-     *   ④ 状态 CAS  markPaid   → 0 行 400                markCancelled → 0 行 400
+     *   ④ 状态 CAS  markPaid   → 0 行 400                cancelOrder → 0 行 400
      *   ⑤ 库存      moveLockedToSold → 0 行 500         releaseLocked → 0 行 500
-     *   ⑥ 事务      @Transactional 包 ④⑤                同
+     *   ⑥ 事务      @Transactional 包 ④⑤                同（外层事务 + cancelOne 加入）
      * </pre>
      *
      * <p>★ ④ 与「支付」的 ④ 是<b>同一个状态位的两次争夺</b>：两条 SQL 的
@@ -208,6 +225,11 @@ public class OrderServiceImpl implements OrderService {
      * 而且并发时能显著减少对 {@code inventories} 行的锁竞争
      * （只有一个事务会走到 ⑤，其余在 ④ 就被挡下）。
      *
+     * <p>★★ ②③④ 的实现搬到了 {@link OrderCancelExecutor#cancelOne(Long)}，因为
+     * <b>系统视角</b>（超时关单）要用同一份逻辑，只是对「0 行」的解释不同：
+     * 用户视角报 {@code 400}，系统视角<b>跳过</b>（大概率是用户刚好把它付掉了）。
+     * 若两边各写一份，第 4 步给库存写点加流水时会漏改其中一处。
+     *
      * <p>★ ⑤ 按 {@code skuId} 升序退还，与 {@code createFromCart} 扣减时的排序规则一致。
      * 统一锁顺序才能消灭死锁（环形等待）—— 加锁方向与解锁方向<b>不必</b>相反，
      * 只要所有事务都按同一个顺序拿行锁即可。
@@ -216,51 +238,72 @@ public class OrderServiceImpl implements OrderService {
      * 取消只碰 {@code orders} + {@code inventories}，不碰 {@code payments}；
      * 而 {@code mall-order} 本来就依赖 {@code mall-inventory}（下单时就在用 {@code deductForOrder}）。
      * 零新依赖、也不会产生循环依赖。（对比 Day 13 支付必须新开 {@code mall-payment} 模块。）
+     *
+     * <p>★ 本方法保留 {@code @Transactional}：{@code cancelOne} 是 REQUIRED 传播，
+     * 会<b>加入</b>本方法的事务 —— 所以「改状态 + 回补库存」仍然是一个原子操作。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=404 订单不存在（含「不是你的」）
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许取消
      */
     @Override
     @Transactional
     public void cancel(Long userId, Long orderId) {
-
         // ① 语义分流：「订单不存在」与「订单不是你的」共用同一个 404（写在 requireOwn 里）
         //    ★ 这是【写操作的 IDOR】—— 读越权是泄露，写越权是破坏，后果更重。
-        Order order = requireOwn(userId, orderId);
+        requireOwn(userId, orderId);
 
-        // ② 读明细：要退回的是哪几个 SKU、各多少件（只认服务端数据）
-        List<OrderItem> items = orderItemMapper.selectList(
-                new LambdaQueryWrapper<OrderItem>().eq(OrderItem::getOrderId, order.getId()));
-        if (items.isEmpty()) {
-            // 正常流程不可能发生（下单那一刻就写了明细）→ 服务端异常态，报 500
-            throw new BusinessException(ResultCode.FAIL.getCode(), "订单明细缺失");
-        }
-
-        // ③ CAS 抢资格：抢不到抛 400 → 整个事务回滚
-        //    （注意：这里【不】返回状态，因为订单状态用不上 —— 判据全在 SQL 的 WHERE 里）
-        markCancelled(order.getId());
-
-        // ④ 逐个 SKU 把 locked 退回 available（★ 按 skuId 升序，统一锁顺序）
-        List<OrderItem> ordered = new ArrayList<>(items);
-        ordered.sort(Comparator.comparing(OrderItem::getSkuId));
-        for (OrderItem item : ordered) {
-            inventoryService.releaseLocked(item.getSkuId(), item.getQuantity());
+        // ②③④ 与系统视角共用同一份实现（跨 Bean 调用 → 事务正常加入本方法）
+        if (!cancelExecutor.cancelOne(orderId)) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
         }
     }
 
     /**
-     * CAS 把订单推进到「已取消」—— 与 {@link #markPaid} 严格对称。
+     * ★★ 系统视角：批量取消「超时未支付」的订单（Day 14 第 3 步）。
      *
-     * <p>真正的内容只有一句：调 {@code OrderMapper.cancelOrder}，把 0 行翻译成人话。
+     * <p>★ 与 {@link #cancel(Long, Long)} 的差别<b>不是少写一行校验</b>，而是<b>权限模型的分层</b>：
+     * 前者是「你能取消你的订单」，本方法是「系统有权取消所有人的超时单」——
+     * 所以本方法<b>不带 user_id 条件</b>。混成一个方法，要么越权，要么取消不了。
      *
-     * <p>★ 0 行报 {@code 400} 而不是 {@code 500}：订单「已支付 / 已取消」是业务上的正常状态
-     * （用户刷新页面就能看到正确结果），不是系统故障。
-     * 对比 {@code InventoryServiceImpl.releaseLocked} 的 0 行是账目对不上 —— 那才报 500。
+     * <p>★★ 本方法<b>刻意不加 {@code @Transactional}</b>：这是本步最关键的一行「不写」。
+     * 整批共用一个事务的话，第 37 张单失败会把前 36 张<b>一起回滚</b>。
+     * 逐单事务由 {@link OrderCancelExecutor#cancelOne(Long)} 各自持有。
+     *
+     * <p>★ 与用户支付的竞态<b>不需要新代码</b>：还是
+     * {@code WHERE status = 'PENDING_PAYMENT'} 那条 CAS 兜住 ——
+     * 定时任务只是「多了一个竞争者」，谁赢由数据库决定。
+     *
+     * @param minutes 超时阈值（分钟）
+     * @return 本轮<b>真正取消掉</b>的订单条数（0 = 没有超时单，属正常）
      */
     @Override
-    public void markCancelled(Long orderId) {
-        int rows = orderMapper.cancelOrder(orderId);
-        if (rows == 0) {
-            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
+    public int cancelTimeoutOrders(int minutes) {
+        // ① 找出超时未支付的订单 id。★ 不带 user_id —— 这是系统视角
+        List<Long> ids = orderMapper.selectTimeoutOrderIds(minutes);
+        if (ids.isEmpty()) {
+            return 0;                       // 常态：大多数轮次都没有超时单
         }
+
+        // ② 逐单处理 —— ★ 必须走【另一个 Bean】：
+        //    若写成 this.cancelOne(...) 就是自调用，不走代理 → @Transactional 静默失效
+        int cancelled = 0;
+        for (Long id : ids) {
+            try {
+                // ★ 必须用返回值判断：false = 状态已不是 PENDING_PAYMENT
+                //   （大概率是用户刚好付掉了）→ 跳过，不能计成「取消成功」
+                if (cancelExecutor.cancelOne(id)) {
+                    cancelled++;
+                }
+            } catch (Exception e) {
+                // ★ 必须吞掉（catch Exception 而不是 BusinessException）：
+                //   单笔失败不能让后面几十张单失去被取消的机会
+                log.warn("超时关单失败，跳过 orderId={}", id, e);
+            }
+        }
+        log.info("超时关单：扫到 {} 张，取消 {} 张", ids.size(), cancelled);
+        return cancelled;
     }
+
 
     // ============================ 查询（Day 12 第 4 步） ============================
 

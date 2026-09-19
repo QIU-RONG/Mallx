@@ -92,4 +92,27 @@ public interface OrderMapper extends BaseMapper<Order> {
      * @return 影响行数：1 = 抢到了；0 = 已被别人先付 / 已取消（状态不是 {@code PENDING_PAYMENT}）
      */
     int cancelOrder(@Param("orderId") Long orderId);
+
+    /**
+     * 查「超时未支付」的订单 id（Day 14 第 3 步 · 超时关单）。
+     *
+     * <p>★★ <b>不带 user_id 条件</b> —— 这是本方法与其它所有查询最大的不同。
+     * 定时任务代表的是<b>系统</b>，它有权取消任何人的超时单；
+     * 用户视角的 {@code cancel} 才需要 {@code requireOwn} 那道归属校验。
+     * 把两者混成一个方法，要么越权，要么系统取消不了。
+     *
+     * <p>★ 为什么只返回 {@code id} 而不是整行 {@code Order}：
+     * 调用方拿到 id 就去逐单开事务，这些行的其它字段一个都不会看 ——
+     * 拖整行纯属浪费（而且要再定义 VO 或复用实体）。
+     *
+     * <p>★ {@code ORDER BY id}：让批量处理顺序稳定、可复现，
+     * 与库存扣减「按 skuId 升序」是同一个理由（统一顺序 → 无环形等待）。
+     *
+     * <p>★ 判据只看 {@code created_at}，不引入任何「超时标记列」——
+     * 状态 + 时间就是全部依据，不需要额外的 DDL（本步零 DDL）。
+     *
+     * @param minutes 超时阈值（分钟）：{@code created_at} 早于「现在 − minutes」的待支付单
+     * @return 超时订单 id 列表（按 id 升序）；无超时单时返回空列表，不是 null
+     */
+    List<Long> selectTimeoutOrderIds(@Param("minutes") int minutes);
 }

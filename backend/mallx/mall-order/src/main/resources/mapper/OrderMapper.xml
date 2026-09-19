@@ -107,4 +107,28 @@
            AND status = 'PENDING_PAYMENT'
     </update>
 
+    <!--
+      查「超时未支付」的订单 id（Day 14 第 3 步 · 超时关单）。
+
+      ★★ 不带 user_id 条件 —— 这是本文件里唯一一条「系统视角」的查询。
+         定时任务代表系统，有权取消任何人的超时单；用户视角的取消才需要归属校验。
+
+      ★ 只取 id：调用方拿到 id 就去逐单开事务，这些行的其它字段一个都不会看。
+
+      ★ make_interval(mins => ?) 是 PG 原生写法，比拼字符串 interval 干净，
+        且参数是 int 类型，不走字符串解析。
+
+      ★ 判据只有「状态 + 时间」两个条件，不需要任何额外的超时标记列（本步零 DDL）。
+
+      ⚠️ XML 里的小于号必须写成 &lt;（直接写小于号会让解析器以为标签开始）。
+      ⚠️ 注释里不能出现连续两个减号（本文件 Day 13 已经踩过一次，启动才炸）。
+    -->
+    <select id="selectTimeoutOrderIds" resultType="java.lang.Long">
+        SELECT id
+          FROM orders
+         WHERE status = 'PENDING_PAYMENT'
+           AND created_at &lt; CURRENT_TIMESTAMP - make_interval(mins => #{minutes})
+         ORDER BY id
+    </select>
+
 </mapper>

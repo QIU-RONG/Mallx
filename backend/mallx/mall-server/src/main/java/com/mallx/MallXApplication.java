@@ -3,6 +3,7 @@ package com.mallx;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * MallX 启动类
@@ -11,6 +12,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * （com.mallx.user / com.mallx.product / ...）
  */
 
+@EnableScheduling
 @MapperScan("com.mallx.**.mapper")
 @SpringBootApplication
 public class MallXApplication {
