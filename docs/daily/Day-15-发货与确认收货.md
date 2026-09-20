@@ -431,8 +431,9 @@ Day 14 给三个**库存**写点各加了一条 `inventory_logs` 流水。
 
 ## 八、写代码时的对照清单（★ 动手时对着这张表勾）
 
-★ 本节是**规格**不是实现 —— 给你「改哪一行、必须满足什么、别踩什么」，
-代码由你自己写（本日工作方式：我只交付设计/规划/验收标准，**不落实现到 `backend/mallx/**`**）。
+★ 本节是**规格**不是实现 —— 给你「改哪一行、必须满足什么、别踩什么」。
+（原定工作方式：只交付设计/规划/验收标准、不落实现到 `backend/mallx/**`；
+2026-09-20 用户改为「帮我写完」，故实现由 AI 按本清单落地，结果见 §九。）
 
 ### 8.1 逐文件改动 · 第 1 步（发货）
 
@@ -496,6 +497,125 @@ Day 14 给三个**库存**写点各加了一条 `inventory_logs` 流水。
 5. **对账复核**：脚本第 [10] 组会跑新旧两条口径 —— 期望**都是 0 漂移**（§0.2 已证今天是安全空操作）
 6. **确认基线复位**：7 SKU 逐字段回到 §0.3（`100/80/56/147/117/40/90` 的可售列 +
    `sold = 0/0/4/3/3/0/0`），`orders=8`、`payments=5`、`order_items=9`、`inventory_logs=0`
+
+---
+
+## 九、实测小节（2026-09-20 落地 + 验收）
+
+### 9.1 落地清单（5 个文件，全部按 §8 的锚点与「必须满足」写）
+
+| # | 文件 | 落地内容 |
+|---|---|---|
+| 1 | `OrderMapper.java` | `shipOrder` / `confirmReceipt` 两个声明；类注释「五个 → 七个」 |
+| 2 | `OrderMapper.xml` | ⑥ `<update id="shipOrder">`（`WHERE status='PAID'`）+ ⑦ `<update id="confirmReceipt">`（`WHERE status='SHIPPED'`） |
+| 3 | `OrderService.java` | `void ship(Long orderId)`（不带 userId）+ `void confirm(Long userId, Long orderId)` |
+| 4 | `OrderServiceImpl.java` | 两个实现，各 3 行（CAS → 0 行 → 400）；**都没有 `@Transactional`** |
+| 5 | `OrderController.java` | `POST /{id}/ship`（`@PreAuthorize` + 补 import + 改类注释）、`POST /{id}/confirm`（要 `Authentication`） |
+
+★ 三处「不写」全部照做，一处没漏：**不给 ship/confirm 加 `@Transactional`**、
+**不给 confirm 的 CAS 加 `user_id`**、**不写 `inventory_logs` 流水**。
+
+### 9.2 §8.3 陷阱清单逐条复核
+
+| # | 陷阱 | 结果 |
+|---|---|---|
+| 1 | XML 注释里连续两个减号 | ✅ 无（两段新注释里没有 `--`） |
+| 2 | Javadoc 里写 `/api/orders/*/ship` 导致 `*/` 提前结束注释 | ✅ 改用「权限种子里的 URL 模式」措辞，不含 `*/` |
+| 3 | 漏写 `updated_at` / `shipped_at` / `completed_at` | ✅ 三条时间列全部手写 |
+| 4 | 把 principal 当发货人 | ✅ `ship` 端点**没有** `Authentication` 参数 |
+| 5 | 给两条边加 `@Transactional` | ✅ 都没加 |
+| 6 | `confirm` 的 CAS 带 `user_id` | ✅ 只 `WHERE id = #{orderId} AND status = 'SHIPPED'` |
+| 7 | 给 `confirm` 挂 `@PreAuthorize` | ✅ 没挂 |
+| 8 | 硬塞 `change_quantity = 0` 的流水 | ✅ 两条边零流水写入 |
+
+★ §8.4「不要动」清单也复核过：`GlobalExceptionHandler` / `SecurityConfig` /
+`JwtAuthenticationFilter` / `OrderStatus` / `03-data.sql` **一个字节都没改**。
+
+### 9.3 验收结果：**56 / 56 全绿**
+
+`backend/loadtest/day15-ship-confirm.py` → `day15-ship-confirm-report.txt`
+
+**正向闭环（ORDER A：下单 9034 → 支付 → 发货 → 确认）**
+
+| 段 | 断言要点 | 实测 |
+|---|---|---|
+| 下单 | → `PENDING_PAYMENT` | ✅ `available −1 / locked +1 / sold +0` |
+| 支付 | → `PAID` | ✅ `locked −1 / sold +1`、`available` 不动 |
+| **发货** | admin token → `SHIPPED` | ✅ HTTP 200 + code 200；★★ **库存三格全为 0 变化** |
+| **确认** | C 端 token → `COMPLETED` | ✅ HTTP 200 + code 200；★★ **库存三格全为 0 变化** |
+
+时间戳三连：`paid=12:59:35 shipped=12:59:40 completed=12:59:45` —— 严格非降，且
+`cancelled_at` 全程为 NULL（与 `paid_at` 互斥的不变式没被破坏）。
+
+**★★ RBAC 首次业务验证（ORDER B）—— 本日最有价值的一组**
+
+| 请求 | 期望 | 实测 |
+|---|---|---|
+| demo（C 端）token 打 ship | 403 | ✅ **真 HTTP 403** + `{"code":403,"message":"没有权限访问"}` |
+| 匿名打 ship | 401 | ✅ **真 HTTP 401** + `{"code":401,"message":"未登录或登录已过期"}` |
+| intruder（C 端）打 ship | 403 | ✅ **真 HTTP 403** |
+
+★ 三条拒绝后订单 B **仍是 `PENDING_PAYMENT`**、库存一格未动 —— 拒绝了就是拒绝了。
+★ 也顺带证实 §3.2 的判断：**`GlobalExceptionHandler` 不需要动**，
+401/403 两个出口本来就通（Day 07 那个 `AccessDeniedException` 专用 handler 在生效）。
+
+**顺序 / 幂等 / IDOR**
+
+| 断言 | 实测 |
+|---|---|
+| `PENDING_PAYMENT` 直接 ship → 400 | ✅ `code=400 订单状态不允许发货`（HTTP 200） |
+| `PAID` 直接 confirm → 400 | ✅ `code=400 订单状态不允许确认收货` |
+| 重复 ship → 400 | ✅ `code=400` |
+| 重复 confirm → 400 | ✅ `code=400` |
+| intruder confirm demo 的 SHIPPED 单 → 伪 404 | ✅ `code=404 订单不存在`（HTTP 200） |
+
+★★ IDOR 那条是**设计过的**：B 此刻**正是 `SHIPPED`** —— CAS 本来会成功。
+所以这个 404 **只可能来自 `requireOwn`**，从而证明「归属校验跑在 CAS 之前」是结构性的，
+不是碰巧。且事后 DB 侧订单 B **仍是 `SHIPPED`**（CAS 根本没被触达）。
+
+**口径升级（§0.2 的发现被实测复现）**
+
+| 口径 | 漂移 SKU 数 |
+|---|---|
+| `sold == Σ(PAID)` （旧） | **1** ← 假警报，两单已走完 SHIPPED/COMPLETED 却仍记在 `sold` 里 |
+| `sold == Σ(PAID, SHIPPED, COMPLETED)` （新） | **0** ✅ |
+| `locked == Σ(PENDING_PAYMENT)` （不变） | **0** ✅ |
+
+★ 旧口径**确实**报漂移 —— §0.2「旧口径会假警报」从推理变成了证据。
+
+**清理与复位**：删掉 9034/9035 两单及其明细/支付；7 SKU **逐字段回到基线**；
+行数 `8/5/9/0` 与开跑时完全一致；无孤儿 `order_items`/`payments`；无遗留 `SHIPPED`/`COMPLETED`。
+**脚本连跑两轮都 56/56**（第二轮订单号 9034/9035，序列前进属正常）。
+
+### 9.4 ⚠️ 脚本自身的一处假失败（已修）
+
+首跑 **55/56**，失败项是 `[6] ★ stock untouched by all three refusals`。
+
+**根因不在生产代码，在断言取点**：该断言拿的是 `[5]` 结束时的快照 `a_done`，
+但 `[6]` 开头**先下了订单 B** —— sku4 的 `available` 已经 −1。
+于是「B 的下单」被误判成「拒绝时动了库存」。
+
+**修法**：在 B 下单之后**重新取快照** `b_placed`，断言改成 `stock_same(b_placed, …)`。
+复跑 **56/56**。
+
+★ 教训与 Day 14「对照组的断言要按模式分支」是同一类：
+**断言必须挂在正确的时点上** —— 共享状态被中途改动过之后，旧快照就失效了。
+这也是「假失败比真失败更费时间」的又一例。
+
+### 9.5 进度
+
+```
+Day 01–14  ✅ 全部完成
+Day 15     ✅ 发货 + 确认收货（56/56）  ← 本日
+Day 16     评价（reviews）→ 里程碑 M1
+```
+
+状态机现在**五条边全部打通**：
+
+```
+PENDING_PAYMENT ──支付/取消/超时──> PAID / CANCELLED
+PAID ──发货(admin)──> SHIPPED ──确认(user)──> COMPLETED
+```
 
 ---
 
