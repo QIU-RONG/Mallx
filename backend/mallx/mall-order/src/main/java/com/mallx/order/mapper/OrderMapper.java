@@ -12,16 +12,21 @@ import java.util.List;
  * 订单 Mapper
  *
  * <p>{@link BaseMapper} 提供单表 CRUD（第 4 步的分页 {@code selectPage} 也用它）；
- * 跨模块 / 跨表的四条语句走 XML。
+ * 跨模块 / 跨表的语句一律走 XML。
  *
  * <p>⚠️ 铁律：这里声明的每个方法，{@code OrderMapper.xml} 里必须有【方法名逐字符一致】的
  * 同名标签，否则 MyBatis 启动时不报错、一调用就 {@code Invalid bound statement}。
- * 现有五个（都在 XML 里）：
+ * 现有七个（都在 XML 里）：
  * {@code selectAddressForOrder} / {@code selectSelectedCartItems} / {@code deleteSelectedCartItems}
- * / {@code markPaid} / {@code cancelOrder}。
+ * / {@code markPaid} / {@code cancelOrder} / {@code shipOrder} / {@code confirmReceipt}。
  *
- * <p>★ 后两个是「同一条边的两个方向」：都是 {@code WHERE status = 'PENDING_PAYMENT'}，
- * 一个走向 {@code PAID}、一个走向 {@code CANCELLED}。
+ * <p>★ {@code markPaid} 与 {@code cancelOrder} 是「同一条边的两个方向」：都是
+ * {@code WHERE status = 'PENDING_PAYMENT'}，一个走向 {@code PAID}、一个走向 {@code CANCELLED}。
+ *
+ * <p>★ {@code shipOrder} / {@code confirmReceipt} 是 Day 15 补上的正向两条边
+ * （{@code PAID → SHIPPED → COMPLETED}）：两者都<b>不碰库存</b>，
+ * 且起点各不相同 —— 所以它们不与支付/取消抢状态位，只能按顺序发生。
+ * 这也是本文件里唯一两条「起点不是 {@code PENDING_PAYMENT}」的语句。
  *
  * <p>不加 {@code @Mapper} 注解：全局 {@code @MapperScan("com.mallx.**.mapper")} 已覆盖本包。
  */
@@ -115,4 +120,60 @@ public interface OrderMapper extends BaseMapper<Order> {
      * @return 超时订单 id 列表（按 id 升序）；无超时单时返回空列表，不是 null
      */
     List<Long> selectTimeoutOrderIds(@Param("minutes") int minutes);
+
+    /**
+     * 发货：CAS 推进订单状态（Day 15 第 1 步）—— 条件 UPDATE 在本项目的第五次使用
+     * （前四次：{@code deductStock}、{@code moveLockedToSold}、{@code markPaid}、{@code cancelOrder}）。
+     *
+     * <p>★ 为什么不是「先查后改」：两个线程都先读到 {@code PAID}，
+     * 各自 UPDATE 一次 → <b>同一张单被发了两次货</b>，还会各写一次 {@code shipped_at}。
+     * {@code WHERE status = 'PAID'} 让数据库替我们做原子比较：
+     * 只有第一个匹配得上，第二个执行时状态已变 → 0 行。
+     *
+     * <p>★★ 与前四条边最大的不同：<b>本方法不碰库存</b>。
+     * 「货」的归属在支付那一刻（{@code locked → sold}）就已经定死了 ——
+     * 发货推进的是<b>物流状态</b>，{@code available / locked / sold} 三格一格不动。
+     * 所以本方法既没有第二个写点需要事务保护，也不写 {@code inventory_logs} 流水。
+     *
+     * <p>★ 起点 {@code PAID}、终点 {@code SHIPPED} —— 这是状态机里<b>唯一一条起点不是
+     * {@code PENDING_PAYMENT} 的边</b>。因此它与支付/取消的互斥关系不同：
+     * 那两条边抢同一个状态位（谁快谁赢），本边只能<b>按顺序</b>排在支付成功之后。
+     *
+     * <p>★ 【故意不做】归属校验：这是<b>管理端动作</b>（权限 {@code order:ship}），
+     * 管理员有权给任何人的订单发货 —— 所以本方法<b>不接收 userId</b>，
+     * {@code WHERE} 里也只有 {@code id}。订单存不存在统一由 0 行表达。
+     *
+     * <p>★ {@code shipped_at} 由 SQL 手写（不挂 fill）—— 与 {@code paid_at} 一样，
+     * 它记的是「业务事实发生的那一刻」，不是「这一行被改过」。
+     *
+     * @param orderId 订单主键
+     * @return 影响行数：1 = 抢到了；0 = 订单不存在 / 已被别人先发货 / 状态不是 {@code PAID}
+     */
+    int shipOrder(@Param("orderId") Long orderId);
+
+    /**
+     * 确认收货：CAS 推进订单状态（Day 15 第 2 步）—— 条件 UPDATE 在本项目的第六次使用。
+     *
+     * <p>★ 与 {@link #shipOrder} 是<b>三处相反</b>的孪生：
+     * 本方法是 <b>C 端用户动作</b> —— 要归属分流（Service 层 {@code requireOwn}）、
+     * 不挂 {@code @PreAuthorize}、起点是 {@code SHIPPED} 而不是 {@code PAID}。
+     *
+     * <p>★ 为什么不是「先查后改」：两个线程都先读到 {@code SHIPPED}，
+     * 各自 UPDATE 一次 → <b>重复确认收货</b>。{@code WHERE status = 'SHIPPED'}
+     * 让数据库替我们做原子比较：只有第一个匹配得上，第二个执行时状态已变 → 0 行。
+     *
+     * <p>★ 与 {@link #shipOrder} 一样<b>不碰库存</b>：{@code available / locked / sold}
+     * 三格一格不动，因此同样不需要事务与库存流水。
+     *
+     * <p>★ 为什么 {@code WHERE} 里【不要再带 user_id】：归属已在 Service 第一步
+     * （{@code requireOwn}）验完。带了会让「订单不存在 / 不是你的 / 状态不对」
+     * 三种 0 行原因重新糊在一起，上层就没法把它稳定地翻成「400 状态不允许确认收货」。
+     *
+     * <p>★ {@code completed_at} 是本列<b>第一次被写入</b>（此前全为 NULL）——
+     * 同样由 SQL 手写，不挂 fill。
+     *
+     * @param orderId 订单主键
+     * @return 影响行数：1 = 抢到了；0 = 订单不存在 / 已被别人确认过 / 状态不是 {@code SHIPPED}
+     */
+    int confirmReceipt(@Param("orderId") Long orderId);
 }

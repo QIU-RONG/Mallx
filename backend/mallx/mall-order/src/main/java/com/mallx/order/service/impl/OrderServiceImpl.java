@@ -304,6 +304,65 @@ public class OrderServiceImpl implements OrderService {
         return cancelled;
     }
 
+    // ==================== 发货 / 确认收货（Day 15 第 1、2 步） ====================
+
+    /**
+     * ★★ CAS 推进订单状态 —— 与 {@link #markPaid(Long)} 同构，
+     * 本方法的全部内容就是「调一条条件 UPDATE，看影响行数」；
+     * 真正的逻辑在 SQL 的 {@code WHERE status = 'PAID'} 里（见 OrderMapper.xml）。
+     *
+     * <p>★ 0 行报 {@code 400} 而不是 {@code 500}：与支付/取消同一个口径 ——
+     * 「订单不是已支付状态」是管理员可理解的正常结果（可能刚被取消、或已经发过货了），
+     * 不是服务端账目不一致。
+     *
+     * <p>★ 0 行也<b>不是</b> {@code 404}：发货<b>不做归属校验</b>，
+     * 订单存不存在统一由 0 行表达 —— 管理员不需要（也不应该）从响应里
+     * 区分「这个订单号不存在」与「它状态不对」。
+     *
+     * <p>★ 【故意不加】{@code @Transactional}：本方法<b>只碰 orders 一张表、一条 UPDATE</b>，
+     * 自身即原子，没有第二个写点需要与它同生共死。
+     * 这正是本日两条边与支付/取消最本质的差别 ——
+     * 那两条边要「改状态 + 改 N 个 SKU 库存」，这两条边不碰库存。
+     */
+    @Override
+    public void ship(Long orderId) {
+        int rows = orderMapper.shipOrder(orderId);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许发货");
+        }
+    }
+
+    /**
+     * ★★ 确认收货（<b>用户视角</b>）—— 与 {@link #cancel(Long, Long)} 同构的两步。
+     *
+     * <p>把两条链路并排看，本方法就是取消链路的<b>正向孪生</b>：
+     * <pre>
+     *              取消（cancel）                确认收货（本方法）
+     *   ① 归属     requireOwn → 404                同
+     *   ② 状态 CAS  WHERE PENDING_PAYMENT          WHERE SHIPPED
+     *   ③ 库存      releaseLocked                 无（Day 15 两条边都不碰库存）
+     *   ④ 事务      @Transactional 包 ②③           无（只有一条 UPDATE）
+     * </pre>
+     *
+     * <p>★ ① 必须在 ② 之前：② 的 {@code WHERE} 里【不带 user_id】——
+     * 带了会让「不存在 / 不是你的 / 状态不对」三种 0 行原因重新糊在一起，
+     * 上层就没法把它稳定地翻成「400 状态不允许确认收货」。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=404 订单不存在（含「不是你的」）
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许确认收货
+     */
+    @Override
+    public void confirm(Long userId, Long orderId) {
+        // ① 语义分流：「订单不存在」与「订单不是你的」共用同一个 404（写在 requireOwn 里）
+        //    ★ 这是【写操作的 IDOR】—— 读越权是泄露，写越权是破坏，后果更重。
+        requireOwn(userId, orderId);
+
+        // ② CAS 抢资格：只有 SHIPPED 才能被确认；0 行 → 400
+        int rows = orderMapper.confirmReceipt(orderId);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许确认收货");
+        }
+    }
 
     // ============================ 查询（Day 12 第 4 步） ============================
 

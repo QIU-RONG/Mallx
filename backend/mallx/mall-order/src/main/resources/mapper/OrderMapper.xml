@@ -131,4 +131,59 @@
          ORDER BY id
     </select>
 
+    <!-- ★★★ ⑥ Day 15 的核心 SQL：CAS 推进订单状态（发货成功）。
+         ★ 这是全文件【唯一一条起点不是 PENDING_PAYMENT 的边】——
+           PAID 变成 SHIPPED，只能排在支付成功之后，与支付/取消不抢同一个状态位。
+
+         ★ WHERE status = 'PAID' 就是 Compare-And-Set：
+           「只有现在还是已支付，才允许被我改成已发货」。
+           影响行数 1 = 抢到；0 = 订单不存在 / 已被别人先发货 / 状态不是 PAID → 上层抛 400。
+
+         ★ 本语句【不碰库存】：available / locked / sold 三格一格不动 ——
+           货的归属在支付那一刻（locked 变 sold）就已经定死了，
+           发货推进的是【物流状态】，不是库存状态。
+           所以它既不需要事务，也不写 inventory_logs 流水。
+
+         ★ 为什么【不】带 user_id：这是管理端动作（权限 order:ship），
+           管理员有权给任何人的订单发货 —— 连 userId 都不接收。
+
+         ⚠️ shipped_at 与 updated_at 都要手写：前者记「业务事实发生的那一刻」（不挂 fill），
+            后者是自定义 XML 的 UPDATE 不走 MetaObjectHandler 的补偿。
+            （对比：15 列里 shipped_at 一直是 NULL，本语句是第一次写它。）
+         ⚠️ status 用字面量 'SHIPPED' —— 必须与 Java 侧 OrderStatus.SHIPPED 逐字符一致。
+            orders.status 列【没有 CHECK 约束】，拼错了数据库不拦你。 -->
+    <update id="shipOrder">
+        UPDATE orders
+           SET status     = 'SHIPPED',
+               shipped_at = CURRENT_TIMESTAMP,
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = #{orderId}
+           AND status = 'PAID'
+    </update>
+
+    <!-- ★★★ ⑦ Day 15 的核心 SQL：CAS 推进订单状态（确认收货）。
+         与 ⑥ shipOrder 是孪生结构，但有三处相反：
+           ① 本语句服务的是【C 端用户动作】→ 归属由 Service 的 requireOwn 先分流（404）；
+           ② 起点是 SHIPPED 而不是 PAID（终点 COMPLETED）；
+           ③ 依然【不碰库存】。
+
+         ★ WHERE status = 'SHIPPED' 就是 Compare-And-Set：
+           「只有现在还是已发货，才允许被我改成已完成」。
+           影响行数 1 = 抢到；0 = 已被别人确认过 / 状态不是 SHIPPED → 上层抛 400。
+
+         ★ 为什么【不】带 user_id：归属在 Service 第一步已经分流过；
+           带了会让三种 0 行原因（不存在 / 不是你的 / 状态不对）重新糊在一起，
+           上层就没法稳定地把它翻成「400 状态不允许确认收货」。
+
+         ⚠️ completed_at 与 updated_at 都要手写。
+            （对比：15 列里 completed_at 一直是 NULL，本语句是第一次写它。） -->
+    <update id="confirmReceipt">
+        UPDATE orders
+           SET status       = 'COMPLETED',
+               completed_at = CURRENT_TIMESTAMP,
+               updated_at   = CURRENT_TIMESTAMP
+         WHERE id = #{orderId}
+           AND status = 'SHIPPED'
+    </update>
+
 </mapper>

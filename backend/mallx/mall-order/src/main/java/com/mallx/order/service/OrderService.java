@@ -108,4 +108,43 @@ public interface OrderService {
      */
     int cancelTimeoutOrders(int minutes);
 
+    /**
+     * 发货：把「已支付」的订单推进到「已发货」（Day 15 第 1 步 · 管理端动作）。
+     *
+     * <p>★ 与 {@link #markPaid(Long)} / {@link #cancel(Long, Long)} 最大的不同有两点：
+     * <ol>
+     *   <li><b>不碰库存</b>：货的归属在支付那一刻就已定死，发货只推进物流状态 ——
+     *       所以本方法只写 {@code orders} 一张表、一条 UPDATE，不需要事务；</li>
+     *   <li><b>不接收 userId</b>：管理员有权给任何人的订单发货。
+     *       「只有管理端能调」由调用方的 {@code @PreAuthorize("hasAuthority('order:ship')")}
+     *       保证，而不是靠归属校验。</li>
+     * </ol>
+     *
+     * <p>★★ 也正因为如此，本方法<b>不读取 principal</b> ——
+     * {@code JwtAuthenticationFilter} 只把 token 的 {@code sub} 转成 {@code Long} 当 principal，
+     * 管理端 admin 与 C 端用户的 {@code sub} 可能撞成同一个数值，
+     * 拿它当「发货人」是错误的。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许发货
+     */
+    void ship(Long orderId);
+
+    /**
+     * 确认收货：把「已发货」的订单推进到「已完成」（Day 15 第 2 步 · C 端动作）。
+     *
+     * <p>★ 与 {@link #ship(Long)} 是<b>三处相反</b>的孪生：本方法<b>带 userId</b>、
+     * <b>不做权限校验</b>（C 端 token 的权限集是空的，一挂 {@code @PreAuthorize} 就 403）、
+     * <b>要归属分流</b>。
+     *
+     * <p>★ 与 {@link #cancel(Long, Long)} 同构的两步：先 {@code requireOwn} 分流
+     * （不存在 / 不是你的 → 同一个 404，不可区分），再 CAS 抢资格（0 行 → 400）。
+     * 两步的顺序不能反 —— CAS 的 {@code WHERE} 里<b>不带</b> {@code user_id}。
+     *
+     * <p>★ 同样<b>不碰库存</b>：{@code available / locked / sold} 一格不动，不需要事务。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=404 订单不存在（含「不是你的」）
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许确认收货
+     */
+    void confirm(Long userId, Long orderId);
+
 }
