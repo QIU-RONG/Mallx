@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.review.mapper.ReviewMapper">
+
+    <!--
+      ★★★ Day 16 骨架（6 条 SQL 由你写）
+
+      通用规矩（写一条勾一条）：
+        · 方法名与 id 必须【逐字符一致】，否则调用时报 Invalid bound statement，编译不报错
+        · 列名显式列出，禁止 r.* 与 oi.*（显式列 = 出参白名单）
+        · 别名一律用【下划线】，靠 map-underscore-to-camel-case 转驼峰；
+          写成 AS orderItemId 会被 PG 折成小写 orderitemid，【映射不上且不报错】，字段静静留 null
+        · XML 注释里不能出现连续两个减号（Day 13 踩过：编译通过、启动才炸）
+        · 时间戳列（created_at / updated_at）在自定义 XML 的 INSERT 里必须【手写】
+    -->
+
+    <!--
+      ① 写评价（本日核心）
+      要求见 ReviewMapper.java#insertReview 与 docs/daily/Day-16-商品评价.md §3.2。要点：
+        · INSERT INTO reviews (user_id, product_id, order_id, order_item_id,
+                               rating, content, status, created_at, updated_at)
+        · VALUES 里 status 写死 1；两个时间戳写 CURRENT_TIMESTAMP
+        · ★★ 结尾必须是 ON CONFLICT (order_item_id) DO NOTHING
+          它返回的影响行数就是答案：1 = 插入成功，0 = 该明细已评过（上层抛 400）。
+          这条语句把「并发重复评价」压成一次原子操作，不需要事务。
+    -->
+    <insert id="insertReview">
+        TODO
+    </insert>
+
+    <!--
+      ② 回查一条评价（发表接口的返回值）
+      字段集与 ③④ 完全一致，所以 resultType 复用 ReviewVO。要点：
+        · WHERE r.order_item_id = #{orderItemId}
+        · LEFT JOIN users 取昵称、LEFT JOIN order_items 取商品快照
+    -->
+    <select id="selectByOrderItemId" resultType="com.mallx.review.vo.ReviewVO">
+        TODO
+    </select>
+
+    <!--
+      ③ 商品维度的评价列表（★★ 公开接口，游客可看）。要点：
+        · WHERE r.product_id = #{productId} AND r.status = 1
+          status = 1 不能省：将来评价被置为不可见时不能又露出来
+        · LEFT JOIN users u ON u.id = r.user_id                 取 nickname
+        · LEFT JOIN order_items oi ON oi.id = r.order_item_id   取商品快照
+        · ★ 请在这里写一句注释说明：JOIN users 是【只读跨域查询】，不是模块依赖
+        · ORDER BY r.created_at DESC, r.id DESC（不带排序的分页 = 随机翻页）
+        · 昵称空值兜底：COALESCE(u.nickname, '用户****')，绝不暴露 user_id
+      ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里不用写。
+    -->
+    <select id="selectProductReviews" resultType="com.mallx.review.vo.ReviewVO">
+        TODO
+    </select>
+
+    <!--
+      ④ 我的评价列表（需登录）。要点：
+        · WHERE r.user_id = #{userId}（归属条件写死在 SQL 里）
+        · JOIN order_items 取商品快照，好让列表直接展示「是哪件商品」
+        · ORDER BY r.created_at DESC, r.id DESC
+    -->
+    <select id="selectMyReviews" resultType="com.mallx.review.vo.ReviewVO">
+        TODO
+    </select>
+
+    <!--
+      ⑤ 商品平均分（1 位小数，无评价时为 0）。SQL 形状：
+           SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 0)
+             FROM reviews WHERE product_id = #{productId} AND status = 1
+      ★ products 表没有 rating 冗余列，聚合一律实时算（理由见规划 §4.2）。
+    -->
+    <select id="selectProductAvgRating" resultType="java.math.BigDecimal">
+        TODO
+    </select>
+
+    <!--
+      ⑥ 商品评价总数。SQL 形状：
+           SELECT COUNT(*) FROM reviews
+            WHERE product_id = #{productId} AND status = 1
+    -->
+    <select id="selectProductReviewCount" resultType="java.lang.Long">
+        TODO
+    </select>
+
+</mapper>
