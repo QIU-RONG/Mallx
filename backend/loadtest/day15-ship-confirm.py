@@ -425,6 +425,11 @@ def main():
             raise _Abort()
         created.append(order_b)
 
+        # ★ 库存快照必须在「B 下完单之后」取 —— 下单本身已经让 available -1。
+        #   若沿用 [5] 的 a_done 来比，会把「B 的下单」误判成「拒绝时动了库存」，
+        #   制造一条纯属口径过时的假失败（Day 14 同类教训：断言要按真实时点写）。
+        b_placed = inv(TARGET_SKU)
+
         before_rbac = status_of(order_b)
         st_d, raw_d = api("POST", "/api/orders/%d/ship" % order_b, token=demo)
         say("  demo (C-end) token  -> ship order B : http=%s code=%s %s"
@@ -444,7 +449,7 @@ def main():
             % (st_x, body_code(raw_x), short(raw_x, 100)))
         chk("★ any C-end token is refused with 403 (RBAC, not ownership)",
             st_x == 403)
-        chk("★ stock untouched by all three refusals", stock_same(a_done, inv(TARGET_SKU)))
+        chk("★ stock untouched by all three refusals", stock_same(b_placed, inv(TARGET_SKU)))
 
         say("\n[7] wrong-state guards (the CAS condition, one edge at a time)")
         st_w, b_w, raw_w = ship(order_b)          # B is PENDING_PAYMENT, needs PAID

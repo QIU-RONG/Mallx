@@ -1,0 +1,103 @@
+==============================================================================
+Day 15 -- ship + confirm: the last two edges (PAID -> SHIPPED -> COMPLETED)
+target : http://127.0.0.1:8080   accounts: demo(id=1) / admin(id=1) / intruder(id=2)
+sku under test: 4
+==============================================================================
+
+[0] BASELINE FINGERPRINT (all 7 SKUs)
+  baseline             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
+  baseline             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
+  baseline             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
+  baseline             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  baseline             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
+  baseline             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  baseline             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
+  rows orders/payments/order_items/inventory_logs = 8/5/9/0
+  ★ A0 = available_stock of sku4 at start = 147
+
+[1] logins (tokens stay in memory, never on disk)
+  demo      http=200 code=200 userId=1 token_len=191
+  admin     http=200 code=200 adminId=1 token_len=393
+  intruder  http=200 code=200 userId=2 token_len=196
+
+------------------------------------------------------------------------------
+ORDER A -- the full forward path: place -> pay -> SHIP -> CONFIRM
+------------------------------------------------------------------------------
+
+[2] place order A (sku4 x1)
+  POST /api/orders -> order=9034 code=200 {"code":200,"message":"success","data":9034}
+  after place A        sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
+  delta vs start: available -1  locked +1  sold +0
+
+[3] pay order A
+  POST /api/payments -> http=200 code=200
+  after pay A          sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
+  delta vs after-place: available +0  locked -1  sold +1
+
+[4] ★ SHIP order A -- ADMIN token, needs order:ship
+  POST /api/orders/9034/ship (admin) -> http=200 code=200 {"code":200,"message":"success","data":null}
+  after ship A         sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
+  delta vs after-pay: available +0  locked +0  sold +0   ★ must be all zeros
+
+[5] ★ CONFIRM order A -- C-end token, the owner
+  POST /api/orders/9034/confirm (demo) -> http=200 code=200 {"code":200,"message":"success","data":null}
+  after confirm A      sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
+  delta vs after-ship: available +0  locked +0  sold +0   ★ must be all zeros
+  A timestamps: paid=12:59:35 shipped=12:59:40 completed=12:59:45
+
+------------------------------------------------------------------------------
+ORDER B -- the guard rails: wrong state, wrong actor, repeated calls
+------------------------------------------------------------------------------
+
+[6] ★★ RBAC -- ship is the first business endpoint that really uses it
+  order B placed -> 9035
+  demo (C-end) token  -> ship order B : http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+  anonymous           -> ship order B : http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
+  intruder (C-end)    -> ship order B : http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+
+[7] wrong-state guards (the CAS condition, one edge at a time)
+  admin ship a PENDING_PAYMENT order -> http=200 code=400 {"code":400,"message":"订单状态不允许发货","data":null}
+  pay order B -> http=200 code=200
+  demo confirm a PAID order -> http=200 code=400 {"code":400,"message":"订单状态不允许确认收货","data":null}
+  admin ship order B -> http=200 code=200
+
+[8] IDOR -- ownership is checked BEFORE the CAS
+  intruder confirm demo's order B -> http=200 code=404 {"code":404,"message":"订单不存在","data":null}
+
+[9] idempotency -- the second call must be refused
+  admin ship an already-SHIPPED order -> http=200 code=400 {"code":400,"message":"订单状态不允许发货","data":null}
+  demo confirm order B -> http=200 code=200
+  demo confirm again -> http=200 code=400 {"code":400,"message":"订单状态不允许确认收货","data":null}
+
+==============================================================================
+[10] ★★ THE RECONCILIATION RULE HAD TO CHANGE (Day 15 section 0.2)
+==============================================================================
+  sold == sum(PAID units)                              -> 1 drifting SKUs
+  sold == sum(PAID + SHIPPED + COMPLETED units)         -> 0 drifting SKUs
+  ★ 两份订单已经走完 SHIPPED / COMPLETED，但 sold 仍然记着它们。
+    旧口径只认 PAID，于是它们从右边「掉出去」→ 报假漂移。
+  locked conservation (unchanged rule) -> 0 drifting SKUs
+
+  ledger rows created by this run: 4
+  ★ 本日两条边【不写流水】：inventory_logs 记的是「库存发生过什么」，
+    发货/收货对库存贡献为 0，硬塞一条 change=0 只会让账本变脏。
+
+==============================================================================
+[11] CLEANUP -- remove this run's artifacts, restore the baseline
+==============================================================================
+  orders to delete: [9034, 9035]
+  ledger rows to delete: id > 0
+
+[12] VERIFY -- the database is byte-for-byte back at baseline
+  restored             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
+  restored             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
+  restored             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
+  restored             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  restored             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
+  restored             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  restored             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
+  rows orders/payments/order_items/inventory_logs = 8/5/9/0   (baseline 8/5/9/0)
+
+==============================================================================
+ASSERTIONS: 56 / 56 passed
+==============================================================================
