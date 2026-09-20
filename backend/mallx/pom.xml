@@ -27,6 +27,7 @@
         <module>mall-inventory</module>
         <module>mall-order</module>
         <module>mall-payment</module>
+        <module>mall-review</module>
         <module>mall-marketing</module>
         <module>mall-admin</module>
         <module>mall-server</module>
@@ -78,6 +79,11 @@
             <dependency>
                 <groupId>com.mallx</groupId>
                 <artifactId>mall-payment</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.mallx</groupId>
+                <artifactId>mall-review</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

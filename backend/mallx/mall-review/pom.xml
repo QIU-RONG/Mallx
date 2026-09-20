@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mallx</groupId>
+        <artifactId>mallx</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>mall-review</artifactId>
+    <name>mall-review</name>
+    <description>MallX 评价模块：商品评价（M1「下单 → 支付 → 收货 → 评价」的最后一环）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-common</artifactId>
+        </dependency>
+
+        <!-- 评价要回答两个问题：「这笔购买是不是我的？」「订单完成了没？」
+             —— 答案的权威在订单模块，所以向它要事实（OrderItemBuyContext）。
+             版本由父 POM 的 dependencyManagement 托管，这里不写 version。 -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-order</artifactId>
+        </dependency>
+
+        <!-- ★ 刻意【不依赖】mall-product：
+             order_items 已快照 product_name / sku_name / image，
+             评价展示所需的商品信息全在订单域内（见 docs/daily/Day-16-商品评价.md §2.3）。 -->
+    </dependencies>
+</project>
