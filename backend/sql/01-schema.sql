@@ -230,12 +230,17 @@ CREATE TABLE IF NOT EXISTS payments (
 -- ============================================================
 
 -- 14. 商品评价
+-- ★ Day 16：order_item_id 改为 NOT NULL 并加唯一约束（一明细一评）。
+--   两条缺一不可 —— PG 的 UNIQUE 约束【豁免 NULL】：列可空时两行 NULL 互不相等、
+--   全都合法，约束形同虚设；连 INSERT ... ON CONFLICT DO NOTHING 也绕得过去。
+--   ⚠️ 对【已建库】而言，下面的 CREATE TABLE IF NOT EXISTS 不会改结构 ——
+--     必须另跑补丁：backend/sql/04-review-constraints.sql
 CREATE TABLE IF NOT EXISTS reviews (
     id             BIGSERIAL PRIMARY KEY,
     user_id        BIGINT     NOT NULL,
     product_id     BIGINT     NOT NULL,
     order_id       BIGINT     NOT NULL,
-    order_item_id  BIGINT,
+    order_item_id  BIGINT     NOT NULL,                       -- ★ Day 16：原为可空，见 04 补丁
     rating         SMALLINT   NOT NULL,
     content        TEXT,
     images         JSONB,
@@ -244,7 +249,8 @@ CREATE TABLE IF NOT EXISTS reviews (
     updated_at     TIMESTAMP  NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_review_user    FOREIGN KEY (user_id)    REFERENCES users(id),
     CONSTRAINT fk_review_product FOREIGN KEY (product_id) REFERENCES products(id),
-    CONSTRAINT fk_review_order   FOREIGN KEY (order_id)   REFERENCES orders(id)
+    CONSTRAINT fk_review_order   FOREIGN KEY (order_id)   REFERENCES orders(id),
+    CONSTRAINT uk_reviews_order_item UNIQUE (order_item_id)   -- ★ Day 16：一明细一评
 );
 
 -- ============================================================
