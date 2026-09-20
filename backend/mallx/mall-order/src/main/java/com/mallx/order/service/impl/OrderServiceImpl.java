@@ -7,6 +7,7 @@ import com.mallx.common.api.PageResult;
 import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
 import com.mallx.inventory.service.InventoryService;
+import com.mallx.order.api.OrderItemBuyContext;
 import com.mallx.order.common.OrderStatus;
 import com.mallx.order.dto.OrderCreateDTO;
 import com.mallx.order.entity.Order;
@@ -362,6 +363,28 @@ public class OrderServiceImpl implements OrderService {
         if (rows == 0) {
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许确认收货");
         }
+    }
+
+    // ============== 跨模块只读门面（Day 16 第 1 步 · 供 mall-review 用） ==============
+
+    /**
+     * ★★ 本方法是 {@code mall-order} 对外的<b>唯一</b>只读门面 —— 全文就是「调一条 SQL，把结果原样交出去」。
+     *
+     * <p>★ 业务判断一个都不要加：<b>不存在</b>与<b>不是你的</b>都由 SQL 的
+     * {@code WHERE o.user_id = #{userId}} 合成同一个 {@code null}。
+     * 这里<b>刻意</b>不再补一次归属校验 —— 防线只有一处，才不会有人以为别处还有。
+     *
+     * <p>★ 也不需要任何状态判断：状态<b>原样带回</b>，
+     * 「能不能评价」是评价域的规则（本日定义的是 {@code COMPLETED}），
+     * 不该由订单域替它决定 —— 订单域只负责说「事实是什么」。
+     *
+     * <p>★ 只读、无事务：单条 SELECT 自身即一致性快照。
+     */
+    @Override
+    public OrderItemBuyContext getBuyContext(Long userId, Long orderItemId) {
+        // TODO(你写): 直接转调 orderItemMapper.selectBuyContext(userId, orderItemId)，一行就够。
+        //   不要在这里加 if 判断（归属与状态都不属于本方法该操心的事）。
+        throw new UnsupportedOperationException("TODO: OrderServiceImpl.getBuyContext");
     }
 
     // ============================ 查询（Day 12 第 4 步） ============================

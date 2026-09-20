@@ -1,6 +1,7 @@
 package com.mallx.order.service;
 
 import com.mallx.common.api.PageResult;
+import com.mallx.order.api.OrderItemBuyContext;
 import com.mallx.order.dto.OrderCreateDTO;
 import com.mallx.order.vo.OrderDetailVO;
 import com.mallx.order.vo.OrderVO;
@@ -146,5 +147,30 @@ public interface OrderService {
      * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许确认收货
      */
     void confirm(Long userId, Long orderId);
+
+    /**
+     * ★★ 供评价模块（{@code mall-review}）调用：按「订单明细 id」取出这笔购买的事实。
+     *
+     * <p>★ 为什么评价模块要绕道订单服务，而不是自己裸读 {@code orders} / {@code order_items}：
+     * 「这笔购买是不是你的」「这张订单完成了吗」这两个问题的<b>权威答案在订单域</b>
+     * —— 状态机的所有权柄都在这里（{@code OrderStatus} + 那几条 CAS UPDATE）。
+     * 让别的模块自己去读状态列，等于把状态机的知识复制到第二个模块，
+     * 以后状态机一改就得满仓库找。
+     * 这里开一扇<b>只读门面</b>：它只取事实，不改任何东西。
+     *
+     * <p>★★ 返回值 {@code null} <b>同时</b>表示「明细不存在」与「明细不属于该用户」——
+     * 归属条件写死在 SQL 的 {@code WHERE} 里，两种原因在数据库层就合成了一个空结果。
+     * 调用方（评价服务）把 {@code null} 统一翻成 404，与订单详情的口径完全一致。
+     * <b>不要把这两种情况分开报</b>：可区分 = 可枚举，攻击者遍历 id 就能画出
+     * 「哪些明细真实存在」的地图。
+     *
+     * <p>★ 本方法只读、不加事务：单条 SELECT 自身即一致性快照，
+     * 也不需要与调用方的事务绑在一起（评价的写入是一条 INSERT，原子性由它自己保证）。
+     *
+     * @param userId      当前登录用户（来自 token，不接受客户端传参）
+     * @param orderItemId 订单明细 id
+     * @return 这笔购买的事实；明细不存在<b>或</b>不属于该用户 → {@code null}
+     */
+    OrderItemBuyContext getBuyContext(Long userId, Long orderItemId);
 
 }

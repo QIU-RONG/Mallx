@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.order.mapper.OrderItemMapper">
+
+    <!--
+      ★★ Day 16 骨架（SQL 由你写）
+
+      这是本文件的第一条 SQL：order_items 此前一直靠 MP 的 BaseMapper 活着。
+      BaseMapper 表达不了「JOIN orders 取状态 + 在 WHERE 里做归属校验」，所以本日补 XML。
+
+      要求（对着 docs/daily/Day-16-商品评价.md §3.3 与 §8.1 第 11 项写）：
+        1. FROM order_items oi，JOIN orders o ON o.id = oi.order_id
+        2. 取 8 个字段：oi.id / oi.order_id / oi.product_id / oi.sku_id /
+           oi.product_name / oi.sku_name / oi.image / o.status
+        3. ★★ 归属条件写死在 WHERE 里：oi.id = #{orderItemId} AND o.user_id = #{userId}
+           这样「明细不存在」与「明细属于别人」在 SQL 层就合成同一个空结果，
+           调用方拿到的结论天然不可区分（与订单详情 / 支付记录 / 评价各处的 404 伪装同源）
+        4. ★ 别名一律用【下划线】，靠 map-underscore-to-camel-case 自动转驼峰：
+           order_item_id -> orderItemId、product_name -> productName、order_status -> orderStatus
+           ⚠️ 写成 AS orderItemId 会被 PG 折成小写 orderitemid，映射不上且【不报错】，
+              字段静静留成 null（陷阱 5）
+        5. 列名显式列出、禁止 oi.* —— 显式列 = 出参白名单
+
+      ⚠️ 三条铁律：方法名与这里的 id 必须【逐字符一致】（差个字母就 Invalid bound statement，
+         编译不报错）；XML 注释里不能出现连续两个减号（Day 13 踩过：编译通过、启动才炸）。
+    -->
+    <select id="selectBuyContext" resultType="com.mallx.order.api.OrderItemBuyContext">
+        TODO
+    </select>
+
+</mapper>
