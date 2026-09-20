@@ -118,6 +118,48 @@ ALTER TABLE reviews ADD CONSTRAINT uk_reviews_order_item UNIQUE (order_item_id);
 ★ `docs/daily/Day-16-商品评价.md` §8 的清单是「改哪一行、必须满足什么、别踩什么」；
 `backend/loadtest/day16-review-e2e.py` 同时充当**验收标准**，写代码时对着它对。
 
+### 0.7 ★★ 分工改档（2026-09-20 用户拍定）：AI 交**骨架**，逻辑全部由用户写
+
+> 用户先是说「帮我写好」，随后改口 **「只要写好骨架就好了」** ——
+> 于是本日最终形态是：**AI 交出能编译、能启动、能被路由的类骨架，方法体与 SQL 一律留 `TODO`。**
+
+| 层 | AI 已交 | 用户要写 |
+|---|---|---|
+| **DDL** | ✅ 两条约束已执行 + 牙齿复核（§0.3 / §0.4） | —— |
+| **模块接入** | ✅ 4 处 pom + 包目录（§2.4） | —— |
+| **类骨架** | ✅ 14 个类/文件：包、注解、字段、方法签名、Javadoc、难点清单 | —— |
+| **方法体** | ⬜ `TODO` 注释（含步骤拆解 + 要用的 import） | ★ **全部** |
+| **SQL** | ⬜ `ReviewMapper.xml`（6 条）+ `OrderItemMapper.xml`（1 条），只留 `id` / `resultType` + TODO | ★ **全部** |
+| **验收** | ✅ `day16-review-e2e.py`（13 组，验收标准）+ `day16-skeleton-smoke.py`（17 项，骨架自检） | —— |
+
+**骨架自检结果**（`day16-skeleton-smoke.py`，✅ **17/17 全绿**）：
+
+| 组 | 验的是什么 | 实测 |
+|---|---|---|
+| 1–2 | 应用起得来、能登录 | `/api/hello` 200、demo token 191 字符 |
+| 3 | ★★ **`mall-review` 真的接进了 `mall-server`** | `GET /api/products/1/reviews` **匿名**可达（`code=500` = 走到 TODO；★ 若漏改 `mall-server/pom.xml` 这里会是 **404**） |
+| 3 | ★ 白名单对任意 productId 生效 | `/api/products/999999/reviews` 匿名同样可达 |
+| 4 | ★ 两个需登录端点的边界 | 匿名 `POST /api/reviews` / `GET /api/reviews/my` → **真 HTTP 401** |
+| 5 | 带 token 能被路由 | 两个端点均 200 + `code=500`（TODO） |
+| 6 | ★★ **DTO 校验收在骨架期就已生效** | `rating` 0/6/null、`content` 501 字、缺 `orderItemId` → 一律 `code=400` 且消息正确 |
+| 7 | DDL 仍在位 | `is_nullable=NO`、`uk_reviews_order_item` 存在、`reviews` 0 行 |
+
+★★ 第 3 组与第 6 组是本节的**两个关键证据**：
+前者证明「模块接进去」这件事**不能靠编译成功来证明**（漏一处 pom 也编译成功），
+后者的 5 条断言在**业务代码一行都没写**的情况下就全绿 ——
+说明`@Valid` 与业务逻辑是两层，参数校验挂在 DTO 上，先于任何 Service 调用。
+
+★ 骨架新增的两个 dev 工具（都不改生产行为）：
+- `backend/loadtest/day16-skeleton-smoke.py` —— 骨架期自检（可重复跑、零写入）
+- `backend/loadtest/day16-xml-check.py` —— 两个 mapper XML 的**良构性**检查（毫秒级）
+  ⚠️ 它专门抓「XML 注释里出现连续两个减号」这个坑：**Maven 照抄不报错、MyBatis 启动才炸**。
+  本次写骨架时 AI **自己就踩了一次**（`----` 用作项目符号）—— 靠这个脚本当场抓到。
+
+★ 一处**脚本自身的假失败**已修（`day16-review-e2e.py` 分页边界组）：
+原断言 `size=0 → n == 0` 照搬的是 MP 的原生行为（`LIMIT 0` → 空列表），
+与 §4.4 定的夹紧规则（`size < 1` 归一到 1）**互斥** —— 实现按夹紧走，这条必假失败。
+已改为断言「被夹到 1」。**教训：断言要对着【设计】写，不是对着【某个库的默认行为】写。**
+
 ---
 
 ## 一、全景：3 步
@@ -575,6 +617,11 @@ SELECT (SELECT count(*) FROM reviews) <=
 ---
 
 ## 八、写代码时的对照清单（★ 动手时对着这张表勾）
+
+> ★★ **2026-09-20 现状**：下表里 §8.1 的 1–6 与 §8.2 的 17–18（数据类）**已由 AI 交成骨架**，
+> 其余每一格的**方法体与 SQL 都是 `TODO`**，等你填。
+> 骨架的每个 `TODO` 旁边都写了「步骤拆解 + 需要哪个 import」，直接照着写即可。
+> 填完的顺序见 **§8.5 自检顺序**；每填完一块可先跑 `day16-skeleton-smoke.py` 看有没有把线接错。
 
 ### 8.1 逐文件改动 · 第 1 步（写评价）
 
