@@ -102,6 +102,22 @@ ALTER TABLE reviews ADD CONSTRAINT uk_reviews_order_item UNIQUE (order_item_id);
 
 ★ 造靶子本身就是 M1 的端到端走查 —— 所以本日的验收脚本**天然同时覆盖 Day 12/13/15 的成果**。
 
+### 0.6 开工准备（AI 已完成 ✅ 2026-09-20）
+
+工作方式：**陪练** —— 生产代码（`backend/mallx/**`）由用户亲手写；AI 负责 DDL / 模块骨架 /
+编译 / 起应用 / 跑验收 / 审查。
+
+| 项 | 状态 | 提交 |
+|---|---|---|
+| 两条 DDL 执行 + 幂等复跑 + 结构复核 | ✅ `order_item_id` → `NOT NULL`、`uk_reviews_order_item` 已建 | `c072629` |
+| **DDL 牙齿复核** | ✅ 同明细插两次 → `23505`；`ON CONFLICT` 第二次 → `INSERT 0 0`；插 NULL → `23502`（全程回滚零痕迹） | `e618197` |
+| `mall-review` 模块骨架（4 处 pom + 包目录） | ✅ `mvn -o install -pl mall-review -am` → **BUILD SUCCESS** | `fcbda08` |
+| 验收脚本 `day16-review-e2e.py`（13 组） | ✅ `py_compile` 通过；**待代码落地后跑** | `e618197` |
+
+★ 剩下**全部是生产代码**：`mall-order` 侧的跨模块契约 + `mall-review` 的业务代码，见 §8.1 / §8.2。
+★ `docs/daily/Day-16-商品评价.md` §8 的清单是「改哪一行、必须满足什么、别踩什么」；
+`backend/loadtest/day16-review-e2e.py` 同时充当**验收标准**，写代码时对着它对。
+
 ---
 
 ## 一、全景：3 步
