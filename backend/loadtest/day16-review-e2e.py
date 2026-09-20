@@ -649,7 +649,7 @@ def main():
             item_elig not in my_items)
 
         say("\n  pagination edges (Day 12's three traps)")
-        for q, note in [("page=1&size=0", "size=0 -> empty list, total intact"),
+        for q, note in [("page=1&size=0", "size=0 -> clamped up to 1"),
                         ("page=1&size=-1", "size<0 -> must NOT dump the whole table"),
                         ("page=0&size=10", "page<1 -> MP tolerates it"),
                         ("page=1&size=999", "size>100 -> must be clamped")]:
@@ -658,7 +658,13 @@ def main():
             say("    %-16s code=%-5s records=%d   (%s)" % (q, b_z.get("code"), n, note))
             chk("★ pagination %s does not blow up" % q, b_z.get("code") == 200)
             if "size=0" in q:
-                chk("★ size=0 returns an empty page (not the whole table)", n == 0)
+                # ★ 本行曾是【脚本自身的假失败】：原断言 n == 0 照搬了 MP 的原生行为
+                #   （size=0 -> LIMIT 0 -> 空列表），但规划的夹紧规则是 size < 1 归一到 1
+                #   （见 §4.4），两者互斥。实现按夹紧走 ⇒ 这里断言「被夹到 1」。
+                #   同 Day 15「断言必须挂在正确的时点上」一类：断言要对着【设计】写，
+                #   不是对着【某个库的默认行为】写。
+                chk("★★ size=0 was clamped up to 1 (never dumps the table, never a silent empty)",
+                    n == 1)
             if "size=-1" in q:
                 chk("★★ size=-1 did NOT dump the whole table", n <= 100)
             if "size=999" in q:
