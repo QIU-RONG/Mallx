@@ -4,15 +4,16 @@
 <mapper namespace="com.mallx.review.mapper.ReviewMapper">
 
     <!--
-      ★★★ Day 16 骨架（6 条 SQL 由你写）
+      ★★★ Day 16 商品评价 SQL（6 条，已全部落地）
 
-      通用规矩（写一条勾一条）：
+      通用规矩：
         · 方法名与 id 必须【逐字符一致】，否则调用时报 Invalid bound statement，编译不报错
         · 列名显式列出，禁止 r.* 与 oi.*（显式列 = 出参白名单）
         · 别名一律用【下划线】，靠 map-underscore-to-camel-case 转驼峰；
           写成 AS orderItemId 会被 PG 折成小写 orderitemid，【映射不上且不报错】，字段静静留 null
         · XML 注释里不能出现连续两个减号（Day 13 踩过：编译通过、启动才炸）
         · 时间戳列（created_at / updated_at）在自定义 XML 的 INSERT 里必须【手写】
+        · 分页 SQL 里不写 LIMIT：分页插件靠首参 IPage 改写 SQL，自己写会双重分页
     -->
 
     <!--
@@ -58,8 +59,20 @@
         · 昵称空值兜底：COALESCE(u.nickname, '用户****')，绝不暴露 user_id
       ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里不用写。
     -->
+    <!--
+      ★ JOIN users 是【只读跨域查询】，不是模块依赖
+        mall-review 的编译期依赖仍然只有 mall-common + mall-order；
+        这里只是 SQL 层面读一下 users.nickname（与 PaymentMapper.xml JOIN orders 同一种做法）。
+    -->
     <select id="selectProductReviews" resultType="com.mallx.review.vo.ReviewVO">
-        TODO
+        SELECT r.id, r.order_item_id, r.product_id, oi.product_name, oi.sku_name, oi.image,
+               r.rating, r.content,
+               COALESCE(u.nickname, '用户****') AS user_nickname, r.created_at
+          FROM reviews r
+          LEFT JOIN users u ON u.id = r.user_id
+          LEFT JOIN order_items oi ON oi.id = r.order_item_id
+         WHERE r.product_id = #{productId} AND r.status = 1
+         ORDER BY r.created_at DESC, r.id DESC
     </select>
 
     <!--
@@ -69,7 +82,14 @@
         · ORDER BY r.created_at DESC, r.id DESC
     -->
     <select id="selectMyReviews" resultType="com.mallx.review.vo.ReviewVO">
-        TODO
+        SELECT r.id, r.order_item_id, r.product_id, oi.product_name, oi.sku_name, oi.image,
+               r.rating, r.content,
+               COALESCE(u.nickname, '用户****') AS user_nickname, r.created_at
+          FROM reviews r
+          LEFT JOIN order_items oi ON oi.id = r.order_item_id
+          LEFT JOIN users u ON u.id = r.user_id
+         WHERE r.user_id = #{userId}
+         ORDER BY r.created_at DESC, r.id DESC
     </select>
 
     <!--
@@ -79,7 +99,9 @@
       ★ products 表没有 rating 冗余列，聚合一律实时算（理由见规划 §4.2）。
     -->
     <select id="selectProductAvgRating" resultType="java.math.BigDecimal">
-        TODO
+        SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 0)
+          FROM reviews
+         WHERE product_id = #{productId} AND status = 1
     </select>
 
     <!--
@@ -88,7 +110,9 @@
             WHERE product_id = #{productId} AND status = 1
     -->
     <select id="selectProductReviewCount" resultType="java.lang.Long">
-        TODO
+        SELECT COUNT(*)
+          FROM reviews
+         WHERE product_id = #{productId} AND status = 1
     </select>
 
 </mapper>

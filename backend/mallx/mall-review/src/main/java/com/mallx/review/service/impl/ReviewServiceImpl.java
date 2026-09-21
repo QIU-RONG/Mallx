@@ -12,6 +12,8 @@ import com.mallx.review.mapper.ReviewMapper;
 import com.mallx.review.service.ReviewService;
 import com.mallx.review.vo.ReviewPageVO;
 import com.mallx.review.vo.ReviewVO;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
 
 /**
@@ -70,8 +72,6 @@ public class ReviewServiceImpl implements ReviewService {
      */
     @Override
     public ReviewVO create(Long userId, ReviewCreateDTO dto) {
-        // TODO(你写): 按上面 ①②③④ 四步实现。
-        //   需要 import: com.mallx.common.api.ResultCode、com.mallx.common.exception.BusinessException
         OrderItemBuyContext ctx = orderService.getBuyContext(userId, dto.getOrderItemId());
         if (ctx == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "订单明细不存在");
@@ -116,8 +116,23 @@ public class ReviewServiceImpl implements ReviewService {
      */
     @Override
     public ReviewPageVO pageByProduct(Long productId, long page, long size) {
-        // TODO(你写): 按上面四步实现。
-        throw new UnsupportedOperationException("TODO: ReviewServiceImpl.pageByProduct");
+        // ① 夹紧分页 —— ★ 必须在 new Page 之前，构造进去的值就是最终发给 DB 的值
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        // ② 首参必须传 IPage，否则分页插件不改写 SQL（不报错，静默查全表）
+        IPage<ReviewVO> result =
+                reviewMapper.selectProductReviews(new Page<>(safePage, safeSize), productId);
+
+        // ③④ 组装：分页四件套取自 result，两个聚合取自评价域的独立查询
+        ReviewPageVO vo = new ReviewPageVO();
+        vo.setRecords(result.getRecords());
+        vo.setTotal(result.getTotal());
+        vo.setCurrent(result.getCurrent());
+        vo.setSize(result.getSize());
+        vo.setAvgRating(reviewMapper.selectProductAvgRating(productId));
+        vo.setReviewCount(reviewMapper.selectProductReviewCount(productId));
+        return vo;
     }
 
     /**
@@ -130,7 +145,15 @@ public class ReviewServiceImpl implements ReviewService {
      */
     @Override
     public PageResult<ReviewVO> pageMine(Long userId, long page, long size) {
-        // TODO(你写): 按上面三步实现。
-        throw new UnsupportedOperationException("TODO: ReviewServiceImpl.pageMine");
+        // ① 夹紧规则与 pageByProduct 完全相同
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        // ② 归属条件在 SQL 里写死；这里只是把当前用户传下去
+        IPage<ReviewVO> result =
+                reviewMapper.selectMyReviews(new Page<>(safePage, safeSize), userId);
+
+        // ③ 没有聚合，字段集正好是分页四件套 —— 直接复用公共壳
+        return PageResult.of(result);
     }
 }

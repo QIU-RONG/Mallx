@@ -77,8 +77,6 @@ public class ReviewController {
     @PostMapping("/reviews")
     public Result<ReviewVO> create(Authentication authentication,
                                    @Valid @RequestBody ReviewCreateDTO dto) {
-        // TODO(你写): Long userId = (Long) authentication.getPrincipal();
-        //             return Result.ok(reviewService.create(userId, dto));
         Long userId = (Long) authentication.getPrincipal();
         return Result.ok(reviewService.create(userId, dto));
     }
@@ -94,8 +92,7 @@ public class ReviewController {
     public Result<ReviewPageVO> listByProduct(@PathVariable Long productId,
                                               @RequestParam(defaultValue = "1") long page,
                                               @RequestParam(defaultValue = "10") long size) {
-        // TODO(你写): return Result.ok(reviewService.pageByProduct(productId, page, size));
-        throw new UnsupportedOperationException("TODO: ReviewController.listByProduct");
+        return Result.ok(reviewService.pageByProduct(productId, page, size));
     }
 
     /**
@@ -107,8 +104,6 @@ public class ReviewController {
     public Result<PageResult<ReviewVO>> listMine(Authentication authentication,
                                                  @RequestParam(defaultValue = "1") long page,
                                                  @RequestParam(defaultValue = "10") long size) {
-        // TODO(你写): Long userId = (Long) authentication.getPrincipal();
-        //             return Result.ok(reviewService.pageMine(userId, page, size));
         return Result.ok(reviewService.pageMine((Long) authentication.getPrincipal(), page, size));
     }
 }
