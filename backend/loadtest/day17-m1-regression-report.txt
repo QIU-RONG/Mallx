@@ -1,0 +1,94 @@
+==============================================================================
+MallX  M1 milestone regression   (place -> pay -> ship -> confirm -> review)
+==============================================================================
+run at : 2026-09-21 21:19:01
+
+[1] CHAIN -- each link's own end-to-end report, regenerated in this run
+  -> Day 14  day14-e2e-walk.py
+     proves: place -> pay  (both state-machine exits + the ledger)
+     report mtime : 2026-09-21 21:18:15   (regenerated this run)
+     RESULT: 67 / 67 passed
+       [0] BASELINE FINGERPRINT (all 7 SKUs)
+       [1] login demo (token stays in memory, never on disk)
+       [2] PATH A / place order A (sku4 x1)
+       [3] PATH A / cancel order A
+       [4] PATH B / place order B (sku4 x1)
+       [5] PATH B / pay order B
+       [6] ★★ THE CONTRAST -- same start, same first step, different exit
+       [7] LEDGER AUDIT OVER BOTH PATHS (4 rows, one contiguous chain)
+       [8] BUSINESS CONSERVATION (locked == Σ PENDING_PAYMENT units)
+       [9] CLEANUP -- remove this run's artifacts, restore the baseline
+       [10] VERIFY -- the database is byte-for-byte back at baseline
+
+  -> Day 15  day15-ship-confirm.py
+     proves: pay -> ship -> confirm
+     report mtime : 2026-09-21 21:18:27   (regenerated this run)
+     RESULT: 56 / 56 passed
+       [0] BASELINE FINGERPRINT (all 7 SKUs)
+       [1] logins (tokens stay in memory, never on disk)
+       [2] place order A (sku4 x1)
+       [3] pay order A
+       [4] ★ SHIP order A -- ADMIN token, needs order:ship
+       [5] ★ CONFIRM order A -- C-end token, the owner
+       [6] ★★ RBAC -- ship is the first business endpoint that really uses it
+       [7] wrong-state guards (the CAS condition, one edge at a time)
+       [8] IDOR -- ownership is checked BEFORE the CAS
+       [9] idempotency -- the second call must be refused
+       [10] ★★ THE RECONCILIATION RULE HAD TO CHANGE (Day 15 section 0.2)
+       [11] CLEANUP -- remove this run's artifacts, restore the baseline
+       [12] VERIFY -- the database is byte-for-byte back at baseline
+
+  -> Day 16  day16-review-e2e.py
+     proves: confirm -> review
+     report mtime : 2026-09-21 21:18:51   (regenerated this run)
+     RESULT: 75 / 75 passed
+       [0] BASELINE FINGERPRINT
+       [1] logins (tokens stay in memory, never on disk)
+       [2] place A -> pay -> ship(admin) -> confirm(demo) -> COMPLETED
+       [3] POST /api/reviews -- ★★ the three derived columns must come from the DB
+       [4] the same order line again -- ON CONFLICT DO NOTHING must answer 0 rows
+       [5] ★★ 8 threads, ONE order line -- exactly one winner (the constraint has teeth)
+       [6] IDOR -- reviewing somebody else's purchase must be invisible
+       [7] eligibility -- only COMPLETED orders may be reviewed
+       [8] parameter validation (this runs BEFORE any DB lookup)
+       [9] ★★ forged fields -- the client cannot vote on somebody else's product
+       [10] reading reviews -- per product (PUBLIC) / mine (logged in) / aggregates
+       [11] ★★ RECONCILIATION -- now crossing OUT of the inventory domain
+       [12] CLEANUP -- remove this run's artifacts, restore the baseline
+       [13] VERIFY -- the database is byte-for-byte back at baseline
+
+[2] DATABASE -- snapshot now, compare with the baseline
+  orders           = 8     unchanged
+  order_items      = 9     unchanged
+  payments         = 5     unchanged
+  reviews          = 0     unchanged
+  inventory_logs   = 0     unchanged
+  cart_items       = 0     unchanged
+  inventories     : identical to baseline
+      sku 1   total=100   available=100   locked=0     sold=0
+      sku 2   total=80    available=80    locked=0     sold=0
+      sku 3   total=60    available=56    locked=0     sold=4
+      sku 4   total=150   available=147   locked=0     sold=3
+      sku 5   total=120   available=117   locked=0     sold=3
+      sku 6   total=40    available=40    locked=0     sold=0
+      sku 7   total=90    available=90    locked=0     sold=0
+  milestone invariants (all must be 0):
+    stock identity: available + locked + sold == total = 0
+    no negative stock buckets                  = 0
+    at most one review per order_item          = 0
+    no review on a non-COMPLETED order         = 0
+    every review belongs to a real order_item  = 0
+
+==============================================================================
+MILESTONE M1  --  verdict
+==============================================================================
+  Day 14   day14-e2e-walk.py        67/67  PASS   (this run)
+  Day 15   day15-ship-confirm.py    56/56  PASS   (this run)
+  Day 16   day16-review-e2e.py      75/75  PASS   (this run)
+
+  (a) every link all-green              : YES
+  (b) database back at baseline         : YES
+  (c) milestone invariants all zero     : YES
+
+  M1 REGRESSION: OK -- the chain still works and the books balance
+==============================================================================

@@ -1,0 +1,18 @@
+{
+ "counts": {
+  "orders": 8,
+  "order_items": 9,
+  "payments": 5,
+  "reviews": 0,
+  "inventory_logs": 0,
+  "cart_items": 0
+ },
+ "inv": "1|100|100|0|0\n2|80|80|0|0\n3|60|56|0|4\n4|150|147|0|3\n5|120|117|0|3\n6|40|40|0|0\n7|90|90|0|0",
+ "bad": {
+  "stock identity: available + locked + sold == total": 0,
+  "no negative stock buckets": 0,
+  "at most one review per order_item": 0,
+  "no review on a non-COMPLETED order": 0,
+  "every review belongs to a real order_item": 0
+ }
+}
