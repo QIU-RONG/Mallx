@@ -382,9 +382,7 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public OrderItemBuyContext getBuyContext(Long userId, Long orderItemId) {
-        // TODO(你写): 直接转调 orderItemMapper.selectBuyContext(userId, orderItemId)，一行就够。
-        //   不要在这里加 if 判断（归属与状态都不属于本方法该操心的事）。
-        throw new UnsupportedOperationException("TODO: OrderServiceImpl.getBuyContext");
+        return orderItemMapper.selectBuyContext(userId,orderItemId);
     }
 
     // ============================ 查询（Day 12 第 4 步） ============================

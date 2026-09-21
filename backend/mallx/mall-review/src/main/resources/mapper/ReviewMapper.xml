@@ -26,7 +26,9 @@
           这条语句把「并发重复评价」压成一次原子操作，不需要事务。
     -->
     <insert id="insertReview">
-        TODO
+        INSERT INTO reviews (user_id, product_id, order_id, order_item_id, rating, content, status, created_at, updated_at)
+        VALUES (#{userId}, #{productId}, #{orderId}, #{orderItemId}, #{rating}, #{content}, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (order_item_id) DO NOTHING
     </insert>
 
     <!--
@@ -36,7 +38,13 @@
         · LEFT JOIN users 取昵称、LEFT JOIN order_items 取商品快照
     -->
     <select id="selectByOrderItemId" resultType="com.mallx.review.vo.ReviewVO">
-        TODO
+        SELECT r.id, r.order_item_id, r.product_id, oi.product_name AS product_name,
+               oi.sku_name, oi.image, r.rating, r.content,
+               COALESCE(u.nickname, '用户****') AS user_nickname, r.created_at
+          FROM reviews r
+          LEFT JOIN users u ON u.id = r.user_id
+          LEFT JOIN order_items oi ON oi.id = r.order_item_id
+         WHERE r.order_item_id = #{orderItemId}
     </select>
 
     <!--

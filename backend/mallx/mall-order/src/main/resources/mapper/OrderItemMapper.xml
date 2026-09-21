@@ -26,7 +26,18 @@
          编译不报错）；XML 注释里不能出现连续两个减号（Day 13 踩过：编译通过、启动才炸）。
     -->
     <select id="selectBuyContext" resultType="com.mallx.order.api.OrderItemBuyContext">
-        TODO
+        SELECT oi.id           AS order_item_id,
+               oi.order_id     AS order_id,
+               oi.product_id   AS product_id,
+               oi.sku_id       AS sku_id,
+               oi.product_name AS product_name,
+               oi.sku_name     AS sku_name,
+               oi.image        AS image,
+               o.status        AS order_status
+        FROM order_items oi
+                 JOIN orders o ON o.id = oi.order_id
+        WHERE oi.id = #{orderItemId}
+          AND o.user_id = #{userId}
     </select>
 
 </mapper>

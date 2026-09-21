@@ -1,6 +1,8 @@
 package com.mallx.review.service.impl;
 
 import com.mallx.common.api.PageResult;
+import com.mallx.common.api.ResultCode;
+import com.mallx.common.exception.BusinessException;
 import com.mallx.order.api.OrderItemBuyContext;
 import com.mallx.order.common.OrderStatus;
 import com.mallx.order.service.OrderService;
@@ -70,7 +72,26 @@ public class ReviewServiceImpl implements ReviewService {
     public ReviewVO create(Long userId, ReviewCreateDTO dto) {
         // TODO(你写): 按上面 ①②③④ 四步实现。
         //   需要 import: com.mallx.common.api.ResultCode、com.mallx.common.exception.BusinessException
-        throw new UnsupportedOperationException("TODO: ReviewServiceImpl.create");
+        OrderItemBuyContext ctx = orderService.getBuyContext(userId, dto.getOrderItemId());
+        if (ctx == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "订单明细不存在");
+        }
+        if (!OrderStatus.COMPLETED.equals(ctx.getOrderStatus())) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "只有已完成的订单才能评价");
+        }
+        Review review = new Review();
+        review.setUserId(userId);
+        review.setOrderItemId(ctx.getOrderItemId());
+        review.setOrderId(ctx.getOrderId());
+        review.setProductId(ctx.getProductId());
+        review.setRating(dto.getRating());
+        review.setContent(dto.getContent());
+        review.setStatus(1);
+        int rows = reviewMapper.insertReview(review);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该商品已评价过");
+        }
+        return reviewMapper.selectByOrderItemId(ctx.getOrderItemId());
     }
 
     /**

@@ -79,7 +79,8 @@ public class ReviewController {
                                    @Valid @RequestBody ReviewCreateDTO dto) {
         // TODO(你写): Long userId = (Long) authentication.getPrincipal();
         //             return Result.ok(reviewService.create(userId, dto));
-        throw new UnsupportedOperationException("TODO: ReviewController.create");
+        Long userId = (Long) authentication.getPrincipal();
+        return Result.ok(reviewService.create(userId, dto));
     }
 
     /**
@@ -108,6 +109,6 @@ public class ReviewController {
                                                  @RequestParam(defaultValue = "10") long size) {
         // TODO(你写): Long userId = (Long) authentication.getPrincipal();
         //             return Result.ok(reviewService.pageMine(userId, page, size));
-        throw new UnsupportedOperationException("TODO: ReviewController.listMine");
+        return Result.ok(reviewService.pageMine((Long) authentication.getPrincipal(), page, size));
     }
 }
