@@ -1,0 +1,108 @@
+==========================================================================
+远端仓库事实
+==========================================================================
+  仓库           : QIU-RONG/Mallx
+  default_branch : main
+  是否私有        : False
+  pushed_at      : 2026-09-20T07:16:59Z
+  远端分支       : main
+  远端 HEAD      : d3140ed
+
+==========================================================================
+本地 vs 远端：SHA 逐层对齐
+==========================================================================
+  本地 main      : b10189a   （共 70 个提交）
+  远端 main      : d3140ed
+  远端 HEAD 是本地祖先 : 是 -> 远端是本地的一个前缀，没有分叉
+  本地领先远端的提交数 : 1
+  未推送的提交：
+    b10189a test(review): Day 16 三件验收/教学工具 —— 可执行规格、ON CONFLICT 演示、XML 抽 SQL 直连验证
+
+  工作区未提交改动 (3 个) :
+    M backend/mallx/mall-order/src/main/java/com/mallx/order/service/impl/OrderServiceImpl.java
+     M backend/mallx/mall-order/src/main/resources/mapper/OrderItemMapper.xml
+    ?? backend/loadtest/day16-github-audit.py
+
+==========================================================================
+远端提交时间线（最近 12 条）
+==========================================================================
+  第一页取回 69 条（per_page=100 上限）
+  d3140ed  2026-09-20T07:15:29Z  docs: Day 16 补 §0.7 分工改档（AI 交骨架、逻辑用户写）+ 骨架自检结果
+  3884597  2026-09-20T07:15:25Z  test(review): Day 16 骨架期自检工具（17/17）+ 修掉验收脚本一处自相矛盾的断言
+  0fff96e  2026-09-20T07:15:10Z  feat(review): Day 16 mall-review 模块的类骨架（9 个文件，逻辑留 TODO）
+  d29b1d3  2026-09-20T07:14:55Z  feat(order): Day 16 跨模块只读门面的骨架（OrderItemBuyContext + getBu
+  946bdec  2026-09-20T07:03:38Z  docs: Day 16 补 §0.6 开工准备 —— 记录 AI 已完成的部分与剩余分工
+  e618197  2026-09-20T07:03:03Z  test(review): Day 16 验收脚本（13 组）+ DDL 牙齿复核
+  fcbda08  2026-09-20T07:03:00Z  feat(review): 新建 mall-review 模块骨架（全项目第 10 个模块）
+  c072629  2026-09-20T07:02:56Z  feat(db): Day 16 —— reviews 表补两条约束（SET NOT NULL + UNIQUE 一
+  f7ac725  2026-09-20T05:12:56Z  docs: Day 16 规划 —— 商品评价（里程碑 M1 最后一环）
+  24c06d7  2026-09-20T05:12:47Z  test(review): Day 16 开工前探针 —— 实测 reviews 表的三处缺口与 DDL 的必要性
+  79e81e1  2026-09-20T05:02:06Z  docs: Day 15 实测小节 —— 落地清单、陷阱复核、56/56 验收数据与脚本假失败复盘
+  c742ba9  2026-09-20T05:01:59Z  test(order): Day 15 验收脚本跑通 56/56 + 修掉一处断言取点的假失败
+  ...
+  b912643  2026-09-07T13:14:32Z  feat: Day 03 PostgreSQL 数据库设计与初始化数据
+  737e6a1  2026-09-07T12:52:35Z  feat: 打通 Docker Desktop PostgreSQL 连接（Day 02 基础设施验收）
+  60caf1a  2026-09-07T09:17:42Z  init: MallX 模块化单体后端骨架（Day 02）
+
+==========================================================================
+远端文件树里，历日关键产物是否都在
+==========================================================================
+  远端树条目数 : 365
+  MISS  Day 09 起停脚本      learning/day09/start-app.bat
+  OK   Day 12 下单文档      docs/daily/Day-12-从购物车下单.md
+  OK   Day 13 端到端脚本     backend/loadtest/day13-e2e.py
+  OK   Day 14 校准 SQL    backend/loadtest/day14-recalibrate.sql
+  OK   Day 15 验收脚本      backend/loadtest/day15-ship-confirm.py
+  OK   Day 15 文档        docs/daily/Day-15-发货与确认收货.md
+  OK   Day 16 DDL 补丁    backend/sql/04-review-constraints.sql
+  OK   Day 16 模块 pom    backend/mallx/mall-review/pom.xml
+  OK   Day 16 契约类       backend/mallx/mall-order/src/main/java/com/mallx/order/api/OrderItemBuyContext.java
+  OK   Day 16 服务骨架      backend/mallx/mall-review/src/main/java/com/mallx/review/service/impl/ReviewServiceImpl.java
+  OK   Day 16 规划文档      docs/daily/Day-16-商品评价.md
+
+==========================================================================
+被 .gitignore 排除、因此【永远】不会出现在 GitHub 上的东西
+==========================================================================
+  !  .codegraph/
+  !  .omo/
+  !  .tmp-zen-models.json
+  !  .workbuddy-ai/
+  !  .workbuddy/
+  !  _build.txt
+  !  _chk.txt
+  !  _dd.txt
+  !  _docker.txt
+  !  _err.txt
+  !  _javap.txt
+  !  _run.log
+  !  _sql.txt
+  !  _test1.txt
+  !  backend/.idea/
+  !  backend/backend.iml
+  !  backend/loadtest/__pycache__/
+  !  backend/mallx/.codegraph/
+  !  backend/mallx/.idea/
+  !  backend/mallx/.omo/
+  !  backend/mallx/mall-admin/target/
+  !  backend/mallx/mall-cart/target/
+  !  backend/mallx/mall-common/target/
+  !  backend/mallx/mall-inventory/target/
+  !  backend/mallx/mall-marketing/target/
+  !  backend/mallx/mall-order/target/
+  !  backend/mallx/mall-payment/target/
+  !  backend/mallx/mall-product/target/
+  !  backend/mallx/mall-review/target/
+  !  backend/mallx/mall-server/target/
+  !  backend/mallx/mall-user/target/
+  !  build-check.log
+  !  build-check.txt
+  !  javap-out.txt
+  !  learning/
+
+==========================================================================
+小结
+==========================================================================
+  远端缺失的关键产物 : 1 个 -> ['learning/day09/start-app.bat']
+  本地未推送的提交   : 1 个
+  工作区未提交改动   : 3 个
+  被 ignore 的路径   : 35 个（这些不是「没推」，是「不该进版本库」）

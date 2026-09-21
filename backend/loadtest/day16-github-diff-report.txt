@@ -1,0 +1,77 @@
+==========================================================================
+远端 HEAD : d3140ed
+远端文件  : 204 个 blob / 161 个目录
+本地跟踪  : 207 个（git ls-files）
+==========================================================================
+
+■ 本地有、GitHub 没有的【受版本控制】文件：3 个
+    backend/loadtest/day16-buycontext-probe.sql    <- 在未推送的提交里
+    backend/loadtest/day16-onconflict-demo.sql    <- 在未推送的提交里
+    backend/loadtest/day16-xml-sql-probe.py    <- 在未推送的提交里
+
+■ 远端有、本地没有的文件：0 个
+
+■ 工作区未跟踪（还没 git add 的）：4 个
+    backend/loadtest/day16-github-audit-report.txt
+    backend/loadtest/day16-github-audit.py
+    backend/loadtest/day16-github-diff-report.txt
+    backend/loadtest/day16-github-diff.py
+
+■ 被 .gitignore 排除（因此永远不会上 GitHub）：35 条
+    .codegraph/
+    .omo/
+    .tmp-zen-models.json
+    .workbuddy-ai/
+    .workbuddy/
+    _build.txt
+    _chk.txt
+    _dd.txt
+    _docker.txt
+    _err.txt
+    _javap.txt
+    _run.log
+    _sql.txt
+    _test1.txt
+    backend/.idea/
+    backend/backend.iml
+    backend/loadtest/__pycache__/
+    backend/mallx/.codegraph/
+    backend/mallx/.idea/
+    backend/mallx/.omo/
+    backend/mallx/mall-admin/target/
+    backend/mallx/mall-cart/target/
+    backend/mallx/mall-common/target/
+    backend/mallx/mall-inventory/target/
+    backend/mallx/mall-marketing/target/
+    backend/mallx/mall-order/target/
+    backend/mallx/mall-payment/target/
+    backend/mallx/mall-product/target/
+    backend/mallx/mall-review/target/
+    backend/mallx/mall-server/target/
+    backend/mallx/mall-user/target/
+    build-check.log
+    build-check.txt
+    javap-out.txt
+    learning/
+
+==========================================================================
+docs/daily 下，本地与远端各自的文档
+==========================================================================
+  本地 17 篇 / 远端 17 篇
+    OK   docs/daily/Day-01-项目需求与技术选型.md
+    OK   docs/daily/Day-02-系统架构与项目初始化.md
+    OK   docs/daily/Day-03-PostgreSQL数据库设计.md
+    OK   docs/daily/Day-04-后端基础设施.md
+    OK   docs/daily/Day-05-商品模块.md
+    OK   docs/daily/Day-05-路线决策.md
+    OK   docs/daily/Day-06-登录鉴权.md
+    OK   docs/daily/Day-07-商品写接口与RBAC.md
+    OK   docs/daily/Day-08-商品多表写与事务.md
+    OK   docs/daily/Day-09-商品编辑与软删除.md
+    OK   docs/daily/Day-10-C端购物车.md
+    OK   docs/daily/Day-11-C端收货地址.md
+    OK   docs/daily/Day-12-从购物车下单.md
+    OK   docs/daily/Day-13-支付.md
+    OK   docs/daily/Day-14-订单状态机.md
+    OK   docs/daily/Day-15-发货与确认收货.md
+    OK   docs/daily/Day-16-商品评价.md
