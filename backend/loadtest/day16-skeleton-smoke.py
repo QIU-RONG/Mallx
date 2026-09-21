@@ -158,12 +158,18 @@ def main():
 
     # --------------------------------------------- [5] routing with a real token
     say("\n[5] with a token, the two authenticated endpoints are routed")
+    # orderItemId=1 does not exist -> a FINISHED implementation answers
+    # 404 with the message "订单明细不存在". That 404 lives in body.code, so the
+    # HTTP status stays 200 and this assertion must accept 404 as a PASS.
+    # (Skeleton phase: 500 from UnsupportedOperationException. Finished: 400/404.)
     st5, raw5 = api("POST", "/api/reviews", token=demo,
                     body={"orderItemId": 1, "rating": 5, "content": "smoke"})
-    say("  POST /api/reviews (demo token, valid body) -> http=%s code=%s"
+    say("  POST /api/reviews (demo token, bogus orderItemId) -> http=%s code=%s"
         % (st5, code_of(raw5)))
-    chk("★ authenticated POST /api/reviews is routed (not 401/403/404)",
-        st5 == 200 and code_of(raw5) in (200, 500))
+    say("      skeleton -> 500 (UnsupportedOperationException)")
+    say("      finished -> 404 = \"订单明细不存在\"  <- the fake 404 rides in body.code")
+    chk("★ authenticated POST /api/reviews is routed (not 401/403/404-as-HTTP)",
+        st5 == 200 and code_of(raw5) in (200, 400, 404, 500))
 
     st6, raw6 = api("GET", "/api/reviews/my?page=1&size=10", token=demo)
     say("  GET  /api/reviews/my (demo token) -> http=%s code=%s" % (st6, code_of(raw6)))

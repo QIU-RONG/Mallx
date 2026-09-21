@@ -22,7 +22,9 @@ target: http://127.0.0.1:8080
      商品列表那条才是白名单的功劳（同样匿名，却进得去）。
 
 [5] with a token, the two authenticated endpoints are routed
-  POST /api/reviews (demo token, valid body) -> http=200 code=500
+  POST /api/reviews (demo token, bogus orderItemId) -> http=200 code=400
+      skeleton -> 500 (UnsupportedOperationException)
+      finished -> 404 = "订单明细不存在"  <- the fake 404 rides in body.code
   GET  /api/reviews/my (demo token) -> http=200 code=500
 
 [6] ★ DTO validation is already live - it runs BEFORE the TODO body

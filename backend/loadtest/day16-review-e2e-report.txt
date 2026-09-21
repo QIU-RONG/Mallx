@@ -1,0 +1,152 @@
+==============================================================================
+Day 16 -- product reviews: closing milestone M1
+target : http://127.0.0.1:8080   accounts: demo(id=1) / admin(id=1) / intruder(id=2)
+skus under test: [3, 4, 5]
+==============================================================================
+
+[0] BASELINE FINGERPRINT
+  baseline             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
+  baseline             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
+  baseline             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
+  baseline             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  baseline             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
+  baseline             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  baseline             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
+  rows orders/payments/order_items/inventory_logs/reviews = 8/5/9/0/0
+  ★ reviews at start = 0   (Day 03 built the table; Day 16 is its first use)
+
+[1] logins (tokens stay in memory, never on disk)
+  demo      http=200 code=200 userId=1 token_len=191
+  admin     http=200 code=200 adminId=1 token_len=393
+  intruder  http=200 code=200 userId=2 token_len=196
+
+------------------------------------------------------------------------------
+ORDER A -- one order, three lines: the review target for the whole run
+------------------------------------------------------------------------------
+
+[2] place A -> pay -> ship(admin) -> confirm(demo) -> COMPLETED
+  POST /api/orders (skus [3, 4, 5]) -> order=9036 code=200
+  POST /api/payments -> http=200 code=200
+  POST /api/orders/9036/ship (admin) -> http=200 code=200
+  POST /api/orders/9036/confirm (demo) -> http=200 code=200
+  order_items: [(120, 3, 5), (121, 2, 4), (122, 1, 3)]
+  review targets: item_a=122 (sku3)  item_b=121 (sku4)  item_c=120 (sku5)
+
+------------------------------------------------------------------------------
+[3] POST /api/reviews -- ★★ the three derived columns must come from the DB
+------------------------------------------------------------------------------
+  POST /api/reviews {orderItemId:122, rating:5} -> http=200 code=200 {"code":200,"message":"success","data":{"content":"hello from day16","createdAt":"2026-09-21T20:19:48.856646", ...(truncated)
+  db row: {'id': 26, 'user_id': 1, 'order_id': 9036, 'product_id': 1, 'rating': 5, 'content': 'hello from day16', 'status': 1}
+  evidence: order_items says order_id=9036 product_id=1; orders says user_id=1
+
+[4] the same order line again -- ON CONFLICT DO NOTHING must answer 0 rows
+  POST /api/reviews (same orderItemId) -> http=200 code=400 {"code":400,"message":"该商品已评价过","data":null}
+
+------------------------------------------------------------------------------
+[5] ★★ 8 threads, ONE order line -- exactly one winner (the constraint has teeth)
+------------------------------------------------------------------------------
+  200 -> 1  400 -> 7  other -> 0
+    http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=200   {"code":200,"message":"success","data":{"content":"concurrent-7","crea ...(truncated)
+
+------------------------------------------------------------------------------
+[6] IDOR -- reviewing somebody else's purchase must be invisible
+------------------------------------------------------------------------------
+  intruder -> demo's item 120 : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
+  demo -> a non-existent item  : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
+
+------------------------------------------------------------------------------
+[7] eligibility -- only COMPLETED orders may be reviewed
+------------------------------------------------------------------------------
+  ORDER B placed -> 9037
+  review a PENDING_PAYMENT order's line -> code=400 {"code":400,"message":"只有已完成的订单才能评价","data":null}
+  pay order B -> code=200
+  review a PAID order's line -> code=400 {"code":400,"message":"只有已完成的订单才能评价","data":null}
+  ship order B -> code=200
+  review a SHIPPED order's line -> code=400 {"code":400,"message":"只有已完成的订单才能评价","data":null}
+
+------------------------------------------------------------------------------
+[8] parameter validation (this runs BEFORE any DB lookup)
+------------------------------------------------------------------------------
+  rating = 0    -> code=400 {"code":400,"message":"评分不能低于 1","data":null}
+  rating = 6    -> code=400 {"code":400,"message":"评分不能高于 5","data":null}
+  rating = null -> code=400 {"code":400,"message":"评分不能为空","data":null}
+  content 501ch -> code=400 {"code":400,"message":"评价内容最多 500 字","data":null}
+  ★ 说明：rating 必须声明成【包装类型 Integer】+ @NotNull。
+    写成基本类型 int 时，rating=null 会在 Jackson 反序列化阶段就抛
+    HttpMessageNotReadableException —— 而 GlobalExceptionHandler 还没接它，
+    结果是 code=500（本组会当场抓出来）。
+
+------------------------------------------------------------------------------
+[9] ★★ forged fields -- the client cannot vote on somebody else's product
+------------------------------------------------------------------------------
+  POST with userId/orderId/productId = 999999 -> http=200 code=200
+  db row: {'id': 36, 'user_id': 1, 'order_id': 9036, 'product_id': 3, 'rating': 4, 'content': 'forged attempt', 'status': 1}   (evidence: real order=9036 product=3 user=1)
+
+------------------------------------------------------------------------------
+[10] reading reviews -- per product (PUBLIC) / mine (logged in) / aggregates
+------------------------------------------------------------------------------
+  GET /api/products/1/reviews  (NO token) -> http=200 code=500
+  total=None current=None size=None reviewCount=None avgRating=None
+  GET /api/reviews/my (demo) -> http=200 code=500 count=0 items=[]
+
+  pagination edges (Day 12's three traps)
+    page=1&size=0    code=500   records=0   (size=0 -> clamped up to 1)
+    page=1&size=-1   code=500   records=0   (size<0 -> must NOT dump the whole table)
+    page=0&size=10   code=500   records=0   (page<1 -> MP tolerates it)
+    page=1&size=999  code=500   records=0   (size>100 -> must be clamped)
+
+==============================================================================
+[11] ★★ RECONCILIATION -- now crossing OUT of the inventory domain
+==============================================================================
+  (1) reviews with no purchase evidence (LEFT JOIN order_items)   -> 0 rows
+  (2) order lines reviewed more than once                         -> 0 rows
+  (3) count(reviews) <= count(COMPLETED order lines)              -> True
+  (4) reviews hanging off a non-COMPLETED order                   -> 0 rows
+  ★ 守恒式 (1) 就是「三重派生真的生效」的证据：若 product_id 由客户端传，这里立刻报漂移。
+  ★ 守恒式 (4) 是资格校验的守恒式：评价只可能出现在 COMPLETED 的订单上。
+
+  inventory rules (Day 15's rule, unchanged -- proof we did not break it)
+    sold   == sum(PAID+SHIPPED+COMPLETED units) -> 0 drifting SKUs
+    locked == sum(PENDING_PAYMENT units)         -> 0 drifting SKUs
+
+  ★ 本日评价【不碰库存、不改订单状态】：sold / locked 口径零改动。
+
+==============================================================================
+[12] CLEANUP -- remove this run's artifacts, restore the baseline
+==============================================================================
+  orders to delete: [9036, 9037]
+  ledger rows to delete: id > 0
+
+[13] VERIFY -- the database is byte-for-byte back at baseline
+  restored             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
+  restored             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
+  restored             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
+  restored             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  restored             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
+  restored             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  restored             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
+  rows orders/payments/order_items/inventory_logs/reviews = 8/5/9/0/0   (baseline 8/5/9/0/0)
+
+==============================================================================
+ASSERTIONS: 64 / 75 passed
+
+FAILED:
+  [FAIL] ★★ the product review list is PUBLIC -- a guest (no token) can read it
+  [FAIL] the review just written shows up in the list
+  [FAIL] ★ aggregate reviewCount equals the database count (1)
+  [FAIL] ★ aggregate avgRating equals the database AVG (5.0)
+  [FAIL] my reviews contain this run's order lines
+  [FAIL] ★ every order line this run wrote appears in 'my reviews'
+  [FAIL] ★ pagination page=1&size=0 does not blow up
+  [FAIL] ★★ size=0 was clamped up to 1 (never dumps the table, never a silent empty)
+  [FAIL] ★ pagination page=1&size=-1 does not blow up
+  [FAIL] ★ pagination page=0&size=10 does not blow up
+  [FAIL] ★ pagination page=1&size=999 does not blow up
+==============================================================================
