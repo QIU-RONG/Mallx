@@ -10,10 +10,10 @@ target: http://127.0.0.1:8080
   POST /api/auth/login -> http=200 code=200 token_len=191
 
 [3] ★ mall-review is wired into mall-server (missing jar dependency = 404 here)
-  GET /api/products/1/reviews   (NO token) -> http=200 code=500
+  GET /api/products/1/reviews   (NO token) -> http=200 code=200
       phase SKELETON -> code=500 expected (body is UnsupportedOperationException)
       phase DONE     -> code=200 expected
-  GET /api/products/999999/reviews (NO token) -> http=200 code=500
+  GET /api/products/999999/reviews (NO token) -> http=200 code=200
 
 [4] the two authenticated endpoints must reject anonymous callers
   POST /api/reviews   (NO token) -> http=401 {"code":401,"message":"未登录或登录已过期","data":null}
@@ -25,7 +25,7 @@ target: http://127.0.0.1:8080
   POST /api/reviews (demo token, bogus orderItemId) -> http=200 code=400
       skeleton -> 500 (UnsupportedOperationException)
       finished -> 404 = "订单明细不存在"  <- the fake 404 rides in body.code
-  GET  /api/reviews/my (demo token) -> http=200 code=500
+  GET  /api/reviews/my (demo token) -> http=200 code=200
 
 [6] ★ DTO validation is already live - it runs BEFORE the TODO body
   rating = 0      -> http=200 code=400 msg=评分不能低于 1
