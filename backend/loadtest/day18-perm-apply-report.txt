@@ -1,0 +1,95 @@
+==========================================================================
+Day 18 权限补发 —— D:\MallX\backend\sql\07-admin-permissions.sql
+==========================================================================
+SQL 文件 7212 字符 / 162 行
+
+[1] 执行前快照
+      perm_total         = 13
+      perm_product       = 5
+      perm_category      = 0
+      rp_total           = 25
+      rp_role1_super     = 13
+      rp_role2_product   = 8
+      rp_role3_order     = 4
+      rp_cat_role1       = 0
+      rp_cat_role2       = 0
+      product_paths      = product:list=/api/products ; product:detail=/api/products/* ; product:create=/api/products ; product:update=/api/products/* ; product:delete=/api/products/*
+      perm_max_id        = 13
+
+[2] 第一次执行  rc=0
+      ✅ 执行成功（含文件末尾的四段自检 SELECT，输出见下）
+
+      UPDATE 5
+      INSERT 0 4
+      INSERT 0 4
+      INSERT 0 4
+      17
+      1|product:list|商品列表|/api/admin/products|GET
+      2|product:detail|商品详情|/api/admin/products/*|GET
+      3|product:create|新建商品|/api/admin/products|POST
+      4|product:update|编辑商品|/api/admin/products/*|PUT
+      5|product:delete|删除商品|/api/admin/products/*|DELETE
+      14|category:list|分类列表|/api/admin/categories/tree|GET
+      15|category:create|新建分类|/api/admin/categories|POST
+      16|category:update|编辑分类|/api/admin/categories/*|PUT
+      17|category:delete|删除分类|/api/admin/categories/*|DELETE
+      ORDER_ADMIN|4|order:cancel, order:detail, order:list, order:ship
+      PRODUCT_ADMIN|12|category:create, category:delete, category:list, category:update, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN|17|category:create, category:delete, category:list, category:update, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:list
+      4|4|4|0
+
+[3] 第一次执行后的变化（before -> after）
+      perm_category      0 -> 4
+      perm_max_id        13 -> 17
+      perm_total         13 -> 17
+      product_paths      product:list=/api/products ; product:detail=/api/products/* ; product:create=/api/products ; product:update=/api/products/* ; product:delete=/api/products/* -> product:list=/api/admin/products ; product:detail=/api/admin/products/* ; product:create=/api/admin/products ; product:update=/api/admin/products/* ; product:delete=/api/admin/products/*
+      rp_cat_role1       0 -> 4
+      rp_cat_role2       0 -> 4
+      rp_role1_super     13 -> 17
+      rp_role2_product   8 -> 12
+      rp_total           25 -> 33
+
+[4] 第二次执行（幂等验证）  rc=0
+
+[5] 第二次执行后的变化（after1 -> after2）—— ★ 必须为空
+      ✅ 无任何变化 —— SQL 是幂等的
+
+[6] 权限清单（product:* + category:*）
+      1 | product:list | 商品列表 | /api/admin/products | GET
+      2 | product:detail | 商品详情 | /api/admin/products/* | GET
+      3 | product:create | 新建商品 | /api/admin/products | POST
+      4 | product:update | 编辑商品 | /api/admin/products/* | PUT
+      5 | product:delete | 删除商品 | /api/admin/products/* | DELETE
+      14 | category:list | 分类列表 | /api/admin/categories/tree | GET
+      15 | category:create | 新建分类 | /api/admin/categories | POST
+      16 | category:update | 编辑分类 | /api/admin/categories/* | PUT
+      17 | category:delete | 删除分类 | /api/admin/categories/* | DELETE
+
+[7] 每个角色拿到了多少权限
+      ORDER_ADMIN | 4 | order:cancel, order:detail, order:list, order:ship
+      PRODUCT_ADMIN | 12 | category:create, category:delete, category:list, category:update, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN | 17 | category:create, category:delete, category:list, category:update, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:list
+
+[8] ★ 交叉核对（对着 EXPECT_CROSS 断言；注意最后一列期望为 0）
+      [PASS] category_perms_total       实际=4   期望=4
+      [PASS] granted_to_product_admin   实际=4   期望=4
+      [PASS] granted_to_super_admin     实际=4   期望=4
+      [PASS] granted_to_order_admin     实际=0   期望=0
+
+[9] ★ 元数据核对 —— product 的五条 path 必须已订正，category 四条必须与端点一致
+      [PASS] category:create  path=/api/admin/categories
+      [PASS] category:delete  path=/api/admin/categories/*
+      [PASS] category:list    path=/api/admin/categories/tree
+      [PASS] category:update  path=/api/admin/categories/*
+      [PASS] product:create   path=/api/admin/products
+      [PASS] product:delete   path=/api/admin/products/*
+      [PASS] product:detail   path=/api/admin/products/*
+      [PASS] product:list     path=/api/admin/products
+      [PASS] product:update   path=/api/admin/products/*
+
+[10] ★ 残留检查：还指向 C 端路径的 product 权限条数（期望 0）
+      [PASS] 实际=0 期望=0
+
+==========================================================================
+VERDICT: OK —— 权限已补发 + 订正 + 幂等
+==========================================================================
