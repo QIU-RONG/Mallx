@@ -1,5 +1,9 @@
 package com.mallx.inventory.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.mallx.common.api.PageResult;
 import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
 import com.mallx.inventory.common.InventoryLogType;
@@ -7,6 +11,8 @@ import com.mallx.inventory.entity.InventoryLog;
 import com.mallx.inventory.mapper.InventoryLogMapper;
 import com.mallx.inventory.mapper.InventoryMapper;
 import com.mallx.inventory.service.InventoryService;
+import com.mallx.inventory.vo.InventoryLogVO;
+import com.mallx.inventory.vo.InventoryVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +40,16 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class InventoryServiceImpl implements InventoryService {
+
+    /**
+     * 分页上限：单页最多 100 条 —— 与 {@code OrderServiceImpl.MAX_PAGE_SIZE} /
+     * {@code ReviewServiceImpl.MAX_PAGE_SIZE} 同一个值、同一套夹紧规则。
+     *
+     * <p>★ 不抽到 {@code mall-common} 做成公共常量：那是一次跨模块重构，与本步无关。
+     * 三处各留一份、注释互相指明，等真有需要时再抽。
+     * （本日新增的是第 4 处 —— 库存列表与库存流水各用一次，共用这一个常量。）
+     */
+    private static final long MAX_PAGE_SIZE = 100;
 
     private final InventoryMapper inventoryMapper;
     private final InventoryLogMapper inventoryLogMapper;
@@ -145,5 +161,128 @@ public class InventoryServiceImpl implements InventoryService {
         log.setBeforeStock(after - change);
         log.setReferenceId(referenceId);
         inventoryLogMapper.insert(log);
+    }
+
+    // ================== 管理端（Day 17 · 库存查询 / 调整 / 流水） ==================
+
+    /**
+     * ★ 管理端库存分页 —— <b>骨架</b>，方法体由你写。
+     *
+     * <p>三步（与 {@code OrderServiceImpl.listAllOrders} 同款，只少一个过滤归一化）：
+     * <pre>
+     *   ① 夹紧（★ 必须在 new Page 之前）：
+     *        long safePage = Math.max(page, 1);
+     *        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+     *   ② IPage&lt;InventoryVO&gt; result =
+     *        inventoryMapper.selectInventoryPage(new Page&lt;&gt;(safePage, safeSize));
+     *   ③ return PageResult.of(result);
+     * </pre>
+     *
+     * <p>⚠️ 别去找 {@code PageResult.convert} —— 它不存在（{@code PageResult} 只有 {@code of}）。
+     * 本方法也不需要转换：{@code selectInventoryPage} 返回的本来就是 {@code IPage<InventoryVO>}。
+     *
+     * <p>★ <b>不加 {@code @Transactional}</b>：只读一张表，
+     * 单条 SELECT 自身即一致性快照（与三个写点「必须加」形成对照 ——
+     * 判据是<b>写点个数</b>，不是「方法重不重要」）。
+     */
+    @Override
+    public PageResult<InventoryVO> listSkus(long page, long size) {
+        // TODO(你写): 按上面 ①②③ 三步实现（import 已备好）。
+        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.listSkus");
+    }
+
+    /**
+     * ★★★ 管理端调整库存 —— <b>骨架</b>，方法体由你写（本日最重要的一段）。
+     *
+     * <p>五个步骤，顺序不能换：
+     * <pre>
+     *   ① delta == 0 → BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "调整量不能为 0")
+     *      ★ 为什么在这里而不是 DTO 上：Jakarta 没有「不等于某值」的现成注解，
+     *        而「delta = 0 是一次无意义的改动」本质是【业务规则】，不是格式规则。
+     *        格式类校验留注解、业务类校验留服务 —— 这条分界本身就是规矩。
+     *   ② Integer after = inventoryMapper.adjustStock(skuId, delta);
+     *   ③ after == null → BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+     *                        "调整后可用/总库存不能为负")
+     *      ★★ 400 而不是 500：这是【用户可理解的业务结果】（管理员填了个太大的负数），
+     *         与 moveLockedToSold / releaseLocked 的 0 行（账目不一致，500）不是一回事。
+     *      ★★ 此刻【还没有写流水】—— 抛异常让事务回滚，不会留下孤儿流水。
+     *         这正是「调 400 前先确认没有副作用」的落地方式。
+     *   ④ writeLog(skuId, InventoryLogType.ADMIN_ADJUST, delta, after, null);
+     *      ★ change = delta：available 跟着 total 同向同量动，所以变化量就是 delta
+     *      ★ referenceId = null：管理端调整没有关联订单（不是「拿不到」，是本来就没有）
+     *      ★ 复用私有方法 writeLog —— 它已经把 before = after - change 算好了，
+     *        恒等式 change == after - before 由构造保证，不可能写歪
+     *   ⑤ 返回类型是 void：前端拿到 200 后重新拉一次库存列表即可。
+     *      （前端想立刻看到新值，也可以顺手把 ② 的 after 作为返回值 ——
+     *        那是接口设计的选择，本日保持与另外三个写点同款：void。）
+     * </pre>
+     *
+     * <p>⚠️ {@code reason} 在本方法里【只出现、不使用】：本日不落库（显式取舍，见规划 §4.3）。
+     * 它已经在 DTO 上被 {@code @NotBlank} 校验过，这里不必再判一次 ——
+     * <b>同一条规则只在一处表达</b>，重复校验看起来更安全，实际是两份真相的开始。
+     */
+    @Override
+    @Transactional
+    public void adjust(Long skuId, int delta, String reason) {
+        // TODO(你写): 按上面 ①②③④ 五步实现（⑤ 是返回类型，不用写代码）。
+        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.adjust");
+    }
+
+    /**
+     * ★ 管理端库存流水 —— <b>骨架</b>，方法体由你写。
+     *
+     * <p>四步：
+     * <pre>
+     *   ① 夹紧（同 listSkus，★ 必须在 new Page 之前）
+     *   ② 归一化空串：String safeType = (type == null || type.isBlank()) ? null : type;
+     *   ③ IPage&lt;InventoryLog&gt; result = inventoryLogMapper.selectPage(
+     *          new Page&lt;&gt;(safePage, safeSize),
+     *          new LambdaQueryWrapper&lt;InventoryLog&gt;()
+     *              .eq(skuId != null, InventoryLog::getSkuId, skuId)
+     *              .eq(safeType != null, InventoryLog::getType, safeType)
+     *              .orderByDesc(InventoryLog::getId));
+     *   ④ return PageResult.of(result.convert(this::toLogVO));
+     * </pre>
+     *
+     * <p>★ <b>③ 用的是「条件版 eq」</b>：{@code eq(boolean condition, 列, 值)} ——
+     * 第一个参数为 false 时<b>整个条件根本不拼进 SQL</b>。
+     * 这正是「可选过滤」的正统写法，比在 XML 里堆 {@code <if>} 更直接。
+     * ⚠️ 写成 {@code .eq(InventoryLog::getSkuId, skuId)} 且 skuId 为 null 时，
+     * 会拼出 {@code WHERE sku_id = null} → <b>永远不成立、且不报错</b>（返回空列表）
+     * —— 与 XML 里 {@code AS userNickname} 那类坑同一个性质：<b>安静地错</b>。
+     *
+     * <p>★★ <b>为什么这里用 MP wrapper 而不是新写 XML</b>（对规划 §8.2 的一处偏离）：
+     * <ol>
+     *   <li>它是<b>单表查询 + 可选等值条件</b>，不需要任何 JOIN ——
+     *       {@code LambdaQueryWrapper} 天生就是为这个场景做的
+     *       （{@code OrderServiceImpl.listMyOrders} 用的是同一手法）；</li>
+     *   <li>{@code InventoryLogMapper} 的类注释明确写着「<b>故意是空的</b>……
+     *       流水没有这种需求，所以不写 XML、也不声明任何方法」——
+     *       为一次简单分页去推翻它，不如顺着它；</li>
+     *   <li>XML 只在「一条语句要完成判断 + 修改」或「要 JOIN 跨表」时才值得写
+     *       （本日 {@code adjustStock} 与 {@code selectInventoryPage} 都属于后者）。</li>
+     * </ol>
+     * ⚠️ 代价：实体是 {@code InventoryLog}、出参要 {@code InventoryLogVO}，
+     * 所以多一步 {@code convert(this::toLogVO)} —— 这就是下面那个私有方法存在的理由。
+     *
+     * <p>★ <b>不加 {@code @Transactional}</b>：只读。
+     */
+    @Override
+    public PageResult<InventoryLogVO> listLogs(Long skuId, String type, long page, long size) {
+        // TODO(你写): 按上面 ①②③④ 四步实现。
+        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.listLogs");
+    }
+
+    /**
+     * 流水实体 → 流水行（只为 {@link #listLogs} 存在）。
+     *
+     * <p>★ 八个字段一一对应搬过去。这张表<b>只增不改</b>，没有需要屏蔽的内部列，
+     * 所以这是本项目里最「直白」的一次 VO 装配 —— 但它仍然值得单独存在：
+     * 「实体可以出接口」这个先例一旦开了，表加一列出参就跟着变。
+     */
+    private InventoryLogVO toLogVO(InventoryLog log) {
+        // TODO(你写): 8 个字段一一搬（id / skuId / type / changeQuantity /
+        //   beforeStock / afterStock / referenceId / createdAt）。
+        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.toLogVO");
     }
 }

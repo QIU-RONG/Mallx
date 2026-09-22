@@ -1,7 +1,9 @@
 package com.mallx.inventory.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.mallx.inventory.entity.Inventory;
+import com.mallx.inventory.vo.InventoryVO;
 
 import org.apache.ibatis.annotations.Param;
 
@@ -10,9 +12,15 @@ import org.apache.ibatis.annotations.Param;
  *
  * <p>{@link BaseMapper} 提供全套单表 CRUD；扣库存这种「原子动作」走 XML 手写 SQL。
  *
- * <p>⚠️ 铁律：这里声明的 {@code deductStock}，{@code InventoryMapper.xml} 里必须有同名
- * {@code <select id="deductStock">}，否则 MyBatis 启动时不报错、一调用就
- * {@code Invalid bound statement}。
+ * <p>⚠️ 铁律：这里声明的方法，{@code InventoryMapper.xml} 里必须有【方法名逐字符一致】的
+ * 同名标签，否则 MyBatis 启动时不报错、一调用就 {@code Invalid bound statement}。
+ * 现有五个：
+ * <pre>
+ *   deductStock          / moveLockedToSold / releaseLocked     三个库存写点（Day 12 / 13 / 14）
+ *   adjustStock                                                 第四个写点（Day 17）
+ *   selectInventoryPage                                         管理端库存分页读（Day 17）
+ * </pre>
+ * ★ Day 17 只<b>新增</b>，一个字节都没改上面三个 —— 它们与 Day 14 的全链路对账绑定在一起。
  *
  * <p>不加 {@code @Mapper} 注解：全局 {@code @MapperScan("com.mallx.**.mapper")} 已覆盖本包。
  *
@@ -132,4 +140,87 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
      * @return 更新后的 available_stock；null 表示锁定库存不足（异常态）
      */
     Integer releaseLocked(@Param("skuId") Long skuId, @Param("quantity") int quantity);
+
+    /**
+     * ★★★ 管理端人工调整（Day 17）—— <b>本项目的第四个库存写点</b>，
+     * 也是四条里<b>唯一会改 {@code total_stock} 的一条</b>。
+     *
+     * <p>★★ 管理员改的是<b>守恒式，不是一个数</b>：
+     * <pre>
+     *   total_stock = available_stock + locked_stock + sold_stock
+     * </pre>
+     * 所以 {@code total} 与 {@code available} <b>必须同向同量移动</b>，
+     * 而 {@code locked} / {@code sold} <b>一格都不许动</b>。
+     *
+     * <p>★ 天真写法（只改 available）的后果：恒等式当场被打破，
+     * 此后<b>所有</b>对账脚本都会开始报警，而错误会指向「库存流水不对」——
+     * 离真正的原因（管理端少改了一格）十万八千里。
+     *
+     * <p>★★ 与「下单锁库」的本质差别（这两件事长得像，但完全不同）：
+     * <pre>
+     *   deductStock     available → locked   total 不变   ← 改的是「货归哪一格」
+     *   adjustStock     total ±d , available ±d           ← 改的是「一共有多少货」
+     * </pre>
+     *
+     * <p>★ 两个守卫都必须写进 {@code WHERE}（由数据库原子完成，不是「先查后改」）：
+     * <pre>
+     *   AND total_stock     + #{delta} &gt;= 0
+     *   AND available_stock + #{delta} &gt;= 0
+     * </pre>
+     * 0 行（返回 {@code null}）= 调整后会出现负数 → 上层抛 400
+     * 「调整后可用/总库存不能为负」。注意这是<b>用户可理解的业务结果</b>（400），
+     * 与 {@code moveLockedToSold} / {@code releaseLocked} 的 0 行
+     * （账目不一致，500）不是一回事。
+     *
+     * <p>★★ 实现细节沿用 Day 13 的定型做法，两条都不能省：
+     * <ol>
+     *   <li><b>用 {@code <select>} 包住 {@code UPDATE ... RETURNING}</b> ——
+     *       {@code <update>} 会把结果集丢掉，且没有 {@code resultType} 属性，
+     *       接不住 {@code RETURNING}；</li>
+     *   <li><b>必须写 {@code flushCache="true"}</b> —— MyBatis 一级缓存
+     *       （{@code localCacheScope} 默认 {@code SESSION}）始终开启，
+     *       {@code <select>} 会填充它，只有 {@code insert/update/delete} 才刷新它。
+     *       不写的话，同一事务里用相同参数调第二次<b>根本不会发 SQL</b>，
+     *       上层以为改成功了、实际数据库没动。Day 13 已实测（见 XML 顶部那段）。</li>
+     * </ol>
+     *
+     * <p>★ {@code updated_at} 必须手写：自定义 XML 的 UPDATE
+     * <b>不走</b> {@code MetaObjectHandler}，漏了它这一格就永远停在旧时间。
+     *
+     * @param skuId SKU 主键
+     * @param delta 带符号的变化量（正=补货/盘盈，负=报损/盘亏；★ 调用方已保证非 0）
+     * @return 更新后的 {@code available_stock}；{@code null} = 守卫不成立（调整后为负）
+     */
+    Integer adjustStock(@Param("skuId") Long skuId, @Param("delta") int delta);
+
+    /**
+     * ★ 管理端库存分页读（Day 17）—— JOIN 出 SKU 名与商品名，让列表自解释。
+     *
+     * <p>★ 起点是 {@code inventories i}，{@code LEFT JOIN product_skus s} +
+     * {@code LEFT JOIN products p}。这里的 JOIN 是<b>只读跨表查询</b>，不是模块依赖
+     * （与本项目 {@code PaymentMapper.xml} JOIN {@code orders} 同一性质）。
+     *
+     * <p>★ 用 {@code LEFT JOIN} 而不是 {@code INNER JOIN}：万一某个 SKU 被物理删除
+     * 而库存行还在，{@code INNER JOIN} 会让这条库存<b>从列表里凭空消失</b>，
+     * 而它恰恰是需要被看见的那一行（对账要的是「账上有什么」，不是「能联上的有什么」）。
+     * 名称侧的空值交给 {@code COALESCE} 兜底成 {@code '(已删除)'} 之类的字面量。
+     *
+     * <p>★ 排序 {@code ORDER BY i.sku_id}：不带排序的分页 = 随机翻页。
+     * 按 {@code sku_id} 而不是按创建时间，是因为库存列表是<b>对账视图</b> ——
+     * 顺序稳定（每次刷新都一样）比「最新的在最前」更重要。
+     *
+     * <p>★ 本日<b>不加过滤条件</b>（连 {@code keyword} 都没有）：规划里只要求分页，
+     * 而多一个可选条件就多一条「空串 vs null」的分支要测。
+     * ⚠️ 若将来要按名称搜：加 {@code @Param("keyword") String keyword}，
+     * 并在 XML 里写 {@code test="keyword != null and keyword != ''"}
+     * （只判 {@code != null} 时空串会拼出 {@code LIKE '%%'} 之外的意外语义）。
+     *
+     * <p>★★ <b>首参必须是 {@code IPage}</b>：分页插件靠它决定是否改写 SQL 加 LIMIT/OFFSET，
+     * 少了它<b>不报错，只是静默查全表</b>。（本方法只有 7 行库存数据，
+     * 查全表也不会出事 —— 所以这个错误在本项目<b>永远暴露不出来</b>，
+     * 只能靠规矩守住。）
+     *
+     * @param page 分页参数（由 Service 夹紧后构造，★ 夹紧必须在 new Page 之前）
+     */
+    IPage<InventoryVO> selectInventoryPage(IPage<InventoryVO> page);
 }

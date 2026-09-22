@@ -98,4 +98,71 @@
         RETURNING available_stock
     </select>
 
+    <!--
+      ★★★ ⑨ Day 17 的核心 SQL：管理端人工调整
+
+      本句是【第四个库存写点】，也是四条里【唯一会改 total_stock 的一条】。
+      要求见 InventoryMapper.java#adjustStock 与
+      docs/daily/Day-17-管理端订单与库存.md §4.1。要点：
+
+        · UPDATE inventories
+             SET total_stock     = total_stock     + #{delta},
+                 available_stock = available_stock + #{delta},
+                 updated_at      = CURRENT_TIMESTAMP
+           WHERE sku_id = #{skuId}
+             AND total_stock     + #{delta} &gt;= 0
+             AND available_stock + #{delta} &gt;= 0
+          RETURNING available_stock
+
+        · ★★ total 与 available 必须【同向同量】移动 —— 管理员改的是守恒式
+          （total = available + locked + sold），不是一个数字。
+          只改 available 会当场打破恒等式，此后【所有】对账脚本都开始报警，
+          而错误会指向「库存流水不对」，离真正的原因（少改了一格）十万八千里。
+        · ★★ 绝不碰 locked_stock / sold_stock —— 那两格记的是【已发生的业务事实】
+          （谁锁着、谁买过）。要降 locked 只能走「释放超时单」那条业务流程
+          （它同时会改订单状态）；单独调它等于让账本与事实脱钩。
+        · ★ 两个守卫都写进 WHERE（由数据库原子完成，不是「先查后改」）：
+          0 行 = 调整后会出现负数 → 上层抛 400「调整后可用/总库存不能为负」。
+          注意这是【用户可理解的业务结果】，
+          与 moveLockedToSold / releaseLocked 的 0 行（账目不一致，500）不同类。
+        · ★ 包裹方式沿用 Day 13 的定型做法，两条都不能省：
+          ① 用 select 标签包住 UPDATE ... RETURNING
+             （update 标签会丢掉结果集、也没有 resultType 属性，接不住 RETURNING）；
+          ② 必须写 flushCache="true"（一级缓存坑，Day 13 实测过：
+             不写它，同一事务内用相同参数调第二次【根本不发 SQL】）。
+        · updated_at 必须手写：自定义 XML 的 UPDATE 不走 MetaObjectHandler。
+        ⚠️ 返回语义：resultType=java.lang.Integer，值是【改完之后】的 available_stock；
+           null = 守卫不成立（0 行，RETURNING 空手而归）。
+    -->
+    <select id="adjustStock" resultType="java.lang.Integer" flushCache="true" useCache="false">
+        TODO
+    </select>
+
+    <!--
+      ★ ⑩ Day 17 的读 SQL：管理端库存分页（JOIN 出 SKU 名与商品名）
+
+      要求见 InventoryMapper.java#selectInventoryPage。要点：
+
+        · FROM inventories i
+            LEFT JOIN product_skus s ON s.id = i.sku_id
+            LEFT JOIN products     p ON p.id = s.product_id
+        · ★ LEFT JOIN 不是 INNER JOIN：万一某个 SKU 被物理删除而库存行还在，
+          INNER JOIN 会让这条库存【从列表里凭空消失】——
+          而它恰恰是需要被看见的那一行（对账要的是「账上有什么」，
+          不是「能联上的有什么」）。
+        · 显式列 + 别名【全用下划线】：
+            i.sku_id AS sku_id、s.name AS sku_name、s.product_id AS product_id、
+            p.name AS product_name、i.total_stock AS total_stock、
+            i.available_stock AS available_stock、i.locked_stock AS locked_stock、
+            i.sold_stock AS sold_stock、i.updated_at AS updated_at
+          ⚠️ 别名写成 AS skuName 会被 PG 折成 skuname，字段静默为 null 且不报错。
+        · 名称兜底：COALESCE(s.name, '(规格已删除)')、COALESCE(p.name, '(商品已删除)')
+        · ORDER BY i.sku_id —— 库存列表是【对账视图】，
+          顺序稳定（每次刷新都一样）比「最新在最前」重要。
+        · ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里【不用写】LIMIT/OFFSET
+    -->
+    <select id="selectInventoryPage" resultType="com.mallx.inventory.vo.InventoryVO">
+        TODO
+    </select>
+
 </mapper>
