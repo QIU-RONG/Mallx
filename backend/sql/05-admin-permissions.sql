@@ -51,7 +51,7 @@ UPDATE permissions
 INSERT INTO permissions (id, name, code, type, path, method)
 SELECT v.id, v.name, v.code, v.type, v.path, v.method
 FROM (VALUES
-    (9,  '管理端订单列表', 'order:detail',     'API', '/api/admin/orders',                'GET'),
+    (9,  '管理端订单详情', 'order:detail',     'API', '/api/admin/orders/*',              'GET'),
     (10, '管理端取消订单', 'order:cancel',     'API', '/api/admin/orders/*/cancel',       'POST'),
     (11, '库存列表',       'inventory:list',   'API', '/api/admin/inventory/skus',        'GET'),
     (12, '调整库存',       'inventory:adjust', 'API', '/api/admin/inventory/skus/*/adjust','POST'),
@@ -63,6 +63,33 @@ WHERE NOT EXISTS (SELECT 1 FROM permissions p WHERE p.code = v.code);
 --   而 id 只是个约定值。用 code 判断，即使将来有人手工挪过 id，本语句依然幂等。
 -- ⚠️ 反过来说：显式指定 id 的种子【必须】校准序列（见第四节），
 --   否则业务侧后续 INSERT 会撞主键（03-data.sql 末尾那段注释讲的就是这件事）。
+
+-- ------------------------------------------------------------
+-- 二·续、订正 order:detail 的名称与路径（Day 17 收尾追加）
+-- ------------------------------------------------------------
+-- 上一段的 INSERT 只对【新库】生效（NOT EXISTS 挡着）。对已经落过库的环境，
+-- 第 9 行早就存在了，于是那处笔误被固定了下来：
+--
+--   code = 'order:detail'      ← 权限码是对的（@PreAuthorize 认的正是它）
+--   name = '管理端订单列表'      ← 错的：这是 id=6（order:list）的名字，照抄时没改
+--   path = '/api/admin/orders' ← 错的：同上，这是【列表】的路径
+--
+-- ★ 危害等级：低 —— path 这一列当前没有任何代码在读，纯粹是「人类可读定位信息」。
+--   但它的危害方式恰恰是最贵的那一种：后来者按 path 去搜「详情端点在哪」，
+--   搜到 /api/admin/orders，然后看见列表的实现，然后开始怀疑是自己找错了地方。
+--   ★ 这与本节第一部分订正 order:list path 是同一个理由 —— 说明「注释/元数据里的
+--     错误指向」在本项目里已经出现过两次，属于需要主动巡检的那一类问题。
+--
+-- ⚠️ 守卫为什么写 AND name = ... 而不是 AND path = ...：
+--   「哪一处是笔误」要靠【name 与 code 的矛盾】判断 —— name 说这是列表、code 说这是详情，
+--   两者必有一错。以 code 为准（它才是把门人），所以本语句只改「还停在旧 name」的那一行；
+--   若有人已经手工订正过，这里不覆盖他的值。
+UPDATE permissions
+   SET name       = '管理端订单详情',
+       path       = '/api/admin/orders/*',
+       updated_at = CURRENT_TIMESTAMP
+ WHERE code = 'order:detail'
+   AND name = '管理端订单列表';
 
 -- ------------------------------------------------------------
 -- 三、补发授权（★ 本文件的核心动作）
@@ -127,7 +154,10 @@ SELECT r.code AS role_code,
  ORDER BY r.code;
 
 -- 5.3 ★ 最关键的一行：这三条计数【必须相等】，否则 @PreAuthorize 会稳定 403
---     （左：库存权限总数 4；中：role 2 拿到的库存权限数 4；右：role 1 拿到的库存权限数 4）
+--     （左：库存权限总数 3；中：role 2 拿到的库存权限数 3；右：role 1 拿到的库存权限数 3）
+--     ⚠️ 是 3 不是 4 —— inventory:list / inventory:adjust / inventory:log 共三条。
+--        本注释最初写成 4，实测后订正（一个写错的目标值比没有目标值更坏：
+--        它会让核对的人以为自己少发了一条权限，转而去改【正确】的授权语句）。
 SELECT (SELECT count(*) FROM permissions p WHERE p.code LIKE 'inventory:%')                 AS inventory_perms_total,
        (SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id = rp.permission_id
          WHERE rp.role_id = 2 AND p.code LIKE 'inventory:%')                                AS granted_to_product_admin,
