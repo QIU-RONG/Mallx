@@ -1,7 +1,7 @@
 ==============================================================================
 MallX  M1 milestone regression   (place -> pay -> ship -> confirm -> review)
 ==============================================================================
-run at : 2026-09-21 21:19:01
+run at : 2026-09-22 20:08:49
 
 [1] CHAIN -- each link's own end-to-end report, regenerated in this run
   -> Day 14  day14-e2e-walk.py
@@ -40,7 +40,7 @@ run at : 2026-09-21 21:19:01
 
   -> Day 16  day16-review-e2e.py
      proves: confirm -> review
-     report mtime : 2026-09-21 21:18:51   (regenerated this run)
+     report mtime : 2026-09-22 20:08:48   (regenerated this run)
      RESULT: 75 / 75 passed
        [0] BASELINE FINGERPRINT
        [1] logins (tokens stay in memory, never on disk)

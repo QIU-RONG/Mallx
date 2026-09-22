@@ -15,8 +15,8 @@
   本日新增 statement：
      ✅ selectAdminOrders
 
-  Java 声明 10 个 / XML statement 9 个
-     ⚠️ Java 有、XML 无（调用必 Invalid bound statement）：selectDetailByAdmin
+  Java 声明 9 个 / XML statement 9 个
+     ✅ 双向一致
 
 ==========================================================================
 模块 mall-inventory
@@ -44,5 +44,5 @@
       · mall-inventory#adjustStock
       · mall-inventory#selectInventoryPage
   → 骨架期正常。全部填完后本栏应为 0 —— 只要非 0，那些接口必然 500。
-  Java 有 / XML 无      : 1 个 ['mall-order#selectDetailByAdmin']
+  Java 有 / XML 无      : 0 个 
   XML 有 / Java 无      : 0 个 
