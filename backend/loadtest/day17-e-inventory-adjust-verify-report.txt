@@ -1,0 +1,87 @@
+==============================================================================
+Day 17 链路 E -- 管理端库存调整（★ 第四个写点 / 唯一改 total_stock 的一条）
+target : http://127.0.0.1:8080/api/admin/inventory/skus/1/adjust
+accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin(SUPER_ADMIN)
+体例   : sku_id=1 ，用例 +5 → -3 → -2 归位，净变化 0
+==============================================================================
+
+[0] BASELINE (psql)
+  sku1  total=100  avail=100  locked=0   sold=0  
+  恒等式 = True ；inventory_logs 水位线 = id>0
+  counters: cart_items=0, inventory_logs=0, order_items=9, orders=8, payments=5
+  ★ 基线快照 = total=100  avail=100  locked=0   sold=0  
+
+[1] 匿名 POST /api/admin/inventory/skus/1/adjust
+  http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
+  ★ Security 层（过滤器）写响应 ⇒ 真 HTTP 401，不是 body.code
+
+[2] 登录四个身份（token 只在内存里，不落盘）
+  demo        code=200 token_len=191
+  op_order    code=200 token_len=311
+  op_product  code=200 token_len=421
+  admin       code=200 token_len=503
+
+[3] ★ 权限矩阵（先做被拒的两个 —— 顺便证明「被拒 = 零副作用」）
+  demo(C 端 token)      http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+  op_order(ORDER_ADMIN) http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+     ★ 它有 order:* 但【故意没有】inventory:adjust ⇒ 应该 403
+
+[4] delta = 0 → 业务规则拒绝（Service 手工判，不在 DTO 上）
+  http=200 code=400 message=调整量不能为 0
+
+[5] DTO 格式校验（@NotNull / @NotBlank / @Size）
+  delta 缺失          http=200 code=400 message=delta 不能为空（正数=补货，负数=报损）
+  reason 空串         http=200 code=400 message=reason 不能为空（管理端改动必须留下理由）
+  reason 缺失         http=200 code=400 message=reason 不能为空（管理端改动必须留下理由）
+  reason 201 字       http=200 code=400 reason 最长 200 字
+
+[6] SKU 不存在（999999）→ 同样是 400，不是 404 / 500
+  http=200 code=400 message=调整后可用/总库存不能为负
+  ★ 守卫在 WHERE 里 ⇒ 影响 0 行 ⇒ RETURNING 空手 ⇒ null ⇒ 400
+    本接口【不区分】「SKU 不存在」与「调成负的」—— 两者都只是「这个调整不成立」
+
+[7] ★ 正补货 delta=+5（op_product）
+  http=200 code=200 message=success
+  total=100  avail=100  locked=0   sold=0    →  total=105  avail=105  locked=0   sold=0  
+
+[8] ★ 正报损 delta=-3
+  http=200 code=200 message=success
+  total=105  avail=105  locked=0   sold=0    →  total=102  avail=102  locked=0   sold=0  
+
+[9] ★ 守卫挡下：delta = -(available+1) → 调整后为负
+  当前 avail=102 ，提交 delta=-103
+  http=200 code=400 message=调整后可用/总库存不能为负
+  对照：moveLockedToSold / releaseLocked 的 0 行是【账目不一致】→ 500；
+        这里的 0 行是【管理员填了个太大的负数】→ 400。同为 0 行，语义不同。
+
+[10] ★ 流水核对（id > 0 的 ADMIN_ADJUST；此刻【还没做还原】）
+  本次新增 2 条：
+    id=94   type=ADMIN_ADJUST  change=5     before=100  after=105  ref=NULL sku=1
+    id=95   type=ADMIN_ADJUST  change=-3    before=105  after=102  ref=NULL sku=1
+
+[11] ★ 还原到基线（+5 → -3 的净额是 +2，所以补一次 -2）
+  http=200 code=200 message=success
+
+[12] ★ 终局对账（库存四格）
+  基线 total=100  avail=100  locked=0   sold=0  
+  终局 total=100  avail=100  locked=0   sold=0  
+
+[13] ★ CLEANUP —— 回收本次产生的流水
+  DELETE FROM inventory_logs WHERE id > 0
+  ★ 生产里流水表是【只增不改不删】的；但验收脚本必须把数据库放回基线 ——
+    这与 day14 / day15 / day16 / day17-C 四个脚本的收尾完全一致：
+    同一句话、同一「全表 max(id) 水位线」约定。不收，M1 回归就报 BASELINE RESTORED: NO。
+  清理后 inventory_logs = 0 （基线 0）
+
+  五项 counters 终局 vs 基线：
+    cart_items     0 → 0  (Δ=+0)
+    inventory_logs 0 → 0  (Δ=+0)
+    order_items    9 → 9  (Δ=+0)
+    orders         8 → 8  (Δ=+0)
+    payments       5 → 5  (Δ=+0)
+  ★ 这是 day17-m1-regression.py 能给出 BASELINE RESTORED: YES 的前提
+
+==============================================================================
+RESULT: 37/37 PASS
+VERDICT: ALL GREEN
+==============================================================================

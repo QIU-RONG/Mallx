@@ -25,8 +25,8 @@
              <select id=deductStock>
              <select id=moveLockedToSold>
              <select id=releaseLocked>
-     ★ TODO <select id=adjustStock>
-     ★ TODO <select id=selectInventoryPage>
+             <select id=adjustStock>
+             <select id=selectInventoryPage>
 
   本日新增 statement：
      ✅ adjustStock
@@ -40,9 +40,7 @@
 ==========================================================================
   XML 良构              : 2 / 2
   本日新增 statement    : 3 个，缺失 0 个
-  SQL 仍停在 TODO       : 2 条
-      · mall-inventory#adjustStock
-      · mall-inventory#selectInventoryPage
-  → 骨架期正常。全部填完后本栏应为 0 —— 只要非 0，那些接口必然 500。
+  SQL 仍停在 TODO       : 0 条
+  → ✅ 所有 SQL 都已填写，可以进入「起应用 + 跑 e2e」阶段。
   Java 有 / XML 无      : 0 个 
   XML 有 / Java 无      : 0 个 
