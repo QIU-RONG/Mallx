@@ -485,17 +485,34 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     * ★★★ 管理端取消订单 —— <b>骨架</b>，方法体由你写。
+     * ★★★ 管理端取消订单。
      *
-     * <p>本方法应当短到只有两行 —— 短本身就是设计目标：
+     * <p>本方法短到只有三步 —— 短本身就是设计目标：
      * <pre>
      *   ① （没有 requireOwn —— 这是与 cancel 的【唯一】差别）
-     *   ② if (!cancelExecutor.cancelOne(orderId)) {
+     *   ② if (orderMapper.selectById(orderId) == null) → 404「订单不存在」
+     *   ③ if (!cancelExecutor.cancelOne(orderId)) {
      *          throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
      *      }
      * </pre>
      *
-     * <p>★★ 第 ② 步与 {@link #cancel(Long, Long)} 的第 ② 步<b>逐字相同</b>。
+     * <p>★ 第 ② 步是「数据权限反转」的<b>连带责任</b>，值得单独记一笔：
+     * C 端 {@link #cancel(Long, Long)} 里的 {@code requireOwn} 顺手把「订单不存在」挡成了 404；
+     * 管理端【不需要归属检查】，于是连存在性检查也一并丢了 ——
+     * 结果是「取消一个不存在的 id」走到 {@code cancelOne} 里查明细为空，
+     * 抛出 500「订单明细缺失」。<b>500 的语义是「服务端错了」，而这个场景是客户端错误</b>
+     * （同一个 id 走详情接口给的就是 404）。所以这里显式补回存在性检查。
+     *
+     * <p>⚠️ 顺序不能反：存在性检查必须在 {@code cancelOne} <b>之前</b>。
+     * 若放到后面，「不存在的 id」会先被 CAS 挡成 400「订单状态不允许取消」——
+     * 把「找不到」说成了「状态不对」，排查时会往完全错的方向走。
+     *
+     * <p>★ 代价说明：这是一次 {@code selectById} 的额外查询。之所以不省，
+     * 是因为它不是「先查后改」（Day 14 明令禁止的 TOCTOU）——
+     * 真正的资格判定仍然由 {@code cancelOne} 里那条 CAS UPDATE 原子完成，
+     * 这里的查询<b>只用于选择错误码</b>，不参与任何决策。
+     *
+     * <p>★★ 上面第 ③ 步与 {@link #cancel(Long, Long)} 里那一句<b>逐字相同</b>。
      * 这不是巧合，而是「复用同一段回补代码」在代码上的<b>落地形态</b>：
      * 两个入口都调 {@code cancelExecutor.cancelOne(orderId)}，
      * 于是「CAS 抢资格 → 按 skuId 升序回补库存 → 写 CANCEL_RELEASE 流水」那一整段
@@ -514,8 +531,12 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public void cancelByAdmin(Long orderId) {
-        if(!cancelExecutor.cancelOne(orderId))
+        if (orderMapper.selectById(orderId) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        if (!cancelExecutor.cancelOne(orderId)) {
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
+        }
     }
 
     // ============================ 查询（Day 12 第 4 步） ============================
