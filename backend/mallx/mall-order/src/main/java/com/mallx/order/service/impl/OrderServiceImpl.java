@@ -514,8 +514,8 @@ public class OrderServiceImpl implements OrderService {
     @Override
     @Transactional
     public void cancelByAdmin(Long orderId) {
-        // TODO(你写): 只写第 ② 步（一行 if + 一行 throw），第 ① 步「故意缺席」。
-        throw new UnsupportedOperationException("TODO: OrderServiceImpl.cancelByAdmin");
+        if(!cancelExecutor.cancelOne(orderId))
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
     }
 
     // ============================ 查询（Day 12 第 4 步） ============================

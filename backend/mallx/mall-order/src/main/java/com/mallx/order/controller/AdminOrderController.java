@@ -146,7 +146,7 @@ public class AdminOrderController {
     @PreAuthorize("hasAuthority('order:cancel')")
     @PostMapping("/{id}/cancel")
     public Result<Void> cancel(@PathVariable Long id) {
-        // TODO(你写): orderService.cancelByAdmin(id); return Result.ok();
-        throw new UnsupportedOperationException("TODO: AdminOrderController.cancel");
+        orderService.cancelByAdmin(id);
+        return Result.ok();
     }
 }
