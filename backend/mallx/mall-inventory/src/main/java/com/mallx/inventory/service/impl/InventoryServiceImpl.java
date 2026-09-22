@@ -187,8 +187,10 @@ public class InventoryServiceImpl implements InventoryService {
      */
     @Override
     public PageResult<InventoryVO> listSkus(long page, long size) {
-        // TODO(你写): 按上面 ①②③ 三步实现（import 已备好）。
-        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.listSkus");
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        IPage<InventoryVO> result = inventoryMapper.selectInventoryPage(new Page<>(safePage, safeSize));
+        return PageResult.of(result);
     }
 
     /**

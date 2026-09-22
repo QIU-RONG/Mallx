@@ -81,8 +81,7 @@ public class AdminInventoryController {
     @GetMapping("/skus")
     public Result<PageResult<InventoryVO>> listSkus(@RequestParam(defaultValue = "1") long page,
                                                     @RequestParam(defaultValue = "10") long size) {
-        // TODO(你写): return Result.ok(inventoryService.listSkus(page, size));
-        throw new UnsupportedOperationException("TODO: AdminInventoryController.listSkus");
+        return Result.ok(inventoryService.listSkus(page, size));
     }
 
     /**

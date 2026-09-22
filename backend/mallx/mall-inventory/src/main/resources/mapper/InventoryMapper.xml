@@ -162,7 +162,19 @@
         · ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里【不用写】LIMIT/OFFSET
     -->
     <select id="selectInventoryPage" resultType="com.mallx.inventory.vo.InventoryVO">
-        TODO
+        SELECT i.sku_id           AS sku_id,
+               COALESCE(s.name, '(规格已删除)')   AS sku_name,
+               s.product_id       AS product_id,
+               COALESCE(p.name, '(商品已删除)')   AS product_name,
+               i.total_stock      AS total_stock,
+               i.available_stock  AS available_stock,
+               i.locked_stock     AS locked_stock,
+               i.sold_stock       AS sold_stock,
+               i.updated_at       AS updated_at
+        FROM inventories i
+                 LEFT JOIN product_skus s ON s.id = i.sku_id
+                 LEFT JOIN products     p ON p.id = s.product_id
+        ORDER BY i.sku_id
     </select>
 
 </mapper>
