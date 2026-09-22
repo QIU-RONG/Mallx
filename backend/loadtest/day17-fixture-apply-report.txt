@@ -1,0 +1,44 @@
+==============================================================================
+Day 17 · 夹具落库 —— backend/sql/06-day17-fixtures.sql
+==============================================================================
+[0] 执行前 admins = 2 行 / admin_roles = 2 行
+      1|admin|{noop}admin123|系统管理员|1
+      2|op_order|{noop}op123456|订单管理员(夹具)|1
+
+[1] 第一次执行 SQL 文件
+      setval 
+      --------
+            2
+      (1 row)
+      
+      INSERT 0 0
+      INSERT 0 0
+         t    | id | username |    roles    |                                                                                      perms                                                                                       
+      --------+----+----------+-------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+       admins |  1 | admin    | SUPER_ADMIN | inventory:adjust,inventory:list,inventory:log,order:cancel,order:detail,order:list,order:ship,product:create,product:delete,product:detail,product:list,product:update,user:list
+       admins |  2 | op_order | ORDER_ADMIN | order:cancel,order:detail,order:list,order:ship
+      (2 rows)
+      → admins = 2 行 / admin_roles = 2 行
+
+[2] 第二次执行（幂等实证）
+      → admins = 2 行 / admin_roles = 2 行
+  ✅ 第二次执行后 admins 快照与第一次【逐字节相同】                              变化 无
+  ✅ 第二次执行后 admin_roles 快照与第一次【逐字节相同】                         变化 无
+  ✅ admins 表无重复 username（幂等没产生副本）                            2 行 / 2 个唯一 username
+  ✅ admin_roles 无重复授予（同一 admin+role 只出现一次）                   ['1|1', '2|3']
+  ✅ admin_roles 净新增 ≤ 1（首次 +1 / 重复 +0 都算对）                   2→2
+
+[3] ★ 判别力前置检查（这条不过，链路 B 的核心断言就是假的）
+  ✅ op_order 已存在                                             ['2|op_order|{noop}op123456|订单管理员(夹具)|1']
+      op_order.id = 2 ；orders.user_id 取值集合 = [1]
+  ✅ op_order.id ≠ 任一订单的 user_id（★ 否则降级实现也返回 200，断言失效）        op_order.id=2 / order owners=[1]
+
+[4] op_order 的实际权限码（角色 3 = ORDER_ADMIN）
+      ['order:cancel', 'order:detail', 'order:list', 'order:ship']
+  ✅ 有 order:*（4 条：list / ship / detail / cancel）             ['order:cancel', 'order:detail', 'order:list', 'order:ship']
+  ✅ ★ 没有 inventory:*（权限矩阵区分度的来源）                             []
+
+==============================================================================
+VERDICT: OK —— 9 / 9 项全过（夹具就绪 + 幂等成立 + 判别力成立）
+   op_order.id = 2，用它取 user_id=1 的订单：正确实现 200 / 降级实现 404。
+==============================================================================
