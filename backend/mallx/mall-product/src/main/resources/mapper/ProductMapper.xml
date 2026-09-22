@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.product.mapper.ProductMapper">
+
+    <!--
+      TODO(你写) countByCategoryId：统计某个分类下挂着多少个商品（★ 不分是否软删）。
+
+      ★ 这个 statement 的【唯一存在理由】就是绕开 @TableLogic：
+        Product 实体上有 @TableLogic，所以 productMapper.selectCount(...) 会被 MyBatis-Plus
+        自动追加 AND is_deleted = 0，于是【已软删的商品被漏算】。
+        后果链条：漏算 → 校验以为该分类空着 → 物理删分类 →
+        紧接着撞 fk_product_category（NO ACTION）→ 现场 500。
+
+      ★ 判据（本日最值钱的一条）：引用计数的口径必须与【外键的口径】一致。
+        外键不认识 is_deleted，计数就不能带它。
+
+      ★ 期望语句：
+          SELECT count(*) FROM products WHERE category_id = #{categoryId}
+        （手写 XML 的 SELECT 不走 @TableLogic 改写，这正是我们要的效果）
+
+      ⚠️ 参数名 #{categoryId} 必须与 Java 侧 @Param("categoryId") 的值逐字一致。
+         XML 与 Java 参数名不一致时，单参数尚可靠类型匹配救回来，多参数直接
+         Invalid bound statement —— 而这个错【编译期不会报】，要到运行才炸。
+
+      ★ 骨架期这里刻意留字面量 TODO（不是可执行 SQL）：
+        MyBatis 启动时【不解析 SQL 语法】，所以文件照样能启动；只有真被调用才抛 SQL 语法错。
+        这正是「未实现」应有的长相 —— 它比留一个能跑的假查询（例如 SELECT 1）更安全：
+        假查询会让「该分类下有商品吗」恒为真，一路静默地给出【错误的业务结论】，
+        而错误结论比崩溃更难发现。
+
+      ★ 填实现时：把 TODO 那一行整段替换掉。
+    -->
+    <select id="countByCategoryId" resultType="java.lang.Long">
+        TODO
+    </select>
+
+</mapper>

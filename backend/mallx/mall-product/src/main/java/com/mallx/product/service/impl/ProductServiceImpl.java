@@ -77,6 +77,27 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return voPage;
     }
 
+    @Override
+    public Page<ProductVO> pageAdminProducts(long current, long size, Long categoryId,
+                                             String keyword, Integer status) {
+        // TODO(你写) pageAdminProducts —— 与上面的 pageProducts 只差【一行过滤口径】：
+        //     C 端    ：.eq(Product::getStatus, 1)                          // 写死：只看上架
+        //     管理端  ：.eq(status != null, Product::getStatus, status)      // 条件：不传就全都要
+        //   其余整段照抄 pageProducts：
+        //     · .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
+        //     · .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
+        //     · .orderByDesc(Product::getId)
+        //     · this.page(new Page<>(current, size), wrapper)
+        //     · BeanUtils.copyProperties 逐个搬进 ProductVO，再 fillNames(voList, records)
+        //     · 最后换壳 new Page<>(page.getCurrent(), page.getSize(), page.getTotal())
+        //
+        //   ★ status 是 Integer 而不是 int —— 只有 null 才表达得出「不过滤」。
+        //     写成 int 的话方法签名就强制调用方给值，「不传」这条路直接被堵死。
+        //   ★ fillNames 是同一个类里的私有方法，直接调，不用抽接口。
+        //   ★ 不用为「管理端」新建 VO：ProductVO 里已经有 status 字段。
+        throw new UnsupportedOperationException("TODO: ProductServiceImpl.pageAdminProducts");
+    }
+
     /**
      * 进阶：把 categoryId 展开成「它自己 + 它所有直接子分类」的 id 集合。
      * 分类量很小（7 条），全量查一次在内存里配对即可 —— selectList(null) 表示无过滤条件（全表）。
