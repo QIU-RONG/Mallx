@@ -1,0 +1,124 @@
+==============================================================================
+Day 17 链路 C -- 管理端取消订单（复用回补链路）
+target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / admin(SUPER_ADMIN)
+==============================================================================
+
+[0] BASELINE (psql)
+  stock          sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  counters: cart_items=0, inventory_logs=0, order_items=9, orders=8, payments=5
+  inventory_logs 水位线 = 0 ；找一个 PAID 单做对照 = 1
+
+[1] 匿名 POST /api/admin/orders/1/cancel
+  http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
+  ★ 这是 Security 层（过滤器）写的响应，所以是【真 HTTP 401】
+
+[2] 登录三个身份（token 只在内存里，不落盘）
+  demo     code=200 token_len=191
+  op_order code=200 token_len=311
+  admin    code=200 token_len=503
+
+[3] C 端 token 打管理端端点（demo 权限集为空 -> 403）
+  http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+  ★ 同样是 Security 层的真 403 —— @PreAuthorize('order:cancel') 在方法前就把门关了
+
+[4] 造一张待支付单 A（demo 下单：available -1 / locked +1）
+    购物车里没有 sku4 -> POST /api/cart
+  新订单 id = 9050
+  psql: {'status': 'PENDING_PAYMENT', 'cancelled_at': 'NULL', 'paid_at': 'NULL'}
+  下单后            sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
+  流水：84|4|ORDER_LOCK|-1|147|146|NULL
+
+[5] ★ op_order(ORDER_ADMIN, id=2) 取消订单 A
+    注意 op_order.id=2 与订单属主 demo.userId=1 【不相等】——
+    所以「停用归属检查」这件事在这里是【可判别的】
+  http=200 code=200 message=success data=null
+
+[6] DB 对账：订单状态（不信接口自报）
+  psql: {'status': 'CANCELLED', 'cancelled_at': '2026-09-22 20:36:51.301237', 'paid_at': 'NULL'}
+
+[7] ★★ 库存回补：releaseLocked 与 deductStock 严格互逆
+  取消后            sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  vs 基线：available +0  locked +0  sold +0
+
+[8] ★★ 流水口径：CANCEL_RELEASE / change=+n / reference_id=orderId
+  本次新增流水：84|4|ORDER_LOCK|-1|147|146|NULL  ;  85|4|CANCEL_RELEASE|1|146|147|9050
+  该条：sku=4 change=1 before=146 after=147 ref=9050
+  ★ 账本自洽：本次 Σ(change) = 0   （下单 -1 与取消 +1 相抵）
+
+[9] ★ 重复取消同一单（这就是端点用 POST 不用 PUT 的原因）
+  http=200 code=400 message=订单状态不允许取消
+
+[10] 造单 B，改由 admin(SUPER_ADMIN) 取消 —— 两个管理身份都必须能取消
+    购物车里没有 sku4 -> POST /api/cart
+  新订单 id = 9051
+  admin 取消 http=200 code=200 -> status=CANCELLED
+
+[11] ★ 取消已支付单 #1 —— 本日边界的显式声明（不做退款）
+  http=200 code=400 message=订单状态不允许取消
+  该单前后：{'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-19 15:05:21.106577'} -> {'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-19 15:05:21.106577'}
+
+[12] 边界：不存在的 id / 非数字 id（★ 这一栏只报实测，不预设答案）
+  POST /api/admin/orders/99999999/cancel -> http=200 code=500 message=订单明细缺失
+     C 端同一场景给的是 404（requireOwn 顺手挡的）；管理端【跳过了归属】，
+     所以这里给什么，取决于有没有单独做存在性检查。
+  POST /api/admin/orders/abc/cancel        -> http=200 code=400 message=参数 id 格式不正确
+
+==============================================================================
+[13] CLEANUP —— 删掉本次造的单据与流水，库存 SET 回基线
+==============================================================================
+  要删的订单：[9050, 9051]
+  要删的流水：id > 0
+
+[14] VERIFY —— 回到基线（这是留给 day17-m1-regression.py 的前提）
+  cart_items       = 0     unchanged
+  inventory_logs   = 0     unchanged
+  order_items      = 9     unchanged
+  orders           = 8     unchanged
+  payments         = 5     unchanged
+  inventories     : 逐字节相同
+
+==============================================================================
+ASSERTIONS
+==============================================================================
+  [PASS] baseline identity holds for sku4
+  [PASS] 匿名被拒，且是真 HTTP 401（不是 body.code）
+  [PASS] 三个身份全部登录成功
+  [PASS] C 端 token 被拒，且是真 HTTP 403
+  [PASS] 订单 A 创建成功
+  [PASS] 订单 A 是 PENDING_PAYMENT
+  [PASS] 下单把货锁住了：available -1 / locked +1 / sold 不动
+  [PASS] 取消成功：HTTP 200 + code 200
+  [PASS] 返回 Result<Void>（data 为 null）
+  [PASS] status 变成 CANCELLED
+  [PASS] cancelled_at 已写入（业务事实时间）
+  [PASS] paid_at 仍为 NULL（取消不碰支付时间）
+  [PASS] locked 回到基线
+  [PASS] available 回到基线
+  [PASS] sold 完全没被碰
+  [PASS] 三格恒等式仍成立
+  [PASS] 新增 CANCEL_RELEASE 恰好 1 条
+  [PASS] change_quantity = +1（available 增加的方向）
+  [PASS] reference_id = 订单 id（能反查是哪张单退回的）
+  [PASS] before/after 接续：after = before + 1
+  [PASS] Σ(change) over 本次流水 == 0
+  [PASS] 重复取消被拒：HTTP 200 + code 400
+  [PASS] ...且措辞是「不允许取消」
+  [PASS] 库存没有被再动一次
+  [PASS] 流水没有新增第 2 条
+  [PASS] 订单 B 创建成功且为 PENDING_PAYMENT
+  [PASS] admin 也能取消（不是只有 op_order 能）
+  [PASS] 库存再次回到基线
+  [PASS] PAID 单被 CAS 挡成 400
+  [PASS] PAID 单原封不动（状态与时间戳都没变）
+  [PASS] 库存未因此变化
+  [PASS] /abc -> code=400（路径变量类型不匹配）
+  [PASS] 清理执行无 SQL 错误
+  [PASS] cart_items 回到基线
+  [PASS] inventory_logs 回到基线
+  [PASS] order_items 回到基线
+  [PASS] orders 回到基线
+  [PASS] payments 回到基线
+  [PASS] 7 个 SKU 库存逐字节回到基线
+
+RESULT: 39/39 passed
+VERDICT: CANCEL-BY-ADMIN OK -- 回补同源、流水口径正确、权限矩阵成立
