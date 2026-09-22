@@ -90,10 +90,11 @@ ck("admins 表无重复 username（幂等没产生副本）",
    len({r.split("|")[1] for r in a1}) == len(a1), "%d 行 / %d 个唯一 username" % (len(a1), len({r.split("|")[1] for r in a1})))
 ck("admin_roles 无重复授予（同一 admin+role 只出现一次）",
    len(l1) == len(set(l1)), str(l1))
-# ★ 不能用「净新增 == 1」当判据 —— 那只在【首次执行】成立；
+# ★ 不能用「净新增 == N」当判据 —— 那只在【首次执行】成立；
 #   重复执行时 +0 才是幂等的正确表现（本行就是为了兼容两种情形）
-ck("admin_roles 净新增 ≤ 1（首次 +1 / 重复 +0 都算对）",
-   len(l1) - len(l0) <= 1, "%d→%d" % (len(l0), len(l1)))
+#   两个夹具账号各挂一个角色 ⇒ 首次 +2
+ck("admin_roles 净新增 ≤ 2（首次 +2 / 重复 +0 都算对）",
+   len(l1) - len(l0) <= 2, "%d→%d" % (len(l0), len(l1)))
 say("")
 
 # ---------- 3. ★ 判别力前置检查：op_order.id 必须 ≠ 1 ----------
@@ -123,6 +124,24 @@ has_inv = sorted(c for c in perms if c.startswith("inventory:"))
 ck("有 order:*（4 条：list / ship / detail / cancel）", has_order ==
    ["order:cancel", "order:detail", "order:list", "order:ship"], str(has_order))
 ck("★ 没有 inventory:*（权限矩阵区分度的来源）", has_inv == [], str(has_inv))
+say("")
+
+# ---------- 5. ★ 反向对照：op_product（角色 2 = PRODUCT_ADMIN） ----------
+say("[5] op_product 的实际权限码（角色 2 = PRODUCT_ADMIN）")
+pp = [r for r in a1 if r.split("|")[1] == "op_product"]
+ck("op_product 已存在", len(pp) == 1, str(pp)[:80])
+perms_p = psql(
+    "SELECT DISTINCT p.code FROM admins a "
+    "JOIN admin_roles ar ON ar.admin_id = a.id "
+    "JOIN role_permissions rp ON rp.role_id = ar.role_id "
+    "JOIN permissions p ON p.id = rp.permission_id "
+    "WHERE a.username = 'op_product' ORDER BY p.code;")
+say("      %s" % perms_p)
+has_inv_p = sorted(c for c in perms_p if c.startswith("inventory:"))
+has_order_p = sorted(c for c in perms_p if c.startswith("order:"))
+ck("有 inventory:*（list / adjust / log 三条）",
+   has_inv_p == ["inventory:adjust", "inventory:list", "inventory:log"], str(has_inv_p))
+ck("★ 没有 order:*（与 op_order 正好一对反向对照）", has_order_p == [], str(has_order_p))
 say("")
 
 # ---------- 汇总 ----------

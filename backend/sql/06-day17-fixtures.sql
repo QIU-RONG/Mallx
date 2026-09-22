@@ -46,7 +46,24 @@ FROM admins a
 WHERE a.username = 'op_order'
   AND NOT EXISTS (SELECT 1 FROM admin_roles ar WHERE ar.admin_id = a.id AND ar.role_id = 3);
 
--- ④ 自检：把账号 / 角色 / 实际权限码打出来（人工核对，脚本也读这一段）
+-- ④ 幂等插入 op_product —— 商品管理员，库存端点的【正向】验证用它。
+--    它与 op_order 构成一对【正反对照】：
+--      op_order   打订单端点 200 / 打库存端点 403   （有 order:*，没有 inventory:*）
+--      op_product 打库存端点 200 / 打订单端点 403   （有 inventory:*，没有 order:*）
+--    同一个 token 打两个模块拿到两种结果，才说明 @PreAuthorize 里的权限码真的在生效；
+--    admin（SUPER_ADMIN）两条都是 200，【证明不了】任何事。
+INSERT INTO admins (username, password, nickname, status)
+SELECT 'op_product', '{noop}prod123456', '商品管理员(夹具)', 1
+WHERE NOT EXISTS (SELECT 1 FROM admins a WHERE a.username = 'op_product');
+
+-- ⑤ 挂角色 2 = PRODUCT_ADMIN（有 inventory:list / adjust / log 与 product:*，没有 order:*）
+INSERT INTO admin_roles (admin_id, role_id)
+SELECT a.id, 2
+FROM admins a
+WHERE a.username = 'op_product'
+  AND NOT EXISTS (SELECT 1 FROM admin_roles ar WHERE ar.admin_id = a.id AND ar.role_id = 2);
+
+-- ⑥ 自检：把账号 / 角色 / 实际权限码打出来（人工核对，脚本也读这一段）
 SELECT 'admins' AS t, a.id, a.username,
        COALESCE(string_agg(DISTINCT r.code, ',' ORDER BY r.code), '(无角色)') AS roles,
        COALESCE(string_agg(DISTINCT p.code, ',' ORDER BY p.code), '(无权限)') AS perms

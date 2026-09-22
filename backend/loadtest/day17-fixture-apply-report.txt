@@ -13,20 +13,23 @@ Day 17 · 夹具落库 —— backend/sql/06-day17-fixtures.sql
       
       INSERT 0 0
       INSERT 0 0
-         t    | id | username |    roles    |                                                                                      perms                                                                                       
-      --------+----+----------+-------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-       admins |  1 | admin    | SUPER_ADMIN | inventory:adjust,inventory:list,inventory:log,order:cancel,order:detail,order:list,order:ship,product:create,product:delete,product:detail,product:list,product:update,user:list
-       admins |  2 | op_order | ORDER_ADMIN | order:cancel,order:detail,order:list,order:ship
-      (2 rows)
-      → admins = 2 行 / admin_roles = 2 行
+      INSERT 0 1
+      INSERT 0 1
+         t    | id |  username  |     roles     |                                                                                      perms                                                                                       
+      --------+----+------------+---------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+       admins |  1 | admin      | SUPER_ADMIN   | inventory:adjust,inventory:list,inventory:log,order:cancel,order:detail,order:list,order:ship,product:create,product:delete,product:detail,product:list,product:update,user:list
+       admins |  2 | op_order   | ORDER_ADMIN   | order:cancel,order:detail,order:list,order:ship
+       admins |  3 | op_product | PRODUCT_ADMIN | inventory:adjust,inventory:list,inventory:log,product:create,product:delete,product:detail,product:list,product:update
+      (3 rows)
+      → admins = 3 行 / admin_roles = 3 行
 
 [2] 第二次执行（幂等实证）
-      → admins = 2 行 / admin_roles = 2 行
+      → admins = 3 行 / admin_roles = 3 行
   ✅ 第二次执行后 admins 快照与第一次【逐字节相同】                              变化 无
   ✅ 第二次执行后 admin_roles 快照与第一次【逐字节相同】                         变化 无
-  ✅ admins 表无重复 username（幂等没产生副本）                            2 行 / 2 个唯一 username
-  ✅ admin_roles 无重复授予（同一 admin+role 只出现一次）                   ['1|1', '2|3']
-  ✅ admin_roles 净新增 ≤ 1（首次 +1 / 重复 +0 都算对）                   2→2
+  ✅ admins 表无重复 username（幂等没产生副本）                            3 行 / 3 个唯一 username
+  ✅ admin_roles 无重复授予（同一 admin+role 只出现一次）                   ['1|1', '2|3', '3|2']
+  ✅ admin_roles 净新增 ≤ 2（首次 +2 / 重复 +0 都算对）                   2→3
 
 [3] ★ 判别力前置检查（这条不过，链路 B 的核心断言就是假的）
   ✅ op_order 已存在                                             ['2|op_order|{noop}op123456|订单管理员(夹具)|1']
@@ -38,7 +41,13 @@ Day 17 · 夹具落库 —— backend/sql/06-day17-fixtures.sql
   ✅ 有 order:*（4 条：list / ship / detail / cancel）             ['order:cancel', 'order:detail', 'order:list', 'order:ship']
   ✅ ★ 没有 inventory:*（权限矩阵区分度的来源）                             []
 
+[5] op_product 的实际权限码（角色 2 = PRODUCT_ADMIN）
+  ✅ op_product 已存在                                           ['3|op_product|{noop}prod123456|商品管理员(夹具)|1']
+      ['inventory:adjust', 'inventory:list', 'inventory:log', 'product:create', 'product:delete', 'product:detail', 'product:list', 'product:update']
+  ✅ 有 inventory:*（list / adjust / log 三条）                    ['inventory:adjust', 'inventory:list', 'inventory:log']
+  ✅ ★ 没有 order:*（与 op_order 正好一对反向对照）                        []
+
 ==============================================================================
-VERDICT: OK —— 9 / 9 项全过（夹具就绪 + 幂等成立 + 判别力成立）
+VERDICT: OK —— 12 / 12 项全过（夹具就绪 + 幂等成立 + 判别力成立）
    op_order.id = 2，用它取 user_id=1 的订单：正确实现 200 / 降级实现 404。
 ==============================================================================
