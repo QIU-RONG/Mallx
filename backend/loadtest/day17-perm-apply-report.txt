@@ -1,0 +1,73 @@
+==========================================================================
+Day 17 权限补发 —— D:\MallX\backend\sql\05-admin-permissions.sql
+==========================================================================
+SQL 文件 6398 字符 / 139 行
+
+[1] 执行前快照
+      perm_total         = 8
+      perm_order         = 2
+      perm_inventory     = 0
+      rp_total           = 15
+      rp_role1_super     = 8
+      rp_role2_product   = 5
+      rp_role3_order     = 2
+      order_list_path    = /api/orders
+      perm_max_id        = 8
+
+[2] 第一次执行  rc=0
+      ✅ 执行成功（含文件末尾的三段自检 SELECT，输出见下）
+
+      UPDATE 1
+      INSERT 0 5
+      INSERT 0 5
+      INSERT 0 2
+      INSERT 0 3
+      13
+      6|order:list|订单列表|/api/admin/orders|GET
+      7|order:ship|订单发货|/api/orders/*/ship|POST
+      9|order:detail|管理端订单列表|/api/admin/orders|GET
+      10|order:cancel|管理端取消订单|/api/admin/orders/*/cancel|POST
+      11|inventory:list|库存列表|/api/admin/inventory/skus|GET
+      12|inventory:adjust|调整库存|/api/admin/inventory/skus/*/adjust|POST
+      13|inventory:log|库存流水|/api/admin/inventory/logs|GET
+      ORDER_ADMIN|4|order:cancel, order:detail, order:list, order:ship
+      PRODUCT_ADMIN|8|inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN|13|inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:list
+      3|3|3|4|4
+
+[3] 第一次执行后的变化（before -> after）
+      order_list_path    /api/orders -> /api/admin/orders
+      perm_inventory     0 -> 3
+      perm_max_id        8 -> 13
+      perm_order         2 -> 4
+      perm_total         8 -> 13
+      rp_role1_super     8 -> 13
+      rp_role2_product   5 -> 8
+      rp_role3_order     2 -> 4
+      rp_total           15 -> 25
+
+[4] 第二次执行（幂等验证）  rc=0
+
+[5] 第二次执行后的变化（after1 -> after2）—— ★ 必须为空
+      ✅ 无任何变化 —— SQL 是幂等的
+
+[6] 权限清单（order:* + inventory:*）
+      6 | order:list | 订单列表 | /api/admin/orders | GET
+      7 | order:ship | 订单发货 | /api/orders/*/ship | POST
+      9 | order:detail | 管理端订单列表 | /api/admin/orders | GET
+      10 | order:cancel | 管理端取消订单 | /api/admin/orders/*/cancel | POST
+      11 | inventory:list | 库存列表 | /api/admin/inventory/skus | GET
+      12 | inventory:adjust | 调整库存 | /api/admin/inventory/skus/*/adjust | POST
+      13 | inventory:log | 库存流水 | /api/admin/inventory/logs | GET
+
+[7] 每个角色拿到了多少权限
+      ORDER_ADMIN | 4 | order:cancel, order:detail, order:list, order:ship
+      PRODUCT_ADMIN | 8 | inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN | 13 | inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:list
+
+[8] ★ 交叉核对（左右两侧的计数必须两两相等）
+      inventory_total=3  granted_to_product_admin=3  granted_to_super_admin=3  order_total=4  granted_to_order_admin=4
+
+==========================================================================
+VERDICT: OK —— 权限已补发且幂等
+==========================================================================
