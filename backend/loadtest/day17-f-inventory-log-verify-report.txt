@@ -1,0 +1,173 @@
+==============================================================================
+Day 17 链路 F -- 管理端库存流水（分页 + 行→VO + 可选过滤）
+target : http://127.0.0.1:8080/api/admin/inventory/logs
+accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin(SUPER_ADMIN)
+fixtures: 6 条直接 INSERT（四种 type / 四个 SKU / 含 reference_id 为 NULL）
+==============================================================================
+
+[0] BASELINE (psql)
+  inventories 恒等式 = t
+  counters: cart_items=0, inventory_logs=0, order_items=9, orders=8, payments=5
+  ★ inventory_logs 高水位 = 0（收尾按 id > 0 删净）
+
+[1] 匿名 GET /api/admin/inventory/logs
+  http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
+  ★ Security 层（过滤器）写响应 ⇒ 真 HTTP 401，不是 body.code
+
+[2] 登录四个身份（token 只在内存里，不落盘）
+  demo       code=200 token_len=191
+  op_order   code=200 token_len=311
+  op_product code=200 token_len=421
+  admin      code=200 token_len=503
+
+[3] ★ 权限矩阵（同一个点，四种身份 —— 区分度就在这里）
+    本端点的权限码是 inventory:log（不是 inventory:list）
+  demo(C 端 token)      http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+  op_order(ORDER_ADMIN) http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+     ★ 它有 order:* 但【故意没有】inventory:* ⇒ 应该是 403
+  op_product(PRODUCT_ADMIN) http=200 code=200
+  admin(SUPER_ADMIN)    http=200 code=200
+
+[4] ★ 空表边界：造夹具【之前】先看一眼 —— 空表不能 500
+  records=[] total=0 current=1 size=10
+
+[5] 造夹具：直接 INSERT 6 条流水（不动 inventories）
+  INSERT rc=0 ；新增 6 条
+    sku=3  ORDER_LOCK      change=-2  50→48 ref=NULL
+    sku=3  PAY_SOLD        change=0   48→48 ref=101
+    sku=5  CANCEL_RELEASE  change=3   20→23 ref=102
+    sku=6  ADMIN_ADJUST    change=7   10→17 ref=NULL
+    sku=6  ORDER_LOCK      change=-1  17→16 ref=NULL
+    sku=7  PAY_SOLD        change=0   90→90 ref=103
+  DB 侧（id 降序）：[114, 113, 112, 111, 110, 109]
+
+[6] ★★ 8 字段逐行与 DB 对账（不信接口自报）
+  records 条数 = 6 ；total = 6
+
+[7] 排序
+  id 顺序：[114, 113, 112, 111, 110, 109]
+  type 分布：['ADMIN_ADJUST', 'CANCEL_RELEASE', 'ORDER_LOCK', 'PAY_SOLD']
+
+[8] 分页：size=2 取三页，并集必须 == 全量且无交集
+  page=1 size=2 -> current=1 size=2 total=6 records=[114, 113]
+  page=2 size=2 -> current=2 size=2 total=6 records=[112, 111]
+  page=3 size=2 -> current=3 size=2 total=6 records=[110, 109]
+  page=4 size=2 -> records=[] （超出范围）
+
+[9] ★ 夹紧四态（MP 的两个静默坑：size=0 返空列表、size<0 查全表）
+  size=0      -> 回传 size=1    records=1  total=6   (夹到 1（不夹时 MP 返回空列表）)
+  size=-5     -> 回传 size=1    records=1  total=6   (夹到 1（不夹时 MP 不执行分页、查全表）)
+  size=99999  -> 回传 size=100  records=6  total=6   (夹到 MAX_PAGE_SIZE=100)
+  size=1      -> 回传 size=1    records=1  total=6   (原样)
+  size=6      -> 回传 size=6    records=6  total=6   (原样)
+  page=0    -> current=1 size=10 records=6
+  不传参      -> current=1 size=10 records=6（defaultValue 生效）
+
+[10] ★★ 可选过滤：eq(condition, 列, 值) 的 condition 必须写对
+     写错成 .eq(列, null) 会拼出 sku_id = null → 恒不匹配且不报错
+  (无)                          -> records=6  total=6   types=['ADMIN_ADJUST', 'CANCEL_RELEASE', 'ORDER_LOCK', 'PAY_SOLD'] skus=[3, 5, 6, 7]   (不筛 = 全量)
+  &skuId=3                     -> records=2  total=2   types=['ORDER_LOCK', 'PAY_SOLD'] skus=[3]   (两个 ORDER_LOCK 里 sku=3 的有 2 条)
+  &skuId=5                     -> records=1  total=1   types=['CANCEL_RELEASE'] skus=[5]   (CANCEL_RELEASE 那条)
+  &skuId=6                     -> records=2  total=2   types=['ADMIN_ADJUST', 'ORDER_LOCK'] skus=[6]   (ADMIN_ADJUST + ORDER_LOCK)
+  &skuId=999999                -> records=0  total=0   types=[] skus=[]   (★ 不存在的 SKU → 空列表，不 500)
+  &type=PAY_SOLD               -> records=2  total=2   types=['PAY_SOLD'] skus=[3, 7]   (sku=3 与 sku=7 各一条)
+  &type=ORDER_LOCK             -> records=2  total=2   types=['ORDER_LOCK'] skus=[3, 6]   ()
+  &type=CANCEL_RELEASE         -> records=1  total=1   types=['CANCEL_RELEASE'] skus=[5]   ()
+  &type=ADMIN_ADJUST           -> records=1  total=1   types=['ADMIN_ADJUST'] skus=[6]   ()
+  &type=NOSUCH                 -> records=0  total=0   types=[] skus=[]   (★ 不存在的 type → 空列表，不 500)
+  &skuId=6&type=ORDER_LOCK     -> records=1  total=1   types=['ORDER_LOCK'] skus=[6]   (★ 两个条件【同时】生效（交集）)
+  &skuId=5&type=ORDER_LOCK     -> records=0  total=0   types=[] skus=[]   (交集为空)
+  &type=%20                    -> records=6  total=6   types=['ADMIN_ADJUST', 'CANCEL_RELEASE', 'ORDER_LOCK', 'PAY_SOLD'] skus=[3, 5, 6, 7]   (★★ 空格串等价【不筛】—— 验 isBlank() 归一化)
+  &type=pay_sold               -> records=0  total=0   types=[] skus=[]   (★ 观察：type 不做大小写归一，原样直传 SQL（PG 区分大小写）)
+     ↑ 这是【有意不归一】：过滤值是查询条件，不是持久化值。
+
+[11] 边界：非数字 page 的原始报错
+  ?page=abc -> http=200 code=400 {"code":400,"message":"参数 page 格式不正确","data":null}
+
+[12] 只读性：除【本脚本自己造的夹具】外，DB 必须一个字节都没动
+  orders           = 8     unchanged
+  order_items      = 9     unchanged
+  payments         = 5     unchanged
+  cart_items       = 0     unchanged
+  inventories     : 逐字节相同
+
+[13] ★ CLEANUP —— 按高水位回收本次夹具（与 day14/15/16/17-C/E 逐字对齐）
+  DELETE rc=0 ；inventory_logs 6 → 0
+
+==============================================================================
+ASSERTIONS：实得 70 条
+==============================================================================
+  [PASS] ★ 基线：inventory_logs == 0 条（M1 回归的前提，不是本脚本造的）
+  [PASS] 基线：inventories 有 7 行
+  [PASS] 匿名被拒，且是真 HTTP 401
+  [PASS] 四个身份全部登录成功
+  [PASS] C 端 token 被拒，且是真 HTTP 403
+  [PASS] ★ op_order（无 inventory:log）被拒：真 HTTP 403
+  [PASS] op_product（有 inventory:log）通过：HTTP 200 + code 200
+  [PASS] admin（超管）通过：HTTP 200 + code 200
+  [PASS] ★ op_product 与 admin 的响应体【逐字节相同】（结果与调用者无关）
+  [PASS] ★ 空表时 records == []（不是 null、不报错）
+  [PASS] ★ 空表时 total == 0
+  [PASS] 空表时 current/size 仍回传（defaultValue 生效）
+  [PASS] 夹具全部落库：新增 == 6 条
+  [PASS] ★ 夹具自身满足口径 change_quantity == after_stock - before_stock
+  [PASS] records 条数 == 新增的 6 条
+  [PASS] total == 6
+  [PASS] ★ 每条 record 的 key 集合 == InventoryLogVO 的 8 个字段（无多无少）
+  [PASS] ★ 6 条 × 8 字段【逐字段】与 DB 相同
+  [PASS] ★ 每行 changeQuantity == afterStock - beforeStock（口径对照 DB 也成立）
+  [PASS] ★ reference_id 为 NULL 的行，接口返回 key 存在且值为 null（不是缺字段）
+  [PASS] ★ referenceId 有值的行也确实带出来了（NULL 与有值都验，避免只验半边）
+  [PASS] ★ createdAt 非空且与 DB 同秒
+  [PASS] ★ 按 id 严格【降序】（orderByDesc(InventoryLog::getId) 生效）
+  [PASS] ★ 四种 type 都在结果里（夹具覆盖完整性）
+  [PASS] page=1 的 current == 1
+  [PASS] page=2 的 current == 2
+  [PASS] page=3 的 current == 3
+  [PASS] 三页并集大小 == 6（不重）
+  [PASS] 三页并集 == 全量 id 集合（不漏）
+  [PASS] page=4（超出）返回空 records，但 total 仍为 6
+  [PASS] size=0 回传的 size == 1
+  [PASS] size=0 的 total 恒为 6（夹紧不影响总数）
+  [PASS] size=-5 回传的 size == 1
+  [PASS] size=-5 的 total 恒为 6（夹紧不影响总数）
+  [PASS] size=99999 回传的 size == 100
+  [PASS] size=99999 的 total 恒为 6（夹紧不影响总数）
+  [PASS] size=1 回传的 size == 1
+  [PASS] size=1 的 total 恒为 6（夹紧不影响总数）
+  [PASS] size=6 回传的 size == 6
+  [PASS] size=6 的 total 恒为 6（夹紧不影响总数）
+  [PASS] size=0/-5 时必须【仍有 1 条】——这是夹紧生效的直接证据（不夹则 0 条）
+  [PASS] page=0 被夹到 current == 1
+  [PASS] 不传 page/size 时走 defaultValue：current=1 / size=10
+  [PASS] 过滤 (无) 命中 6 条
+  [PASS] 过滤 &skuId=3 命中 2 条
+  [PASS] 过滤 &skuId=5 命中 1 条
+  [PASS] 过滤 &skuId=6 命中 2 条
+  [PASS] 过滤 &skuId=999999 命中 0 条
+  [PASS] 过滤 &type=PAY_SOLD 命中 2 条
+  [PASS] 过滤 &type=ORDER_LOCK 命中 2 条
+  [PASS] 过滤 &type=CANCEL_RELEASE 命中 1 条
+  [PASS] 过滤 &type=ADMIN_ADJUST 命中 1 条
+  [PASS] 过滤 &type=NOSUCH 命中 0 条
+  [PASS] 过滤 &skuId=6&type=ORDER_LOCK 命中 1 条
+  [PASS] 过滤 &skuId=5&type=ORDER_LOCK 命中 0 条
+  [PASS] 过滤 &type=%20 命中 6 条
+  [PASS] ★★ type=%20（空格串）total 仍为 6，证明 isBlank() 而非 isEmpty() 在把关
+  [PASS] 过滤 &type=pay_sold 命中 0 条
+  [PASS] ★ 小写 type 不命中（证明过滤值是原样直传的，没有被悄悄 upper 化）
+  [PASS] ?page=abc -> HTTP 200 + code 400（参数类型不匹配）
+  [PASS] orders 未被本链路改动
+  [PASS] order_items 未被本链路改动
+  [PASS] payments 未被本链路改动
+  [PASS] cart_items 未被本链路改动
+  [PASS] ★ inventory_logs 只多出夹具的 6 条（接口本身没有写任何流水）
+  [PASS] ★ 7 个 SKU 库存逐字节不变（本脚本走 INSERT，不碰 inventories）
+  [PASS] ★ inventory_logs 回到基线 0 条
+  [PASS] ★ 五项计数全部回基线（M1 回归的前提）
+  [PASS] ★ 7 个 SKU 库存仍逐字节 == 基线（终局复核）
+  [PASS] ★ 收尾后列表回到空表形态（同 [4]，证明清理彻底）
+
+RESULT: 70/70 passed
+★ 满额自校验：FULL_TOTAL = 70 ；实得 70 ；一致
+VERDICT: INVENTORY-LOG OK -- 权限矩阵有区分度、8 字段与 DB 一致、id 降序、分页不重不漏、夹紧四态正确、两个可选过滤与 isBlank 归一化成立
