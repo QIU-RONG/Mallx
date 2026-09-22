@@ -1,31 +1,34 @@
 ==========================================================================
 Day 17 权限补发 —— D:\MallX\backend\sql\05-admin-permissions.sql
 ==========================================================================
-SQL 文件 6398 字符 / 139 行
+SQL 文件 7612 字符 / 169 行
 
 [1] 执行前快照
-      perm_total         = 8
-      perm_order         = 2
-      perm_inventory     = 0
-      rp_total           = 15
-      rp_role1_super     = 8
-      rp_role2_product   = 5
-      rp_role3_order     = 2
-      order_list_path    = /api/orders
-      perm_max_id        = 8
+      perm_total         = 13
+      perm_order         = 4
+      perm_inventory     = 3
+      rp_total           = 25
+      rp_role1_super     = 13
+      rp_role2_product   = 8
+      rp_role3_order     = 4
+      order_list_path    = /api/admin/orders
+      order_detail_name  = 管理端订单详情
+      order_detail_path  = /api/admin/orders/*
+      perm_max_id        = 13
 
 [2] 第一次执行  rc=0
       ✅ 执行成功（含文件末尾的三段自检 SELECT，输出见下）
 
-      UPDATE 1
-      INSERT 0 5
-      INSERT 0 5
-      INSERT 0 2
-      INSERT 0 3
+      UPDATE 0
+      INSERT 0 0
+      UPDATE 0
+      INSERT 0 0
+      INSERT 0 0
+      INSERT 0 0
       13
       6|order:list|订单列表|/api/admin/orders|GET
       7|order:ship|订单发货|/api/orders/*/ship|POST
-      9|order:detail|管理端订单列表|/api/admin/orders|GET
+      9|order:detail|管理端订单详情|/api/admin/orders/*|GET
       10|order:cancel|管理端取消订单|/api/admin/orders/*/cancel|POST
       11|inventory:list|库存列表|/api/admin/inventory/skus|GET
       12|inventory:adjust|调整库存|/api/admin/inventory/skus/*/adjust|POST
@@ -36,15 +39,7 @@ SQL 文件 6398 字符 / 139 行
       3|3|3|4|4
 
 [3] 第一次执行后的变化（before -> after）
-      order_list_path    /api/orders -> /api/admin/orders
-      perm_inventory     0 -> 3
-      perm_max_id        8 -> 13
-      perm_order         2 -> 4
-      perm_total         8 -> 13
-      rp_role1_super     8 -> 13
-      rp_role2_product   5 -> 8
-      rp_role3_order     2 -> 4
-      rp_total           15 -> 25
+      ⚠️ 没有任何变化 —— 可能权限早就补过了，或 SQL 里的 WHERE NOT EXISTS 判错了
 
 [4] 第二次执行（幂等验证）  rc=0
 
@@ -54,7 +49,7 @@ SQL 文件 6398 字符 / 139 行
 [6] 权限清单（order:* + inventory:*）
       6 | order:list | 订单列表 | /api/admin/orders | GET
       7 | order:ship | 订单发货 | /api/orders/*/ship | POST
-      9 | order:detail | 管理端订单列表 | /api/admin/orders | GET
+      9 | order:detail | 管理端订单详情 | /api/admin/orders/* | GET
       10 | order:cancel | 管理端取消订单 | /api/admin/orders/*/cancel | POST
       11 | inventory:list | 库存列表 | /api/admin/inventory/skus | GET
       12 | inventory:adjust | 调整库存 | /api/admin/inventory/skus/*/adjust | POST
@@ -67,6 +62,13 @@ SQL 文件 6398 字符 / 139 行
 
 [8] ★ 交叉核对（左右两侧的计数必须两两相等）
       inventory_total=3  granted_to_product_admin=3  granted_to_super_admin=3  order_total=4  granted_to_order_admin=4
+
+[9] ★ 元数据订正核对 —— name / path 必须与 code 自洽
+      （本栏是本轮新加的：错误指向不报错、不少列、不影响鉴权，只误导后来者）
+      order:detail   name=管理端订单详情        path=/api/admin/orders/*
+      order:list     name=订单列表           path=/api/admin/orders
+      [PASS] order:detail  期望 name=管理端订单详情 / path=/api/admin/orders/*
+      [PASS] order:list  期望 name=订单列表 / path=/api/admin/orders
 
 ==========================================================================
 VERDICT: OK —— 权限已补发且幂等

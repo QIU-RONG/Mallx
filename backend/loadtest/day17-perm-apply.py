@@ -41,8 +41,10 @@ UNION ALL SELECT 'rp_total',        count(*)::text FROM role_permissions
 UNION ALL SELECT 'rp_role1_super',  count(*)::text FROM role_permissions WHERE role_id = 1
 UNION ALL SELECT 'rp_role2_product',count(*)::text FROM role_permissions WHERE role_id = 2
 UNION ALL SELECT 'rp_role3_order',  count(*)::text FROM role_permissions WHERE role_id = 3
-UNION ALL SELECT 'order_list_path', COALESCE((SELECT path FROM permissions WHERE code = 'order:list'), 'NULL')
-UNION ALL SELECT 'perm_max_id',     COALESCE(max(id)::text, 'NULL') FROM permissions
+UNION ALL SELECT 'order_list_path',   COALESCE((SELECT path FROM permissions WHERE code = 'order:list'), 'NULL')
+UNION ALL SELECT 'order_detail_name', COALESCE((SELECT name FROM permissions WHERE code = 'order:detail'), 'NULL')
+UNION ALL SELECT 'order_detail_path', COALESCE((SELECT path FROM permissions WHERE code = 'order:detail'), 'NULL')
+UNION ALL SELECT 'perm_max_id',       COALESCE(max(id)::text, 'NULL') FROM permissions
 """
 
 CHECK_SQL = """
@@ -73,6 +75,24 @@ SELECT 'inventory_total=' || (SELECT count(*) FROM permissions WHERE code LIKE '
             JOIN permissions p ON p.id = rp.permission_id
            WHERE rp.role_id = 3 AND p.code LIKE 'order:%');
 """
+
+META_SQL = """
+SELECT code || '|' || name || '|' || COALESCE(path, '')
+  FROM permissions
+ WHERE code IN ('order:list', 'order:detail')
+ ORDER BY code;
+"""
+
+# ★ 期望值表 —— 这是「对着设计断言」，不是「对着库的现状断言」。
+#   两个条目都是被错过的历史遗留：
+#     · order:list   的 path 曾指向 C 端端点 '/api/orders'（03-data.sql 的原值）
+#     · order:detail 的 name/path 曾是 order:list 的副本（照抄没改）
+#   之所以值得加断言：这类错误的形态是「不报错、不少列、不影响鉴权」
+#   （@PreAuthorize 认的是 code），只会让后来者按 path 去找端点时找错地方。
+EXPECT_META = {
+    "order:detail": ("管理端订单详情", "/api/admin/orders/*"),
+    "order:list":   ("订单列表",       "/api/admin/orders"),
+}
 
 lines = []
 say = lines.append
@@ -192,10 +212,27 @@ rc, out, err = psql(CROSSCHECK_SQL)
 for ln in out.splitlines():
     say("      %s" % ln)
 
+say("")
+say("[9] ★ 元数据订正核对 —— name / path 必须与 code 自洽")
+say("      （本栏是本轮新加的：错误指向不报错、不少列、不影响鉴权，只误导后来者）")
+rc9, out, err = psql(META_SQL)
+meta_rows = {}
+for ln in out.splitlines():
+    if "|" in ln:
+        c, n, p = ln.split("|", 2)
+        meta_rows[c] = (n, p)
+        say("      %-14s name=%-14s path=%s" % (c, n, p))
+meta_ok = (rc9 == 0)
+for c, (en, ep) in sorted(EXPECT_META.items()):
+    got = meta_rows.get(c)
+    good = (got == (en, ep))
+    meta_ok = meta_ok and good
+    say("      [%s] %s  期望 name=%s / path=%s" % ("PASS" if good else "FAIL", c, en, ep))
+
 # ---------- 小结尾 ----------
 say("")
 say("=" * 74)
-ok = (rc == 0) and (rc2 == 0) and not changes2
+ok = (rc == 0) and (rc2 == 0) and not changes2 and meta_ok
 say("VERDICT: %s" % ("OK —— 权限已补发且幂等" if ok else "FAIL —— 见上文"))
 say("=" * 74)
 
