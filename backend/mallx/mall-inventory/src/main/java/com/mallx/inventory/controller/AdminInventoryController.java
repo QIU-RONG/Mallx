@@ -112,9 +112,8 @@ public class AdminInventoryController {
     @PostMapping("/skus/{skuId}/adjust")
     public Result<Void> adjust(@PathVariable Long skuId,
                               @RequestBody @Valid InventoryAdjustDTO dto) {
-        // TODO(你写): inventoryService.adjust(skuId, dto.getDelta(), dto.getReason());
-        //             return Result.ok();
-        throw new UnsupportedOperationException("TODO: AdminInventoryController.adjust");
+        inventoryService.adjust(skuId, dto.getDelta(), dto.getReason());
+        return Result.ok();
     }
 
     /**

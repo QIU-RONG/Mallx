@@ -135,7 +135,14 @@
            null = 守卫不成立（0 行，RETURNING 空手而归）。
     -->
     <select id="adjustStock" resultType="java.lang.Integer" flushCache="true" useCache="false">
-        TODO
+        UPDATE inventories
+           SET total_stock     = total_stock     + #{delta},
+               available_stock = available_stock + #{delta},
+               updated_at      = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND total_stock     + #{delta} &gt;= 0
+           AND available_stock + #{delta} &gt;= 0
+        RETURNING available_stock
     </select>
 
     <!--

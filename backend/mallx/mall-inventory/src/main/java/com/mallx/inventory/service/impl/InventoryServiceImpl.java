@@ -226,8 +226,14 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     @Transactional
     public void adjust(Long skuId, int delta, String reason) {
-        // TODO(你写): 按上面 ①②③④ 五步实现（⑤ 是返回类型，不用写代码）。
-        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.adjust");
+        if (delta == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "调整量不能为 0");
+        }
+        Integer after = inventoryMapper.adjustStock(skuId, delta);
+        if (after == null) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "调整后可用/总库存不能为负");
+        }
+        writeLog(skuId, InventoryLogType.ADMIN_ADJUST, delta, after, null);
     }
 
     /**
