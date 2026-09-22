@@ -1,0 +1,47 @@
+==========================================================================
+Day 17 骨架门禁 —— 路由 + 权限矩阵前两层
+==========================================================================
+应用可达: 是（等待 4.4s，探测 /api/hello）
+
+[1] 登录
+      demo   : OK
+      admin  : OK
+
+[2] 6 端点 × 3 身份
+
+  GET    /api/admin/orders
+      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
+      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
+      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
+
+  GET    /api/admin/orders/1
+      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
+      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
+      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
+
+  POST   /api/admin/orders/1/cancel
+      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
+      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
+      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
+
+  GET    /api/admin/inventory/skus
+      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
+      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
+      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
+
+  GET    /api/admin/inventory/logs
+      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
+      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
+      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
+
+  POST   /api/admin/inventory/skus/1/adjust
+      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
+      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
+      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
+
+==========================================================================
+VERDICT: OK
+  路由 6/6 生效；匿名全 401、C 端全 403 —— 权限矩阵前两层成立。
+  超管侧落在 500：那是骨架期方法体 TODO 的 throw，属【预期】。
+  填完逻辑后，超管侧应变成 200 / 400（不再是 500）。
+==========================================================================

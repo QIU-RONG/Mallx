@@ -1,0 +1,49 @@
+==========================================================================
+模块 mall-order
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.order.mapper.OrderMapper
+             <select id=selectAddressForOrder>
+             <select id=selectSelectedCartItems>
+             <delete id=deleteSelectedCartItems>
+             <update id=markPaid>
+             <update id=cancelOrder>
+             <select id=selectTimeoutOrderIds>
+             <update id=shipOrder>
+             <update id=confirmReceipt>
+     ★ TODO <select id=selectAdminOrders>
+
+  本日新增 statement：
+     ✅ selectAdminOrders
+
+  Java 声明 9 个 / XML statement 9 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-inventory
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.inventory.mapper.InventoryMapper
+             <select id=deductStock>
+             <select id=moveLockedToSold>
+             <select id=releaseLocked>
+     ★ TODO <select id=adjustStock>
+     ★ TODO <select id=selectInventoryPage>
+
+  本日新增 statement：
+     ✅ adjustStock
+     ✅ selectInventoryPage
+
+  Java 声明 5 个 / XML statement 5 个
+     ✅ 双向一致
+
+==========================================================================
+小结
+==========================================================================
+  XML 良构              : 2 / 2
+  本日新增 statement    : 3 个，缺失 0 个
+  SQL 仍停在 TODO       : 3 条
+      · mall-order#selectAdminOrders
+      · mall-inventory#adjustStock
+      · mall-inventory#selectInventoryPage
+  → 骨架期正常。全部填完后本栏应为 0 —— 只要非 0，那些接口必然 500。
+  Java 有 / XML 无      : 0 个 
+  XML 有 / Java 无      : 0 个 
