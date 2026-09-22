@@ -277,8 +277,20 @@ public class InventoryServiceImpl implements InventoryService {
      */
     @Override
     public PageResult<InventoryLogVO> listLogs(Long skuId, String type, long page, long size) {
-        // TODO(你写): 按上面 ①②③④ 四步实现。
-        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.listLogs");
+        // ① 夹紧 —— 必须在 new Page<>() 之前（size<0 会查全表、size=0 会返空列表）
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        // ② 空串归一化为 null：否则 type="" 会拼出 type = '' → 恒不匹配（且不报错）
+        String safeType = (type == null || type.isBlank()) ? null : type;
+        // ③ 条件版 eq：第一个参数为 false 时整个条件不拼进 SQL（可选过滤的正统写法）
+        IPage<InventoryLog> result = inventoryLogMapper.selectPage(
+                new Page<>(safePage, safeSize),
+                new LambdaQueryWrapper<InventoryLog>()
+                        .eq(skuId != null, InventoryLog::getSkuId, skuId)
+                        .eq(safeType != null, InventoryLog::getType, safeType)
+                        .orderByDesc(InventoryLog::getId));
+        // ④ 实体 → VO（流水只增不改，出参白名单与实体同形，但仍显式转一遍）
+        return PageResult.of(result.convert(this::toLogVO));
     }
 
     /**
@@ -289,8 +301,15 @@ public class InventoryServiceImpl implements InventoryService {
      * 「实体可以出接口」这个先例一旦开了，表加一列出参就跟着变。
      */
     private InventoryLogVO toLogVO(InventoryLog log) {
-        // TODO(你写): 8 个字段一一搬（id / skuId / type / changeQuantity /
-        //   beforeStock / afterStock / referenceId / createdAt）。
-        throw new UnsupportedOperationException("TODO: InventoryServiceImpl.toLogVO");
+        InventoryLogVO vo = new InventoryLogVO();
+        vo.setId(log.getId());
+        vo.setSkuId(log.getSkuId());
+        vo.setType(log.getType());
+        vo.setChangeQuantity(log.getChangeQuantity());
+        vo.setBeforeStock(log.getBeforeStock());
+        vo.setAfterStock(log.getAfterStock());
+        vo.setReferenceId(log.getReferenceId());
+        vo.setCreatedAt(log.getCreatedAt());
+        return vo;
     }
 }

@@ -136,7 +136,6 @@ public class AdminInventoryController {
                                                        @RequestParam(required = false) String type,
                                                        @RequestParam(defaultValue = "1") long page,
                                                        @RequestParam(defaultValue = "10") long size) {
-        // TODO(你写): return Result.ok(inventoryService.listLogs(skuId, type, page, size));
-        throw new UnsupportedOperationException("TODO: AdminInventoryController.listLogs");
+        return Result.ok(inventoryService.listLogs(skuId, type, page, size));
     }
 }
