@@ -5,8 +5,8 @@ Day 17 链路 C -- 管理端取消订单（POST /api/admin/orders/{id}/cancel）
 本链路只有 2 行业务代码，但它是本日【唯一复用回补链路】的一条：
 
     cancel(userId, orderId)    : requireOwn(404) -> CAS -> 回补库存 + 写流水
-    cancelByAdmin(orderId)     : （跳过归属）    -> CAS -> 回补库存 + 写流水
-                                  ^^^^^^^^^^ 唯一差别
+    cancelByAdmin(orderId)     : selectById(404) -> CAS -> 回补库存 + 写流水
+                                  ^^^^^^^^^^^^^^^ 换成存在性检查（不做归属校验）
 
 所以验收的重点不是「能不能取消」，而是：
 
@@ -370,12 +370,30 @@ def main():
             say("\n[11] (库里没有 PAID 单 —— 跳过)")
 
         # ------------------------------------------------------ [12] 边界
-        say("\n[12] 边界：不存在的 id / 非数字 id（★ 这一栏只报实测，不预设答案）")
+        say("\n[12] ★ 边界：不存在的 id / 非数字 id（设计已定案 —— 本栏现在是【断言】，不再只报实测）")
         st, b, raw = japi("POST", "/api/admin/orders/99999999/cancel", token=op_t)
         say("  POST /api/admin/orders/99999999/cancel -> http=%s code=%s message=%s"
             % (st, b.get("code"), b.get("message")))
-        say("     C 端同一场景给的是 404（requireOwn 顺手挡的）；管理端【跳过了归属】，")
-        say("     所以这里给什么，取决于有没有单独做存在性检查。")
+        say("     ★ 这里曾经是 500「订单明细缺失」：C 端的 requireOwn 顺手把「不存在」挡成了 404，")
+        say("       管理端跳过归属之后，连存在性检查也一并丢了，于是走到 cancelOne 里查明细为空。")
+        say("       但 500 的语义是「服务端错了」，而「你要取消的单不存在」是客户端错误。")
+        say("       现已补回：selectById -> null -> 404（与 detailByAdmin 同款）。")
+        chk("★ 不存在的 id -> code=404「订单不存在」（不是 500、也不是 400）",
+            st == 200 and b.get("code") == 404 and b.get("message") == "订单不存在",
+            "实际 http=%s code=%s message=%s" % (st, b.get("code"), b.get("message")))
+        chk("★ 不是 400 —— 证明存在性检查排在 CAS【之前】（顺序写反就会先被 CAS 挡成 400，"
+            "把「找不到」说成「状态不对」）",
+            b.get("code") != 400, "实际 code=%s" % b.get("code"))
+
+        # 同一 id 走【详情】端点，作为同源对照：
+        # 两个端点面对「同一个不存在的资源」必须给出同一个答案。
+        st_d, b_d, _ = japi("GET", "/api/admin/orders/99999999", token=op_t)
+        say("  GET  /api/admin/orders/99999999 (详情)   -> http=%s code=%s message=%s"
+            % (st_d, b_d.get("code"), b_d.get("message")))
+        chk("★ 同 id 的【详情】端点同为 404 —— 取消与详情对「不存在」的口径一致",
+            st_d == 200 and b_d.get("code") == 404 and b_d.get("message") == "订单不存在",
+            "实际 http=%s code=%s message=%s" % (st_d, b_d.get("code"), b_d.get("message")))
+
         st, b, _ = japi("POST", "/api/admin/orders/abc/cancel", token=op_t)
         say("  POST /api/admin/orders/abc/cancel        -> http=%s code=%s message=%s"
             % (st, b.get("code"), b.get("message")))

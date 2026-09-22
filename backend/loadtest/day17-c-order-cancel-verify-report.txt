@@ -23,10 +23,10 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
 
 [4] 造一张待支付单 A（demo 下单：available -1 / locked +1）
     购物车里没有 sku4 -> POST /api/cart
-  新订单 id = 9050
+  新订单 id = 9052
   psql: {'status': 'PENDING_PAYMENT', 'cancelled_at': 'NULL', 'paid_at': 'NULL'}
   下单后            sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
-  流水：84|4|ORDER_LOCK|-1|147|146|NULL
+  流水：115|4|ORDER_LOCK|-1|147|146|NULL
 
 [5] ★ op_order(ORDER_ADMIN, id=2) 取消订单 A
     注意 op_order.id=2 与订单属主 demo.userId=1 【不相等】——
@@ -34,15 +34,15 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
   http=200 code=200 message=success data=null
 
 [6] DB 对账：订单状态（不信接口自报）
-  psql: {'status': 'CANCELLED', 'cancelled_at': '2026-09-22 20:36:51.301237', 'paid_at': 'NULL'}
+  psql: {'status': 'CANCELLED', 'cancelled_at': '2026-09-22 21:46:05.139362', 'paid_at': 'NULL'}
 
 [7] ★★ 库存回补：releaseLocked 与 deductStock 严格互逆
   取消后            sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
   vs 基线：available +0  locked +0  sold +0
 
 [8] ★★ 流水口径：CANCEL_RELEASE / change=+n / reference_id=orderId
-  本次新增流水：84|4|ORDER_LOCK|-1|147|146|NULL  ;  85|4|CANCEL_RELEASE|1|146|147|9050
-  该条：sku=4 change=1 before=146 after=147 ref=9050
+  本次新增流水：115|4|ORDER_LOCK|-1|147|146|NULL  ;  116|4|CANCEL_RELEASE|1|146|147|9052
+  该条：sku=4 change=1 before=146 after=147 ref=9052
   ★ 账本自洽：本次 Σ(change) = 0   （下单 -1 与取消 +1 相抵）
 
 [9] ★ 重复取消同一单（这就是端点用 POST 不用 PUT 的原因）
@@ -50,23 +50,26 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
 
 [10] 造单 B，改由 admin(SUPER_ADMIN) 取消 —— 两个管理身份都必须能取消
     购物车里没有 sku4 -> POST /api/cart
-  新订单 id = 9051
+  新订单 id = 9053
   admin 取消 http=200 code=200 -> status=CANCELLED
 
 [11] ★ 取消已支付单 #1 —— 本日边界的显式声明（不做退款）
   http=200 code=400 message=订单状态不允许取消
   该单前后：{'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-19 15:05:21.106577'} -> {'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-19 15:05:21.106577'}
 
-[12] 边界：不存在的 id / 非数字 id（★ 这一栏只报实测，不预设答案）
-  POST /api/admin/orders/99999999/cancel -> http=200 code=500 message=订单明细缺失
-     C 端同一场景给的是 404（requireOwn 顺手挡的）；管理端【跳过了归属】，
-     所以这里给什么，取决于有没有单独做存在性检查。
+[12] ★ 边界：不存在的 id / 非数字 id（设计已定案 —— 本栏现在是【断言】，不再只报实测）
+  POST /api/admin/orders/99999999/cancel -> http=200 code=404 message=订单不存在
+     ★ 这里曾经是 500「订单明细缺失」：C 端的 requireOwn 顺手把「不存在」挡成了 404，
+       管理端跳过归属之后，连存在性检查也一并丢了，于是走到 cancelOne 里查明细为空。
+       但 500 的语义是「服务端错了」，而「你要取消的单不存在」是客户端错误。
+       现已补回：selectById -> null -> 404（与 detailByAdmin 同款）。
+  GET  /api/admin/orders/99999999 (详情)   -> http=200 code=404 message=订单不存在
   POST /api/admin/orders/abc/cancel        -> http=200 code=400 message=参数 id 格式不正确
 
 ==============================================================================
 [13] CLEANUP —— 删掉本次造的单据与流水，库存 SET 回基线
 ==============================================================================
-  要删的订单：[9050, 9051]
+  要删的订单：[9052, 9053]
   要删的流水：id > 0
 
 [14] VERIFY —— 回到基线（这是留给 day17-m1-regression.py 的前提）
@@ -111,6 +114,9 @@ ASSERTIONS
   [PASS] PAID 单被 CAS 挡成 400
   [PASS] PAID 单原封不动（状态与时间戳都没变）
   [PASS] 库存未因此变化
+  [PASS] ★ 不存在的 id -> code=404「订单不存在」（不是 500、也不是 400）
+  [PASS] ★ 不是 400 —— 证明存在性检查排在 CAS【之前】（顺序写反就会先被 CAS 挡成 400，把「找不到」说成「状态不对」）
+  [PASS] ★ 同 id 的【详情】端点同为 404 —— 取消与详情对「不存在」的口径一致
   [PASS] /abc -> code=400（路径变量类型不匹配）
   [PASS] 清理执行无 SQL 错误
   [PASS] cart_items 回到基线
@@ -120,5 +126,5 @@ ASSERTIONS
   [PASS] payments 回到基线
   [PASS] 7 个 SKU 库存逐字节回到基线
 
-RESULT: 39/39 passed
+RESULT: 42/42 passed
 VERDICT: CANCEL-BY-ADMIN OK -- 回补同源、流水口径正确、权限矩阵成立
