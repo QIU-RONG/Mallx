@@ -10,13 +10,13 @@
              <select id=selectTimeoutOrderIds>
              <update id=shipOrder>
              <update id=confirmReceipt>
-     ★ TODO <select id=selectAdminOrders>
+             <select id=selectAdminOrders>
 
   本日新增 statement：
      ✅ selectAdminOrders
 
-  Java 声明 9 个 / XML statement 9 个
-     ✅ 双向一致
+  Java 声明 10 个 / XML statement 9 个
+     ⚠️ Java 有、XML 无（调用必 Invalid bound statement）：selectDetailByAdmin
 
 ==========================================================================
 模块 mall-inventory
@@ -40,10 +40,9 @@
 ==========================================================================
   XML 良构              : 2 / 2
   本日新增 statement    : 3 个，缺失 0 个
-  SQL 仍停在 TODO       : 3 条
-      · mall-order#selectAdminOrders
+  SQL 仍停在 TODO       : 2 条
       · mall-inventory#adjustStock
       · mall-inventory#selectInventoryPage
   → 骨架期正常。全部填完后本栏应为 0 —— 只要非 0，那些接口必然 500。
-  Java 有 / XML 无      : 0 个 
+  Java 有 / XML 无      : 1 个 ['mall-order#selectDetailByAdmin']
   XML 有 / Java 无      : 0 个 

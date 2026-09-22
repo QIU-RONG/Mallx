@@ -216,7 +216,21 @@
         · ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里【不用写】LIMIT/OFFSET
     -->
     <select id="selectAdminOrders" resultType="com.mallx.order.vo.AdminOrderVO">
-        TODO
+        SELECT o.id AS id, o.user_id AS user_id, COALESCE(u.nickname, '用户****') AS user_nickname, o.total_amount AS total_amount,
+               o.pay_amount AS pay_amount, o.receiver_name AS receiver_name, o.receiver_phone AS receiver_phone,
+               o.status AS status, o.order_no AS order_no,
+               o.created_at AS created_at
+          FROM orders o
+          LEFT JOIN users u ON u.id = o.user_id
+          WHERE 1 = 1
+        <if test="status != null and status != ''">
+            AND o.status = #{status}
+        </if>
+        <if test="userId != null">
+            AND o.user_id = #{userId}
+        </if>
+        ORDER BY o.id DESC
+
     </select>
 
 </mapper>

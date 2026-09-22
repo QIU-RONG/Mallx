@@ -97,8 +97,7 @@ public class AdminOrderController {
                                                  @RequestParam(required = false) Long userId,
                                                  @RequestParam(defaultValue = "1") long page,
                                                  @RequestParam(defaultValue = "10") long size) {
-        // TODO(你写): return Result.ok(orderService.listAllOrders(status, userId, page, size));
-        throw new UnsupportedOperationException("TODO: AdminOrderController.list");
+        return Result.ok(orderService.listAllOrders(status, userId, page, size));
     }
 
     /**

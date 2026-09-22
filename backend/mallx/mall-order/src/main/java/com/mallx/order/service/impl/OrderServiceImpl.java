@@ -415,13 +415,36 @@ public class OrderServiceImpl implements OrderService {
      * 本方法不需要任何转换：{@code selectAdminOrders} 返回的<b>本来就是</b>
      * {@code IPage<AdminOrderVO>} —— 转换发生在 SQL 的别名映射里。
      *
-     * <p>★ 本方法<b>没有 {@code userId} 参数</b>（当前登录用户是谁与本查询无关）：
-     * 「能不能调」由 Controller 的 {@code @PreAuthorize("hasAuthority('order:list')")} 保证。
+     * <p>★★ 本方法的 {@code userId} 参数是<b>筛选条件</b>（「我只看某个买家的单」），
+     * <b>不是权限边界</b> —— 与「当前登录用户是谁」毫无关系。
+     * <pre>
+     *   不传 userId  → 看全站（这是【正确行为】，管理员本就有权看全部）
+     *   传了 userId  → 只是把范围收窄到某个买家
+     * </pre>
+     * ⚠️ 千万别把两者混在一起，否则会演变成
+     * 「不传 userId = 超级权限」这种把授权塞进筛选参数的设计事故。
+     * <b>「能不能调」由 Controller 的 {@code @PreAuthorize("hasAuthority('order:list')")} 保证，
+     * 与传不传 userId 无关。</b>
      */
     @Override
     public PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size) {
-        // TODO(你写): 按上面 ①②③④ 四步实现（import 已备好：IPage / Page / AdminOrderVO）。
-        throw new UnsupportedOperationException("TODO: OrderServiceImpl.listAllOrders");
+        // ① 夹紧分页 —— ★ 必须在 new Page 之前：构造进去的值就是最终发给 DB 的值
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        // ② 归一化空串 —— 空串 = 用户没筛（第一道语义定义；XML 里的 != '' 是第二道保险）
+        //    ⚠️ userId 不用归一化：它是 Long，空值天然是 null
+        String safeStatus = (status == null || status.isBlank()) ? null : status;
+
+        // ③ ★ 首参必须传 IPage，否则分页插件不改写 SQL（不报错，静默查全表）
+        //    ★ 此处【故意】不传「当前登录用户的 id」—— XML 里没有归属条件，
+        //      那一行的缺席就是「数据权限反转」本身
+        IPage<AdminOrderVO> result =
+                orderMapper.selectAdminOrders(new Page<>(safePage, safeSize), safeStatus, userId);
+
+        // ④ 不需要转换：selectAdminOrders 返回的本来就是 IPage<AdminOrderVO>
+        //    （转换发生在 SQL 别名 -> VO 字段的映射里，不像 listMyOrders 还要 result.convert）
+        return PageResult.of(result);
     }
 
     /**
