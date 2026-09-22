@@ -16,6 +16,7 @@ import com.mallx.order.mapper.OrderItemMapper;
 import com.mallx.order.mapper.OrderMapper;
 import com.mallx.order.service.OrderService;
 import com.mallx.order.vo.AddressForOrderVO;
+import com.mallx.order.vo.AdminOrderVO;
 import com.mallx.order.vo.OrderDetailVO;
 import com.mallx.order.vo.OrderItemSourceVO;
 import com.mallx.order.vo.OrderItemVO;
@@ -383,6 +384,111 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public OrderItemBuyContext getBuyContext(Long userId, Long orderItemId) {
         return orderItemMapper.selectBuyContext(userId,orderItemId);
+    }
+
+    // ============== 管理端（Day 17 · 数据权限反转） ==============
+
+    /**
+     * ★★★ 管理端订单列表 —— <b>骨架</b>，方法体由你写。
+     *
+     * <p>只有四步，但第 ① 步的<b>位置</b>是唯一容易写错的地方：
+     * <pre>
+     *   ① 夹紧分页（★ 必须在 new Page 之前，与 listMyOrders 逐字同款）：
+     *        long safePage = Math.max(page, 1);
+     *        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+     *   ② 归一化空串过滤条件：
+     *        String safeStatus = (status == null || status.isBlank()) ? null : status;
+     *      ★ 这是【第一道】语义定义：空串 = 用户没筛。
+     *        XML 里那个 != '' 判断是第二道保险，不是替代品 ——
+     *        「空串非法」这个语义应该在 Java 侧定死，SQL 只负责执行。
+     *      ⚠️ userId 不用归一化：它是 Long，空值天然是 null（字符串参数才有空串问题）。
+     *   ③ IPage&lt;AdminOrderVO&gt; result =
+     *        orderMapper.selectAdminOrders(new Page&lt;&gt;(safePage, safeSize), safeStatus, userId);
+     *      ★ 首参必须传 IPage，否则分页插件不改写 SQL（不报错，静默查全表）
+     *      ★ XML 里【没有归属条件】—— 那一行的缺席就是「数据权限反转」本身
+     *   ④ return PageResult.of(result);
+     * </pre>
+     *
+     * <p>★★ 注意别去找 {@code PageResult.convert} —— <b>它不存在</b>。
+     * {@code convert} 是 {@link IPage} 上的方法（{@code listMyOrders} 用的就是它），
+     * 而 {@code PageResult} 只有 {@code of(IPage)}。
+     * 本方法不需要任何转换：{@code selectAdminOrders} 返回的<b>本来就是</b>
+     * {@code IPage<AdminOrderVO>} —— 转换发生在 SQL 的别名映射里。
+     *
+     * <p>★ 本方法<b>没有 {@code userId} 参数</b>（当前登录用户是谁与本查询无关）：
+     * 「能不能调」由 Controller 的 {@code @PreAuthorize("hasAuthority('order:list')")} 保证。
+     */
+    @Override
+    public PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size) {
+        // TODO(你写): 按上面 ①②③④ 四步实现（import 已备好：IPage / Page / AdminOrderVO）。
+        throw new UnsupportedOperationException("TODO: OrderServiceImpl.listAllOrders");
+    }
+
+    /**
+     * ★★ 管理端订单详情 —— <b>骨架</b>，方法体由你写。
+     *
+     * <p>步骤（与下面的 {@code detail} <b>只差第一步</b>）：
+     * <pre>
+     *   ① Order order = orderMapper.selectById(orderId);
+     *        order == null → BusinessException(ResultCode.NOT_FOUND.getCode(), "订单不存在")
+     *      ★★ 这里【不调 requireOwn】—— 管理员有权看任何订单。
+     *      ★★ 但【也不要抄 requireOwn 的调用】：
+     *         本方法没有 userId 参数。真正危险的不是「抄过来编译不过」（那算幸运），
+     *         而是「为了让它编译过，顺手从 token 里取个 userId 传进去」——
+     *         那等于把管理端详情<b>悄悄降级回</b> C 端详情（不是你的单 → 404），
+     *         而且测试如果只用 admin（超管）跑，永远发现不了。
+     *   ② 明细：orderItemMapper.selectList(按 orderId、id 升序) —— 与 detail 同款
+     *   ③ 装配 OrderDetailVO（14 个字段 + items）
+     * </pre>
+     *
+     * <p>★ 关于 ③：<b>建议把 {@code detail} 里的 ②③ 抽成一个私有方法
+     * {@code buildDetail(Order order)}</b>，让 {@code detail} 与 {@code detailByAdmin} 共用 ——
+     * 两份一模一样的装配代码，早晚会分叉（比如某天给详情加个字段，只改了一处）。
+     * ⚠️ 这会动到已经验收过的 {@code detail}（<b>纯搬移，不改逻辑</b>）——
+     * 回归由 {@code day16-review-e2e.py} 的 75 项保住，改完记得重跑它。
+     *
+     * <p>★ 404 的<b>性质</b>与 C 端不同：C 端的 404 是<b>伪装</b>（「不是你的」与「不存在」
+     * 不可区分，防 id 枚举）；本方法的 404 是<b>事实</b>（这个 id 真的没有订单）。
+     * 路径不同、消息可以相同。
+     */
+    @Override
+    public OrderDetailVO detailByAdmin(Long orderId) {
+        // TODO(你写): 按上面 ①②③ 实现；③ 建议与 detail 共用私有方法 buildDetail(Order)。
+        throw new UnsupportedOperationException("TODO: OrderServiceImpl.detailByAdmin");
+    }
+
+    /**
+     * ★★★ 管理端取消订单 —— <b>骨架</b>，方法体由你写。
+     *
+     * <p>本方法应当短到只有两行 —— 短本身就是设计目标：
+     * <pre>
+     *   ① （没有 requireOwn —— 这是与 cancel 的【唯一】差别）
+     *   ② if (!cancelExecutor.cancelOne(orderId)) {
+     *          throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
+     *      }
+     * </pre>
+     *
+     * <p>★★ 第 ② 步与 {@link #cancel(Long, Long)} 的第 ② 步<b>逐字相同</b>。
+     * 这不是巧合，而是「复用同一段回补代码」在代码上的<b>落地形态</b>：
+     * 两个入口都调 {@code cancelExecutor.cancelOne(orderId)}，
+     * 于是「CAS 抢资格 → 按 skuId 升序回补库存 → 写 CANCEL_RELEASE 流水」那一整段
+     * 全项目只有<b>一份</b>。
+     *
+     * <p>★ 若在这里自己写一遍 CAS + 回补（哪怕逻辑看起来完全一样），
+     * Day 14 建立的库存对账口径就开始有两份真相了 ——
+     * 分叉之后对账脚本会报「账目不一致」，而错误会指向库存模块。
+     *
+     * <p>⚠️ {@code @Transactional} 必须保留（已写好）：{@code cancelOne} 是 REQUIRED 传播，
+     * 会加入本方法的事务，所以「改订单状态 + 回补 N 个 SKU + 写 N 条流水」是一个原子操作。
+     *
+     * <p>⚠️ 本方法<b>不做退款</b>：PAID 单会被 {@code cancelOne} 的 CAS 挡成 400。
+     * 这是本日边界的显式声明，不是缺陷（详见接口上的 Javadoc）。
+     */
+    @Override
+    @Transactional
+    public void cancelByAdmin(Long orderId) {
+        // TODO(你写): 只写第 ② 步（一行 if + 一行 throw），第 ① 步「故意缺席」。
+        throw new UnsupportedOperationException("TODO: OrderServiceImpl.cancelByAdmin");
     }
 
     // ============================ 查询（Day 12 第 4 步） ============================

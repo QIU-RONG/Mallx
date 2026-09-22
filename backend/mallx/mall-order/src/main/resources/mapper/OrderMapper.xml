@@ -186,4 +186,37 @@
            AND status = 'SHIPPED'
     </update>
 
+    <!--
+      ★★★ ⑧ Day 17 的核心 SQL：管理端订单列表（★★ 数据权限反转的第一条查询）
+
+      要求见 OrderMapper.java#selectAdminOrders 与
+      docs/daily/Day-17-管理端订单与库存.md §3.1。要点：
+
+        · ★★ FROM orders o LEFT JOIN users u ON u.id = o.user_id
+          JOIN users 是【只读跨表查询】，不是模块依赖（与本文件 JOIN
+          user_addresses / cart_items 同一性质）。
+        · ★★ 归属条件【不存在】：这里【没有】AND o.user_id = #{userId}。
+          防线不在 SQL 里，而在 Controller 的 @PreAuthorize 权限码上。
+          ⚠️ 这是一个「允许发生」的缺席，不是一个「忘了写」的缺席 ——
+             若给本语句补上归属条件，管理端就再也看不到别人的单，功能直接失效；
+             若把权限码摘掉，它就从管理端接口退化成「任何登录用户能拉全站订单」。
+             两头都是承重结构，改动前请先读 §0.2。
+        · 可选的 status 过滤：test="status != null and status != ''"
+          （只判 != null 时，?status= 空串会拼出 AND o.status = '' → 静默 0 行）
+        · 可选的 userId 过滤：★ 这是【筛选条件】，不是权限边界 ——
+          运营想看「某个买家的单」时用它，有没有它都不影响「谁能调这个接口」。
+        · 显式列 + 别名【全用下划线】：o.user_id AS user_id、
+          COALESCE(u.nickname, '用户****') AS user_nickname、
+          o.total_amount AS total_amount、o.pay_amount AS pay_amount、
+          o.receiver_name AS receiver_name、o.receiver_phone AS receiver_phone、
+          o.created_at AS created_at。
+          ⚠️ 别名写成 AS userNickname 会被 PG 折成 usernickname，字段静默为 null 且不报错。
+          ⚠️ 昵称可空必须 COALESCE —— 裸 NULL 会让前端多一条「判断空」的分支。
+        · ORDER BY o.id DESC（不带排序的分页 = 随机翻页）
+        · ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里【不用写】LIMIT/OFFSET
+    -->
+    <select id="selectAdminOrders" resultType="com.mallx.order.vo.AdminOrderVO">
+        TODO
+    </select>
+
 </mapper>

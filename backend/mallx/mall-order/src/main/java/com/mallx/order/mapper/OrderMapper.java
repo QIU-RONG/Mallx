@@ -1,8 +1,10 @@
 package com.mallx.order.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.mallx.order.entity.Order;
 import com.mallx.order.vo.AddressForOrderVO;
+import com.mallx.order.vo.AdminOrderVO;
 import com.mallx.order.vo.OrderItemSourceVO;
 import org.apache.ibatis.annotations.Param;
 
@@ -16,9 +18,13 @@ import java.util.List;
  *
  * <p>⚠️ 铁律：这里声明的每个方法，{@code OrderMapper.xml} 里必须有【方法名逐字符一致】的
  * 同名标签，否则 MyBatis 启动时不报错、一调用就 {@code Invalid bound statement}。
- * 现有七个（都在 XML 里）：
+ * 现有九个（都在 XML 里）：
  * {@code selectAddressForOrder} / {@code selectSelectedCartItems} / {@code deleteSelectedCartItems}
- * / {@code markPaid} / {@code cancelOrder} / {@code shipOrder} / {@code confirmReceipt}。
+ * / {@code markPaid} / {@code cancelOrder} / {@code selectTimeoutOrderIds} / {@code shipOrder}
+ * / {@code confirmReceipt} / {@code selectAdminOrders}。
+ * （★ 本行原先写「现有七个」而只列了七个名字，漏掉了 {@code selectTimeoutOrderIds} ——
+ *   Day 17 顺手订正。计数类注释最容易说谎，说谎的注释比没有注释更坏：
+ *   下一个人会照着它去数，然后以为「就这么多」。）
  *
  * <p>★ {@code markPaid} 与 {@code cancelOrder} 是「同一条边的两个方向」：都是
  * {@code WHERE status = 'PENDING_PAYMENT'}，一个走向 {@code PAID}、一个走向 {@code CANCELLED}。
@@ -176,4 +182,66 @@ public interface OrderMapper extends BaseMapper<Order> {
      * @return 影响行数：1 = 抢到了；0 = 订单不存在 / 已被别人确认过 / 状态不是 {@code SHIPPED}
      */
     int confirmReceipt(@Param("orderId") Long orderId);
+
+    /**
+     * ★★★ 管理端订单列表（Day 17）—— 全站订单分页，★★ <b>不带归属过滤</b>。
+     *
+     * <p>这是本项目的<b>第一个「数据权限反转」的查询</b>。读懂它与
+     * {@code OrderServiceImpl.listMyOrders} 的差别，本日的核心概念就拿到手了：
+     * <pre>
+     *   C 端    listMyOrders       WHERE o.user_id = #{userId}   ← 归属过滤写死在 SQL 里
+     *   管理端  selectAdminOrders  （没有这一条）                ← 防线换成了 @PreAuthorize 权限码
+     * </pre>
+     *
+     * <p>★★ 为什么是<b>两条独立的 SQL</b>，而不是给 {@code listMyOrders} 加一个
+     * {@code boolean all} 开关：
+     * <ol>
+     *   <li><b>开关一旦被外部可控，一个布尔值就废掉整条越权防线。</b>
+     *       今天它只是 Service 的私有参数，明天有人加个
+     *       {@code @RequestParam(defaultValue="false") boolean all} 就全线失守 ——
+     *       而这行改动看起来人畜无害；</li>
+     *   <li>两条路径共用一段 SQL，任何一次改动都要同时思考两种语义。
+     *       某天有人为修 C 端分页在 SQL 里加了个条件，管理端跟着变了 —— 没人会想到；</li>
+     *   <li>它把「权限边界」降级成了「一个变量」。<b>权限边界应该是结构，不是值。</b></li>
+     * </ol>
+     * → 把差别<b>沉到 SQL 文本里</b>，而不是沉到一个布尔值里。
+     *
+     * <p>★ {@code userId} 在两个接口里的身份<b>完全不同</b>，这是最容易糊掉的一点：
+     * <pre>
+     *   C 端的 userId        来源 = token（客户端连传的机会都没有）
+     *                        作用 = 权限边界 —— 拿掉它就泄露
+     *   管理端的 userId 条件 来源 = 可选的查询条件（运营想看某人的单）
+     *                        作用 = 纯粹的筛选 —— 有没有它都不影响「谁能调这个接口」
+     * </pre>
+     *
+     * <p>★ 两个可选条件都走 {@code <if>} 拼（{@code status} / {@code userId}）——
+     * 传 null 就是不筛，绝不拼出 {@code AND status = null} 这种永远不成立的条件。
+     * ⚠️ XML 里判字符串要写 {@code test="status != null and status != ''"}：
+     * 只判 {@code != null} 时，前端传 {@code ?status=}（空串）会拼出
+     * {@code AND o.status = ''} → 一行都查不出来，而且<b>不报错</b>。
+     *
+     * <p>★ 要 {@code LEFT JOIN users} 取买家昵称。这里的 JOIN 是<b>只读跨表查询</b>，
+     * 不是模块依赖 —— 与本文件 JOIN {@code user_addresses} / {@code cart_items} 同一性质。
+     * 昵称可空 → 必须 {@code COALESCE(u.nickname, '用户****')}，
+     * 与 {@code ReviewMapper} 用同一个兜底串（前端不用认两种写法）。
+     *
+     * <p>★ 排序 {@code ORDER BY o.id DESC}：不带排序的分页 = 随机翻页。
+     * 用 id 而不是 created_at，是因为管理端要「最新下单的排最前」，
+     * 而 id 单调递增、没有同毫秒并列的翻页重排问题。
+     *
+     * <p>★★ <b>首参必须是 {@code IPage}</b>：MyBatis-Plus 的
+     * {@code PaginationInnerInterceptor} 靠「方法参数里有没有 IPage」决定是否改写 SQL
+     * 加 {@code LIMIT/OFFSET} 并跑 count —— 少了它<b>不报错，只是静默查全表</b>。
+     * （分页参数由 Service 夹紧后构造，★ 夹紧必须写在 {@code new Page<>(...)} 之前。）
+     *
+     * <p>⚠️ 列别名一律用<b>下划线</b>：{@code AS userNickname} 会被 PG 折成
+     * {@code usernickname} → 字段静默为 null 且不报错。
+     *
+     * @param page   分页参数（由 Service 夹紧后构造）
+     * @param status 可选的订单状态过滤（null / 空串 = 不筛）
+     * @param userId 可选的买家过滤（null = 不筛。★ 这是<b>筛选条件</b>，不是权限边界）
+     */
+    IPage<AdminOrderVO> selectAdminOrders(IPage<AdminOrderVO> page,
+                                          @Param("status") String status,
+                                          @Param("userId") Long userId);
 }
