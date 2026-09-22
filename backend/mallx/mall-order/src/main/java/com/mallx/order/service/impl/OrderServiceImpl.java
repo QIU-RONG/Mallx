@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -476,8 +477,11 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     public OrderDetailVO detailByAdmin(Long orderId) {
-        // TODO(你写): 按上面 ①②③ 实现；③ 建议与 detail 共用私有方法 buildDetail(Order)。
-        throw new UnsupportedOperationException("TODO: OrderServiceImpl.detailByAdmin");
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        return buildDetail(order);
     }
 
     /**
@@ -565,12 +569,10 @@ public class OrderServiceImpl implements OrderService {
     @Override
     public OrderDetailVO detail(Long userId, Long orderId) {
         Order order = requireOwn(userId, orderId);
+        return buildDetail(order);
+    }
 
-        List<OrderItem> items = orderItemMapper.selectList(
-                new LambdaQueryWrapper<OrderItem>()
-                        .eq(OrderItem::getOrderId, orderId)
-                        .orderByAsc(OrderItem::getId));
-
+    private OrderDetailVO buildDetail(Order order) {
         OrderDetailVO vo = new OrderDetailVO();
         vo.setId(order.getId());
         vo.setOrderNo(order.getOrderNo());
@@ -585,6 +587,11 @@ public class OrderServiceImpl implements OrderService {
         vo.setShippedAt(order.getShippedAt());
         vo.setCompletedAt(order.getCompletedAt());
         vo.setCancelledAt(order.getCancelledAt());
+        List<OrderItem> items = orderItemMapper.selectList(
+                new LambdaQueryWrapper<OrderItem>()
+                        .eq(OrderItem::getOrderId, order.getId())
+                        .orderByAsc(OrderItem::getId));
+
         vo.setItems(items.stream().map(this::toItemVO).toList());
         return vo;
     }

@@ -118,8 +118,7 @@ public class AdminOrderController {
     @PreAuthorize("hasAuthority('order:detail')")
     @GetMapping("/{id}")
     public Result<OrderDetailVO> detail(@PathVariable Long id) {
-        // TODO(你写): return Result.ok(orderService.detailByAdmin(id));
-        throw new UnsupportedOperationException("TODO: AdminOrderController.detail");
+        return Result.ok(orderService.detailByAdmin(id));
     }
 
     /**
