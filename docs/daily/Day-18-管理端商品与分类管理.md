@@ -110,6 +110,43 @@ productMapper.selectCount(new LambdaQueryWrapper<Product>().eq(Product::getCateg
 
 ★ 405 与 404 的区别就是「路径还在、方法没了」—— 这正是「迁移完成」的断言。
 
+#### ★ 实测更正：405 差点出不来（2026-09-23 真实缺陷）
+
+链路 C 第一次跑，三条迁移断言**全红**——`POST /api/products` 返回的是
+**HTTP 200 + `{"code":500,"message":"fail"}`**，而不是 405。
+
+原因在 `GlobalExceptionHandler`：
+
+```java
+@ExceptionHandler(Exception.class)          // ← 什么都接的兜底
+public Result<Void> handleException(Exception e){
+    log.error("系统异常", e);
+    return Result.error(ResultCode.FAIL);   // ⇒ HTTP 200 + code=500
+}
+```
+
+`HttpRequestMethodNotSupportedException` 也是 Exception 的子类，没有更具体的
+handler，于是被这条兜底吃掉。后果有两个，都不轻：
+
+1. **「调用方用错方法」被误报成「服务端故障」**，还白打一条 ERROR 堆栈，排障方向被带偏；
+2. **405 与「路径根本不存在」无法区分** —— 实测 `POST /api/nonexistent` 同样是
+   `200 + code=500`，迁移断言失去全部分辨力。
+
+⇒ 修复（新增一个更具体的 handler，Spring 会优先选它）：
+
+```java
+@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+@ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+public Result<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException e){ ... }
+```
+
+修完实测：`http=405` + `{"code":405,"message":"请求方法不支持，支持的方法：[GET]"}`。
+
+★ **判据（可复用）**：本项目「HTTP 200 + body.code」的约定只覆盖
+**业务结果**（请求合法、业务不同意）。**协议层拒绝**（401/403/405）必须给真实状态码，
+否则「客户端的错」与「服务端的错」在日志和响应里长得一模一样。
+§6.5 的教训在这条上再来一次：**同一个 handler 的粒度，决定了两类错误的可见性**。
+
 ### 6.4 ★★ `@Valid` 跑在 `@PreAuthorize` 之前（Day 18 冒烟实测）
 
 给 `POST /api/products` 发一个**缺 `name` 的 body**，再分别用 C 端 token / 管理员 token 去打，
@@ -178,14 +215,43 @@ POST /api/products  admin(超管)  HTTP 200  {"code":200,"message":"success","da
    而 C 端列表却按 `status=1` 过滤 —— 同一个端的两条路口径不一致。
    本日管理端正好复用它（管理端本就要能看下架），但 C 端那条路建议排到后续 Day 处理。
 
+### 6.7 ★★ 骨架门禁脚本必须有「骨架期护栏」（2026-09-23 事故）
+
+`day18-skeleton-smoke.py` 第 2 节会真的调用 `POST/PUT/DELETE`。
+骨架期零写入，是因为方法体是 `throw`；**实现填完之后再跑它，它就变成破坏性脚本**：
+
+```
+实测（实现已填完时误跑一次）：
+  POST   /api/admin/products     → data=31        ← 真新建了商品
+  PUT    /api/admin/products/1   → 200            ← 改了种子商品 1
+  DELETE /api/admin/products/1   → 200            ← 【软删了种子商品 1】
+  POST   /api/admin/categories   → data=36 / 37   ← 真新建了分类
+  PUT    /api/admin/categories/1 → 200            ← 把分类 1 的 sort_order 改成 99
+```
+
+修复分两步：① 数据层面按种子 SQL 逐字段还原（商品 1 的 `subtitle` 与
+`is_deleted`、分类 1 的 `sort_order`，并物理删掉 id=31 / 36 / 37）；
+② **给脚本加护栏** —— 开跑前扫描源码里还剩几处 `UnsupportedOperationException`，
+
+```python
+_throws = skeleton_remaining()
+if _throws == 0:      # 骨架期已过 → 立刻停，一个写端点都不许打
+    ...; raise SystemExit(0)
+```
+
+⇒ **判据：任何「靠异常/占位来保持无害」的探测脚本，都要把「前提是否还成立」
+写成可执行检查。** 前提一旦消失，脚本的语义会翻转，而它自己不会告诉你。
+
 ## 七、验收清单（写脚本时逐条落成断言）
 
-- [ ] A：`07` 幂等；`category:*` 恰好 4 条；id 14–17 无空洞；role 1/2 均已授权；`product:*` 的 path 已订正为管理端。
-- [ ] B：管理员分页能**看到下架商品**（C 端分页看不到同一条）；`status=0` 过滤生效；`size<1` 夹紧到 1；`size>100` 夹到 100；下架商品详情仍可读；无权限账号（`op_order`）打 `product:list` → **403**；匿名 → **401**。
-- [ ] C：新增 → 改 → 上下架 → 软删 全链路；`sku_code` 撞库回滚（商品主表不残留半成品）；删后 `products.is_deleted=1` 且 SKU 行**原封不动**；**迁移三段证据**（匿名 401 / C 端 token 405 / 管理员 token 405）。
-- [ ] D：树结构两层、`sort_order` 升序、无权限 403、匿名 401。
-- [ ] E：新增分类（顶级 + 二级）；**三级分类被拒**；父分类不存在 → 404/400；改分类名生效；**删有子分类的 → 400**；**删有商品的 → 400（含「商品已软删也照样拒绝」）**；无引用 → 物理删成功（DB 核行数 0）。
-- [ ] F：M1 回归 `198/198` + 逐字节回基线；全链路脚本可重复执行。
+> 以下六条**已全部跑通**（2026-09-23），逐条落成了断言。
+
+- [x] **A**：`07` 幂等；`category:*` 恰好 4 条；id 14–17 无空洞；role 1/2 均已授权；`product:*` 的 path 已订正为管理端。（`day18-perm-apply.py` → VERDICT OK）
+- [x] **B**：管理员分页**能看到下架商品**（C 端看不到同一条）；`status=0` 过滤生效；`size<1` 夹紧到 1；`size>100` 夹到 100；下架商品详情仍可读；`op_order` 打 `product:list` → **403**；匿名 → **401**。（**51/51**）
+- [x] **C**：新增 → 改 → 上下架 → 软删 全链路；`sku_code` 撞库回滚（主表不残留半成品）；删后 `is_deleted=1` 且 SKU 行原封不动；**迁移证据**（匿名 401 / C 端 token 405 / 超管 405，GET 仍 200）。（**42/42**）
+- [x] **D**：树两层、`sort_order` 升序、无权限 403、匿名 401、`op_product` 与超管树**逐字节相同**、C 端树红线仍 200。（**16/16**）
+- [x] **E**：新增顶级 + 二级；**三级被拒 400**；父不存在 → 404；改名生效；**`parentId=null` = 不动**；**有子分类 → 400**；**有商品 → 400**；★★ **商品已软删也拒绝**；无引用 → 物理删成功（DB 行数 0）。（**40/40**）
+- [x] **F**：M1 回归 **198/198** + 逐字节回基线（`BASELINE RESTORED: YES`）；B/C/D/E 四脚本均可重复执行。
 
 ## 八、风险与注意
 
