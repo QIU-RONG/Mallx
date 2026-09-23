@@ -80,10 +80,11 @@ public class AdminProductController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer status) {
-        // TODO(你写)：
-        //   1) 页码/页大小夹紧（照抄 C 端 page() 的写法：夹紧一律写在 new Page<>() 之前）
-        //   2) Page<ProductVO> voPage = productService.pageAdminProducts(current, size, categoryId, keyword, status);
-        //   3) return Result.ok(PageResult.of(voPage));
+        // TODO(你写)：一行转发即可 ——
+        //   ★ 页码/页大小夹紧【不在这层】做：它在 Service（pageAdminProducts）里，
+        //     与 Day 17 的 AdminInventoryController 同构 —— Controller 只管转，Service 管口径。
+        //   return Result.ok(PageResult.of(
+        //           productService.pageAdminProducts(current, size, categoryId, keyword, status)));
         throw new UnsupportedOperationException("TODO: AdminProductController.page");
     }
 

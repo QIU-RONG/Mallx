@@ -154,6 +154,30 @@ POST /api/products  admin(超管)  HTTP 200  {"code":200,"message":"success","da
 事故残留用 `day18-cleanup-probe.py` 清理（先查子行引用，无引用才物理删；
 本机实测 id=22 无任何子行，删后复查 0 行，种子 5 商品完好）。
 
+### 6.6 夹紧放在哪一层：Service（本日订正了一处骨架缺陷）
+
+骨架最初把「页码/页大小夹紧」写在 `AdminProductController.page` 的 TODO 里，并让它
+「照抄 C 端 `page()` 的写法」—— 但 **C 端 `page()` 根本没有夹紧**（`ProductServiceImpl.pageProducts`
+直接 `new Page<>(current, size)`）。照抄一个不存在的写法，只会让人来回找。
+
+订正结果（与 Day 17 / mall-order / mall-inventory 同层）：
+
+| 层 | 职责 | 依据 |
+|---|---|---|
+| `AdminProductController.page` | **一行转发** | 同 `AdminInventoryController`，Controller 只管转 |
+| `ProductServiceImpl.pageAdminProducts` | 夹紧 + 条件查询 + 换壳 | `MAX_PAGE_SIZE = 100`，夹紧必须在 `new Page<>()` 之前 |
+
+★ `MAX_PAGE_SIZE` 在本项目已是**第 5 份拷贝**（order / inventory×2 / review / product），
+各处留注释互相指明，仍不抽 `mall-common`（那是一次跨模块重构，与本步无关）。
+
+**顺带发现的两条既有遗留（本日只记录，不修）**：
+
+1. C 端 `page()` / `pageProducts` **无夹紧** ⇒ `size<0` 会查全表、`size=0` 返空列表。
+   属 Day 09-11 口径，被 M1 回归覆盖着，改它要单独评估影响面。
+2. C 端 `getDetail` **不判 status** ⇒ 匿名也能读到「已下架」商品的详情，
+   而 C 端列表却按 `status=1` 过滤 —— 同一个端的两条路口径不一致。
+   本日管理端正好复用它（管理端本就要能看下架），但 C 端那条路建议排到后续 Day 处理。
+
 ## 七、验收清单（写脚本时逐条落成断言）
 
 - [ ] A：`07` 幂等；`category:*` 恰好 4 条；id 14–17 无空洞；role 1/2 均已授权；`product:*` 的 path 已订正为管理端。

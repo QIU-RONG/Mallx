@@ -20,6 +20,10 @@ public interface ProductService extends IService<Product> {
      *   管理端：status 是可选条件；不传 = 上架 + 下架都要
      * </pre>
      * ★ 所以不要另写一套查询实现，把「过滤」变成参数即可（实现里复用 fillNames 补名字）。
+     * <p>
+     * ★ <b>分页夹紧在本方法内完成</b>（同 {@code mall-order} / {@code mall-inventory} 的规矩）：
+     * {@code current} 归一到 ≥1、{@code size} 落在 1..100，且<b>必须写在 {@code new Page<>(...)} 之前</b>。
+     * Controller 只做转发，不重复夹紧 —— 同一条规则只在一层表达。
      *
      * @param status 1=上架 0=下架；★ 必须是包装类型 Integer —— 只有 null 才表达得出「不过滤」
      */

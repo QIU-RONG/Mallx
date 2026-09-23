@@ -37,6 +37,19 @@ import java.util.Set;
 @Service
 public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> implements ProductService {
 
+    /**
+     * 分页上限：单页最多 100 条 —— 与 {@code OrderServiceImpl} / {@code InventoryServiceImpl} /
+     * {@code ReviewServiceImpl} 同一个值、同一套夹紧规则（本处是第 5 份拷贝）。
+     *
+     * <p>★ 仍不抽到 {@code mall-common}：那是一次跨模块重构，与本步无关；
+     * 各处留一份、注释互相指明，等真有需要时再抽。
+     *
+     * <p>★ 夹紧只对本日新增的 {@code pageAdminProducts} 生效。
+     * C 端 {@code pageProducts}（Day 09-11）<b>没有夹紧</b> —— 属于已知遗留，
+     * 本日不动它：那条路被 M1 回归覆盖着，改口径要单独评估。
+     */
+    private static final long MAX_PAGE_SIZE = 100;
+
     /** 关联表无业务规则，直接注入 Mapper */
     private final CategoryMapper categoryMapper;
     private final BrandMapper brandMapper;
@@ -80,16 +93,27 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public Page<ProductVO> pageAdminProducts(long current, long size, Long categoryId,
                                              String keyword, Integer status) {
-        // TODO(你写) pageAdminProducts —— 与上面的 pageProducts 只差【一行过滤口径】：
-        //     C 端    ：.eq(Product::getStatus, 1)                          // 写死：只看上架
-        //     管理端  ：.eq(status != null, Product::getStatus, status)      // 条件：不传就全都要
-        //   其余整段照抄 pageProducts：
-        //     · .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
-        //     · .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
-        //     · .orderByDesc(Product::getId)
-        //     · this.page(new Page<>(current, size), wrapper)
-        //     · BeanUtils.copyProperties 逐个搬进 ProductVO，再 fillNames(voList, records)
-        //     · 最后换壳 new Page<>(page.getCurrent(), page.getSize(), page.getTotal())
+        // TODO(你写) pageAdminProducts —— 与 Day 17 的 InventoryServiceImpl.listSkus 同构，三步：
+        //
+        //   ① 夹紧（★ 必须在 new Page<>() 之前，同 mall-order / mall-inventory 的规矩）：
+        //        long safePage = Math.max(current, 1);
+        //        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        //      · size=0 → MP 返回【空列表】（total 正常，但看起来像"没数据"）
+        //      · size<0 → MP 【不执行分页、查全表】
+        //      · size>100 → 没有上限，MP 照做（所以 MAX_PAGE_SIZE 必须自己截）
+        //
+        //   ② 条件查询：与上面的 pageProducts 只差【一行过滤口径】——
+        //        C 端    ：.eq(Product::getStatus, 1)                         // 写死：只看上架
+        //        管理端  ：.eq(status != null, Product::getStatus, status)     // 条件：不传就全都要
+        //      其余整段照抄 pageProducts（用 safePage / safeSize）：
+        //        · .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
+        //        · .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
+        //        · .orderByDesc(Product::getId)
+        //        · this.page(new Page<>(safePage, safeSize), wrapper)
+        //
+        //   ③ 换壳：BeanUtils.copyProperties 逐个搬进 ProductVO → fillNames(voList, records)
+        //      → new Page<>(page.getCurrent(), page.getSize(), page.getTotal()) 再 setRecords
+        //      （★ total/current/size 必须搬过去，否则前端看到 total=0）
         //
         //   ★ status 是 Integer 而不是 int —— 只有 null 才表达得出「不过滤」。
         //     写成 int 的话方法签名就强制调用方给值，「不传」这条路直接被堵死。
