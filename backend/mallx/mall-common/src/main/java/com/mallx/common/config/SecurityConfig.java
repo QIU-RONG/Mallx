@@ -49,6 +49,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/login", "/api/auth/admin/login","/api/hello","/error").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
+                // ★ Day 20：优惠券「可领列表」公开。注意这里是【精确路径】，不是 "/api/coupons/**" ——
+                //   通配会把 /api/coupons/my（我的券）一起公开，而白名单只认「路径 + 方法」，
+                //   不认「同一个 Controller 里的不同方法」⇒ 会【静默公开】别人的券。
+                //   精确路径只放行 /api/coupons 本身，/api/coupons/my 照样被 anyRequest() 兜住。
+                .requestMatchers(HttpMethod.GET, "/api/coupons").permitAll()
                 .anyRequest().authenticated()
             )
             // ⑤ 认证失败返回 401、授权失败返回 403，统一 JSON（一次配全，别拆成两次调用）

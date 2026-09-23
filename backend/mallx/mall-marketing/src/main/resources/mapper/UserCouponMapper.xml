@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.marketing.mapper.UserCouponMapper">
+
+    <!--
+      ★★★ Day 20 用户优惠券 SQL（2 条，骨架期留 TODO，由你写）
+
+      通用规矩见 CouponMapper.xml 顶部那段，同样适用：
+        · 方法名与 id 逐字符一致
+        · 别名一律下划线
+        · XML 注释里不能出现连续两个减号
+        · 自定义 XML 的 INSERT 不走 MetaObjectHandler → 时间戳手写
+    -->
+
+    <!--
+      ① 写领取记录 —— 与 Day 16 的 ReviewMapper.xml#insertReview 逐字同构
+      要求见 UserCouponMapper.java#insertIgnore。
+
+      形状：
+          INSERT INTO user_coupons (user_id, coupon_id, status, received_at)
+          VALUES (#{userId}, #{couponId}, 'UNUSED', ______)      ← 时间戳手写
+          ______                                                  ← 关键那一句
+
+      ★ 最后那句必须让「重复领取」不报错、而是【返回 0 行】——
+        这就是它和 Day 16 评价的对应关系：
+            Day 16：ON CONFLICT (order_item_id) DO NOTHING   → 0 行 = 该明细已评过
+            Day 20：ON CONFLICT (______)        DO NOTHING   → 0 行 = 已领过这张券
+        ★ 冲突列写什么，取决于 09-user-coupons-unique.sql 建了哪个唯一约束。
+          写错了 → 直接报 "there is no unique or exclusion constraint matching
+          the ON CONFLICT specification"（不是静默降级）。
+
+      ⚠️ status 写死 'UNUSED' 字面量。⚠️ received_at 用 CURRENT_TIMESTAMP。
+    -->
+    <insert id="insertIgnore">
+        TODO: 见 docs/daily/Day-20-优惠券.md §4.2 与 UserCouponMapper.java#insertIgnore
+    </insert>
+
+    <!--
+      ② 我的券列表（需登录，分页）
+      要求见 UserCouponMapper.java#selectMyCoupons。
+
+      ★ 两表 JOIN：user_coupons uc JOIN coupons c ON c.id = uc.coupon_id
+        LEFT 还是 INNER —— 自己选，并把理由写进注释（javadoc 里给了提示）。
+
+      SELECT 要出的列（与 UserCouponVO 一一对应）：
+          uc.id / uc.coupon_id / c.name AS coupon_name / c.type
+          / c.discount_amount / c.discount_rate / c.min_amount
+          / uc.status / uc.received_at / uc.used_at / uc.order_id
+          / c.end_time
+          / ______ AS expired        ← 现算的布尔列：券是否已过期
+
+      WHERE uc.user_id = #{userId}   ← ★ C 端隔离的唯一防线，写死在这里
+      ORDER BY uc.id DESC
+
+      ★ expired 的算法：把 c.end_time 与 CURRENT_TIMESTAMP 比较得出布尔值。
+        PG 直接写比较表达式即可，它会返回 boolean；
+        这个值【不落库】—— 这就是「惰性过期」，验收会拿 DB 里的 status 仍是 UNUSED 来反证。
+      ★ 别名用下划线；不写 LIMIT。
+    -->
+    <select id="selectMyCoupons" resultType="com.mallx.marketing.vo.UserCouponVO">
+        TODO: 见 docs/daily/Day-20-优惠券.md §4.3 与 UserCouponMapper.java#selectMyCoupons
+    </select>
+
+</mapper>

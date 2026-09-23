@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mallx.marketing.mapper.CouponMapper">
+
+    <!--
+      ★★★ Day 20 优惠券 SQL（2 条，骨架期留 TODO，由你写）
+
+      通用规矩（与全项目一致，逐条都踩过）：
+        · 方法名与 id 必须【逐字符一致】，否则调用时报 Invalid bound statement，编译不报错
+        · 列名显式列出，禁止 p.* 这种写法（显式列 = 出参白名单）
+        · 别名一律用【下划线】：AS discount_amount 而不是 AS discountAmount
+          （真正理由：下划线是唯一在 map-underscore-to-camel-case 开关两态下都成立的写法）
+        · XML 注释里不能出现连续两个减号 → SAXParseException，编译通过、启动才炸
+        · 分页 SQL 里不写 LIMIT：分页插件靠首参 IPage 改写 SQL，自己写会双重分页
+    -->
+
+    <!--
+      ① 领券：条件 UPDATE（CAS）—— 本日核心，也是最短的一条
+      要求见 CouponMapper.java#increaseReceivedCount 与 docs/daily/Day-20-优惠券.md §4.1。
+
+      形状（结构给你，条件你自己列）：
+          UPDATE coupons
+             SET received_count = ______          ← 加法必须由 DB 做
+           WHERE id = #{couponId}
+             AND ______   ← 守卫一：券得是可领状态
+             AND ______   ← 守卫二：已到开始时间
+             AND ______   ← 守卫三：未过结束时间
+             AND ______   ← 守卫四：还有余量  ★ 防超发的全部
+
+      ★ 时间比较用 CURRENT_TIMESTAMP（SQL 侧），不要传 Java 的 now() 进来。
+      ★ 用 <update> + int 返回值。不要包 RETURNING —— 那会把它变成 <select>，
+        还得额外加 flushCache="true"（Day 17 的坑）。
+      ★ 四条守卫缺一条都不报错，只是「多发了券」或「该领的领不到」—— 全靠你写对。
+    -->
+    <update id="increaseReceivedCount">
+        TODO: 见 docs/daily/Day-20-优惠券.md §4.1 与 CouponMapper.java#increaseReceivedCount
+    </update>
+
+    <!--
+      ② C 端可领券列表（公开接口，分页）
+      要求见 CouponMapper.java#selectAvailableCoupons。
+
+      ★★ 筛选条件与上面 ① 的四条守卫【逐字对应】——
+         列表里展示得出来的，就是领得到的。两边写岔了 = 用户体验坏掉但不报错。
+
+      SELECT 要出的列（与 CouponVO 一一对应）：
+          id / name / type / discount_amount / discount_rate / min_amount
+          / total_count / received_count / start_time / end_time / status
+        ★ 别名全部写成下划线形式。
+
+      WHERE 四条件（自己写）：
+          status = 1
+          AND start_time <= CURRENT_TIMESTAMP
+          AND end_time   >= CURRENT_TIMESTAMP
+          AND received_count < total_count      ← 抢光的就不展示了
+
+      ORDER BY id DESC      ← 不带排序的分页 = 随机翻页
+      ★ 不写 LIMIT；首参 IPage 由 Java 侧传。
+    -->
+    <select id="selectAvailableCoupons" resultType="com.mallx.marketing.vo.CouponVO">
+        TODO: 见 docs/daily/Day-20-优惠券.md §5.1 与 CouponMapper.java#selectAvailableCoupons
+    </select>
+
+</mapper>
