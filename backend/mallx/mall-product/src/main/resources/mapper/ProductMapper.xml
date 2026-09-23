@@ -12,7 +12,7 @@
         后果链条：漏算 → 删除分类的引用校验以为该分类空着 → 物理删分类 →
         紧接着撞 fk_product_category（NO ACTION）→ 现场 500。
 
-      ★ 判据（本日最值钱的一条）：引用计数的口径必须与【外键的口径】一致。
+      ★ 判据（Day 18 最值钱的一条）：引用计数的口径必须与【外键的口径】一致。
         外键不认识 is_deleted，计数就不能带它。
         手写 XML 的 SELECT 不走 MP 的 @TableLogic 改写，这正是我们要的效果。
 
@@ -21,6 +21,62 @@
     -->
     <select id="countByCategoryId" resultType="java.lang.Long">
         SELECT count(*) FROM products WHERE category_id = #{categoryId}
+    </select>
+
+    <!--
+      searchProducts：C 端商品搜索（Day 19）—— ★ 骨架期占位实现，真正的 SQL 由你写。
+
+      要求见 ProductMapper.java#searchProducts，七条要点见 docs/daily/Day-19-商品搜索.md §五。
+      下面把该踩的坑集中列一遍，写 SQL 时逐条对照：
+
+        · 表别名统一 p（products）、c（categories）；★ 别名一律下划线形式：
+              p.main_image AS main_image、c.name AS category_name
+          ⚠️ 写成 AS mainImage 会被 PG 折成 mainimage，字段静默为 null 且不报错。
+
+        · ★★ FROM products p LEFT JOIN categories c ON c.id = p.category_id
+          用 LEFT JOIN 而不是 INNER JOIN：分类被删掉时商品不该从结果里消失
+          （与 InventoryMapper 的取径一致）。
+
+        · ★★ WHERE 里【必须自己写】 p.is_deleted = 0 与 p.status = 1 ——
+          手写 XML 不受 @TableLogic 管辖，漏了就静默搜出已删/下架商品。
+
+        · keyword 的召回（空串表示不限，XML 里用 <if test="keyword != ''"> 包住整段）：
+              全文按词命中 + 相关性：
+                  p.search_vector @@ plainto_tsquery('simple', #{keyword})
+              中文/子串兜底（★ 没有索引，会全表扫，这是第一版有意的取舍）：
+                  OR p.name ILIKE '%' || #{keyword} || '%'
+                  OR p.subtitle ILIKE '%' || #{keyword} || '%'
+          ⚠️ 用 plainto_tsquery 而不是 to_tsquery：前者把用户输入当纯文本，
+             后者把 & | ! 当语法，遇到 "iphone &" 会抛 syntax error in tsquery。
+
+        · categoryId 过滤：<if test="categoryId != null"> AND p.category_id = #{categoryId} </if>
+
+        · attrKey / attrValue（★ 成对，Service 已保证；XML 判 attrKey != null 即可）：
+              AND EXISTS (SELECT 1 FROM product_skus s
+                           WHERE s.product_id = p.id
+                             AND s.is_deleted = 0 AND s.status = 1
+                             AND s.attributes @> jsonb_build_object(#{attrKey}, #{attrValue}))
+          ⚠️ 必须用 jsonb_build_object 让 PG 自己构造 JSON ——
+             禁止用 '{"' || #{attrKey} || '"...' 拼字符串（注入口 + 转义地狱）。
+          ⚠️ 用 EXISTS 而不是 JOIN product_skus：一个商品有多个 SKU 时
+             JOIN 会产生【重复行】，把分页 total 直接算错。
+
+        · minPrice 子查询（同一商品在售未删 SKU 的最低价）：
+              (SELECT MIN(s2.price) FROM product_skus s2
+                WHERE s2.product_id = p.id AND s2.is_deleted = 0 AND s2.status = 1) AS min_price
+
+        · 相关性列（★ 别名 search_rank，不是 rank —— rank 是 PG 保留字）：
+              ts_rank(p.search_vector, plainto_tsquery('simple', #{keyword})) AS search_rank
+          无关键词时也要能算 ⇒ 用 COALESCE(#{keyword}, '') 或配合 <choose>，
+          ts_rank(v, ''::tsquery) 返回 0，不会报错。
+
+        · ORDER BY search_rank DESC, p.id ASC —— 前者的 0 值退化成按 id 排，
+          顺序稳定（同库存对账视图的思路：刷新两次结果一致）。
+
+        · ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里【不用写】LIMIT/OFFSET。
+    -->
+    <select id="searchProducts" resultType="com.mallx.product.vo.ProductSearchVO">
+        TODO
     </select>
 
 </mapper>

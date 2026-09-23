@@ -1,6 +1,7 @@
 package com.mallx.product.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.mallx.common.api.ResultCode;
@@ -21,6 +22,7 @@ import com.mallx.product.mapper.ProductMapper;
 import com.mallx.product.mapper.ProductSkuMapper;
 import com.mallx.product.service.ProductService;
 import com.mallx.product.vo.ProductDetailVO;
+import com.mallx.product.vo.ProductSearchVO;
 import com.mallx.product.vo.ProductVO;
 import com.mallx.product.vo.SkuVO;
 import org.springframework.beans.BeanUtils;
@@ -120,6 +122,42 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         voPage.setRecords(voList);
         // ★ 返回 voPage 而不是 page：后者是 Page<Product>，类型不对，也没补 categoryName/brandName
         return voPage;
+    }
+
+    /**
+     * ★★★ C 端商品搜索（Day 19）—— <b>骨架</b>，方法体由你写（本日唯一的核心实现）。
+     *
+     * <p>三步，顺序不能换：
+     * <pre>
+     *   ① 归一化 keyword：
+     *        keyword = (keyword == null) ? "" : keyword.trim();
+     *      ★ 归一化必须在这里做完 —— SQL 侧不接受 null，
+     *        理由见 ProductService#searchProducts 的「PG 类型推断」段落。
+     *   ② 成对校验：
+     *        attrKey / attrValue 只有一个非空 →
+     *            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+     *                                        "attrKey 与 attrValue 必须成对出现");
+     *      ★ 两个都为空是【合法】的（= 不做属性筛选），别写成「必须都有值」。
+     *   ③ 夹紧 + 调用（★ 夹紧必须在 new Page 之前）：
+     *        long safePage = Math.max(current, 1);
+     *        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+     *        return baseMapper.searchProducts(new Page&lt;&gt;(safePage, safeSize),
+     *                                         keyword, categoryId, attrKey, attrValue);
+     * </pre>
+     *
+     * <p>★ <b>本方法不需要换壳</b>：与上面两个分页方法不同 ——
+     * 它们要 {@code Page<Product>} → {@code Page<ProductVO>}（{@code this.page()} 只能吐实体）；
+     * 本方法的 XML <b>直接查出 ProductSearchVO</b>，返回的 IPage 拿来就能用。
+     *
+     * <p>★ 不加 {@code @Transactional}：只读单条 SELECT 自身即一致性快照
+     * （判据是「写点个数」，不是「方法重不重要」）。
+     *
+     * <p>★ 不在此处打日志：查询失败由全局异常处理器统一记，同两个分页方法。
+     */
+    @Override
+    public IPage<ProductSearchVO> searchProducts(long current, long size, String keyword,
+                                                 Long categoryId, String attrKey, String attrValue) {
+        throw new UnsupportedOperationException("TODO: ProductServiceImpl.searchProducts");
     }
 
     /**
