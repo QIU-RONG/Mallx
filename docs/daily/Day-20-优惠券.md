@@ -148,6 +148,23 @@ UPDATE coupons
    AND received_count < total_count
 ```
 
+> ⚠️⚠️ **上面是「纯 SQL 形态」，搬进 XML 之前必须转义小于号。**
+> `start_time <= CURRENT_TIMESTAMP` 的 `<` 会被 XML 解析器当成**标签开始**
+> → `ParseError: not well-formed (invalid token)`，**编译能过、启动才炸**。
+>
+> ```xml
+> AND start_time &lt;= CURRENT_TIMESTAMP      ← XML 里必须这么写
+> AND end_time   >= CURRENT_TIMESTAMP       ← 大于号不用转义（XML 合法）
+> ```
+>
+> ★ 项目内先例：`mall-order/OrderMapper.xml:130`
+> （`AND created_at &lt; CURRENT_TIMESTAMP - make_interval(...)`），
+> 它第 123 行那句注释就是 **Day 17 踩过之后留下的**。
+> ⇒ 这是本项目的既有惯例，跟随它。
+>
+> ★ 另一条路是 `<![CDATA[ ... ]]>` 整段包住，但**项目里一处 CDATA 都没有** ——
+> 别引入第二种风格。
+
 | 对应关系 | Day 17 扣库存 | Day 20 领券 |
 |---|---|---|
 | 要动的格子 | `available_stock` | `received_count` |
@@ -184,7 +201,8 @@ DDL 补丁没跑，这条 SQL **直接报 `there is no unique or exclusion const
 
 `user_coupons.status` 有 `UNUSED / USED / EXPIRED` 三个取值，本日**只写 `UNUSED`**。
 
-「已过期」由**查询时计算**得出（`c.end_time < CURRENT_TIMESTAMP`），
+「已过期」由**查询时计算**得出（`c.end_time < CURRENT_TIMESTAMP` ——
+写进 `selectMyCoupons` 的 XML 时记得写成 `&lt;`，见 §4.1），
 **不写回 `EXPIRED`**：
 
 | 方案 | 代价 |
@@ -210,6 +228,8 @@ SELECT id, name, type, discount_amount, discount_rate, min_amount,
    AND received_count < total_count      -- ★ 抢光的就不展示了
  ORDER BY id DESC
 ```
+
+> ⚠️ 本条同样含 `<=` —— XML 里写 `&lt;=`，写法与理由见 §4.1 的说明。
 
 > ★ **列清单以 `CouponMapper.xml` 的注释为准（含 `status`）**。
 > 理由：`CouponVO` 是**管理端与 C 端共用**的，`status` 是管理端区分上架/下架的唯一字段；
