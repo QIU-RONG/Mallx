@@ -157,7 +157,17 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public IPage<ProductSearchVO> searchProducts(long current, long size, String keyword,
                                                  Long categoryId, String attrKey, String attrValue) {
-        throw new UnsupportedOperationException("TODO: ProductServiceImpl.searchProducts");
+        String kw = (keyword == null || keyword.trim().isEmpty()) ? "" : keyword.trim();
+        String key = (attrKey == null || attrKey.isBlank()) ? null : attrKey;
+        String val = (attrValue == null || attrValue.isBlank()) ? null : attrValue;
+        if((key == null) != (val == null)) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    "attrKey 与 attrValue 必须成对出现");
+        }
+        long safePage = Math.max(current, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        return baseMapper.searchProducts(new Page<>(safePage, safeSize),
+                kw, categoryId, key, val);
     }
 
     /**

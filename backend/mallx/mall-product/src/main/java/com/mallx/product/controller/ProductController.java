@@ -86,6 +86,6 @@ public class ProductController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) String attrKey,
             @RequestParam(required = false) String attrValue) {
-        throw new UnsupportedOperationException("TODO: ProductController.search");
+        return Result.ok(PageResult.of(productService.searchProducts(current, size, keyword, categoryId, attrKey, attrValue)));
     }
 }

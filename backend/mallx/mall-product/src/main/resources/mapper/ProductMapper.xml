@@ -76,7 +76,32 @@
         · ★ 首参 IPage 由 Java 侧传（分页插件靠它改写 SQL），XML 里【不用写】LIMIT/OFFSET。
     -->
     <select id="searchProducts" resultType="com.mallx.product.vo.ProductSearchVO">
-        TODO
+        SELECT p.id AS id,
+               p.name AS name,
+               p.subtitle AS subtitle,
+               p.main_image AS main_image,
+               p.category_id AS category_id,
+               c.name AS category_name,
+        (SELECT MIN(s2.price) FROM product_skus s2 WHERE s2.product_id = p.id AND s2.is_deleted = 0 AND s2.status = 1) AS min_price,
+        ts_rank(p.search_vector, plainto_tsquery('simple', #{keyword})) AS search_rank
+        FROM products p
+        LEFT JOIN categories c ON c.id = p.category_id
+        <where>
+            p.is_deleted = 0 AND p.status = 1
+            <if test="keyword != ''"> AND ( p.search_vector @@ plainto_tsquery('simple', #{keyword})
+                OR p.name ILIKE '%' || #{keyword} || '%'
+                OR p.subtitle ILIKE '%' || #{keyword} || '%'
+                )
+            </if>
+            <if test="attrKey != null">
+                AND EXISTS (SELECT 1 FROM product_skus s
+                            WHERE s.product_id = p.id
+                              AND s.is_deleted = 0 AND s.status = 1
+                              AND s.attributes @> jsonb_build_object(#{attrKey}, #{attrValue}))
+            </if>
+            <if test="categoryId != null"> AND p.category_id = #{categoryId} </if>
+        </where>
+        ORDER BY search_rank DESC, p.id ASC
     </select>
 
 </mapper>
