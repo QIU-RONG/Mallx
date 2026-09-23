@@ -1,0 +1,83 @@
+==========================================================================
+Day 20 骨架门禁 —— 路由 + 白名单粒度 + 权限矩阵 + 补丁状态
+==========================================================================
+骨架期确认：mall-marketing 源码中仍有 11 处 UnsupportedOperationException（预期基线 11；写端点不会真写库）
+应用可达: 是（等待 0.3s，探测 /api/hello）
+
+[1] 登录
+      demo(C端)   : OK
+      admin(超管) : OK
+      op_order    : OK
+      op_product  : OK
+
+[2] ★★ C 端三个端点 —— 白名单粒度（本日最重要的一组）
+      判据：匿名能到 Controller ⇒ HTTP 200 且 body.code=500（骨架占位）
+            匿名被拦         ⇒ HTTP 401
+      ✅ 匿名 GET    /api/coupons                   HTTP 200 / body.code=500 期望 HTTP 200 + code=500
+           ★ 精确白名单应放行（HTTP 200）
+      ✅ demo   GET    /api/coupons                   HTTP 200 / body.code=500
+      ✅ 匿名 GET    /api/coupons/my                HTTP 401 期望 401
+           ★★ 必须 401 —— 通配白名单会误伤它
+      ✅ demo   GET    /api/coupons/my                HTTP 200 / body.code=500
+      ✅ 匿名 POST   /api/coupons/1/receive         HTTP 401 期望 401
+           需登录，不在白名单
+      ✅ demo   POST   /api/coupons/1/receive         HTTP 200 / body.code=500
+
+[3] 管理端三个端点 × 五种身份（★ 期望 coupon:* 只发给超管）
+      demo(C端)   → 403（C 端 token 的 perms 是空集）
+      op_order    → 403（★ 反向对照：有 order:*，没有 coupon:*）
+      op_product  → 403（★ 反向对照：营销不是商品岗位的活）
+      admin(超管) → 过权限，落 HTTP 200 + code=500（骨架占位）
+
+  GET    /api/admin/coupons        [coupon:list]
+      ✅ 匿名           HTTP 401 期望 401
+      ✅ demo(C端)     HTTP 403 期望 403
+      ✅ op_order     HTTP 403 期望 403
+      ✅ op_product   HTTP 403 期望 403
+      ✅ admin(超管)    HTTP 200 / body.code=500 期望 200+500
+
+  POST   /api/admin/coupons        [coupon:create]
+      ✅ 匿名           HTTP 401 期望 401
+      ✅ demo(C端)     HTTP 403 期望 403
+      ✅ op_order     HTTP 403 期望 403
+      ✅ op_product   HTTP 403 期望 403
+      ✅ admin(超管)    HTTP 200 / body.code=500 期望 200+500
+
+  DELETE /api/admin/coupons/1      [coupon:delete]
+      ✅ 匿名           HTTP 401 期望 401
+      ✅ demo(C端)     HTTP 403 期望 403
+      ✅ op_order     HTTP 403 期望 403
+      ✅ op_product   HTTP 403 期望 403
+      ✅ admin(超管)    HTTP 200 / body.code=500 期望 200+500
+
+[4] 白名单红线：以下三条【匿名】可读/应拦，全部不能变
+      ✅ 匿名 GET    /api/products?current=1&size=1     HTTP 200  期望 200
+           Day 09-11 的 C 端公开 GET（回归）
+      ✅ 匿名 GET    /api/categories/tree               HTTP 200  期望 200
+           C 端分类树（回归）
+      ✅ 匿名 GET    /api/coupons                       HTTP 200  期望 200
+           ★ Day 20 新增：可领券列表公开
+      ✅ 匿名 GET    /api/coupons/my                    HTTP 401  期望 401
+           ★★ Day 20 新增：我的券【不能】被公开
+
+[5] SQL 补丁是否已应用（只读核对）
+      ✅ user_coupons 唯一约束          = 1   期望 1    [09-user-coupons-unique.sql]
+      ✅ coupon:* 权限条数              = 3   期望 3    [08-marketing-permissions.sql]
+      ✅ role 1（超管）拿到几条             = 3   期望 3    [08-marketing-permissions.sql 第三节①]
+      ✅ role 2（商品管理员）拿到几条          = 0   期望 0    [★ 期望 0 —— 反向对照，不是遗漏]
+      ✅ role 3（订单管理员）拿到几条          = 0   期望 0    [★ 期望 0 —— 反向对照，不是遗漏]
+
+[6] 零写入核对：门禁全程不应改动任何数据
+      coupons        = 0
+      user_coupons   = 0
+      ✅ 两张表都应为 0（门禁零写入）
+
+==========================================================================
+VERDICT: OK
+  路由 6/6 生效（mall-marketing 被扫到了，没有一个 404）
+  ★ 白名单粒度：匿名 /api/coupons = 200，匿名 /api/coupons/my = 401 —— 精确路径成立
+  ★ 权限矩阵前三层成立：匿名 401 / C端与两个业务管理员 403 / 超管过权限落骨架 500
+  ★ 两个 SQL 补丁均已应用（唯一约束 1 条；coupon:* 3 条只发给了超管）
+  → 超管侧落在 code=500：那是骨架期方法体 TODO 的 throw / XML 的 TODO 占位，属【预期】。
+    填完逻辑后，它应变成 200 / 400（不再是 500）。
+==========================================================================

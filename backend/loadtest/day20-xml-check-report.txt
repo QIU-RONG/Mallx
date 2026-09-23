@@ -1,0 +1,101 @@
+==========================================================================
+模块 mall-marketing / CouponMapper（★ Day 20 主角）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.marketing.mapper.CouponMapper
+     ★ TODO <update id=increaseReceivedCount>
+     ★ TODO <select id=selectAvailableCoupons>
+
+  本日新增 statement：
+     ✅ increaseReceivedCount
+     ✅ selectAvailableCoupons
+
+  Java 声明 2 个 / XML statement 2 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-marketing / UserCouponMapper（★ Day 20 主角）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.marketing.mapper.UserCouponMapper
+     ★ TODO <insert id=insertIgnore>
+     ★ TODO <select id=selectMyCoupons>
+
+  本日新增 statement：
+     ✅ insertIgnore
+     ✅ selectMyCoupons
+
+  Java 声明 2 个 / XML statement 2 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-product（Day 19 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.product.mapper.ProductMapper
+             <select id=countByCategoryId>
+             <select id=searchProducts>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 2 个 / XML statement 2 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-order（Day 17 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.order.mapper.OrderMapper
+             <select id=selectAddressForOrder>
+             <select id=selectSelectedCartItems>
+             <delete id=deleteSelectedCartItems>
+             <update id=markPaid>
+             <update id=cancelOrder>
+             <select id=selectTimeoutOrderIds>
+             <update id=shipOrder>
+             <update id=confirmReceipt>
+             <select id=selectAdminOrders>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 9 个 / XML statement 9 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-inventory（Day 17 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.inventory.mapper.InventoryMapper
+             <select id=deductStock>
+             <select id=moveLockedToSold>
+             <select id=releaseLocked>
+             <select id=adjustStock>
+             <select id=selectInventoryPage>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 5 个 / XML statement 5 个
+     ✅ 双向一致
+
+==========================================================================
+小结
+==========================================================================
+  XML 良构              : 5 / 5
+  本日新增 statement    : 4 个，缺失 0 个
+  XML SQL 仍停在 TODO   : 4 条
+      · mall-marketing / CouponMapper（★ Day 20 主角）#increaseReceivedCount
+      · mall-marketing / CouponMapper（★ Day 20 主角）#selectAvailableCoupons
+      · mall-marketing / UserCouponMapper（★ Day 20 主角）#insertIgnore
+      · mall-marketing / UserCouponMapper（★ Day 20 主角）#selectMyCoupons
+  Java 骨架占位         : 11 处（预期基线 11）
+      · AdminCouponController.java:69
+      · AdminCouponController.java:85
+      · AdminCouponController.java:101
+      · CouponController.java:76
+      · CouponController.java:101
+      · CouponController.java:118
+      · CouponServiceImpl.java:105
+      · CouponServiceImpl.java:139
+      · CouponServiceImpl.java:173
+      · CouponServiceImpl.java:241
+      · CouponServiceImpl.java:299
+
+  → 骨架期正常。XML 4 条 + Java 11 处都填完后，本栏合计应为 0，
+    那时才能进「起应用 + 跑 e2e」。只要非 0，被路由到的端点必然 500。
+  Java 有 / XML 无      : 0 个 
+  XML 有 / Java 无      : 0 个 
