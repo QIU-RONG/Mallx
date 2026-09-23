@@ -1,0 +1,68 @@
+==============================================================================
+FILE 08-marketing-permissions.sql   (ON_ERROR_STOP=1)   rc=0
+==============================================================================
+---- stdout ----
+INSERT 0 0
+INSERT 0 0
+ setval 
+--------
+     20
+(1 row)
+
+ id |     code      |    name    |         path         | method 
+----+---------------+------------+----------------------+--------
+ 18 | coupon:list   | 优惠券列表 | /api/admin/coupons   | GET
+ 19 | coupon:create | 新建优惠券 | /api/admin/coupons   | POST
+ 20 | coupon:delete | 删除优惠券 | /api/admin/coupons/* | DELETE
+(3 rows)
+
+   role_code   | perm_count |                                                                                                                                                   perms                                                                                                                                                   
+---------------+------------+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ ORDER_ADMIN   |          4 | order:cancel, order:detail, order:list, order:ship
+ PRODUCT_ADMIN |         12 | category:create, category:delete, category:list, category:update, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+ SUPER_ADMIN   |         20 | category:create, category:delete, category:list, category:update, coupon:create, coupon:delete, coupon:list, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:list
+(3 rows)
+
+ coupon_perms_total | granted_to_super_admin | granted_to_product_admin | granted_to_order_admin 
+--------------------+------------------------+--------------------------+------------------------
+                  3 |                      3 |                        0 |                      0
+(1 row)
+---- stderr ----
+
+
+==============================================================================
+FILE 09-user-coupons-unique.sql   (ON_ERROR_STOP=0)   rc=0
+==============================================================================
+---- stdout ----
+ column_name | is_nullable | data_type 
+-------------+-------------+-----------
+ coupon_id   | NO          | bigint
+ user_id     | NO          | bigint
+(2 rows)
+
+ user_id | coupon_id | dup_rows 
+---------+-----------+----------
+(0 rows)
+
+DO
+           conname           | contype |         definition          
+-----------------------------+---------+-----------------------------
+ uk_user_coupons_user_coupon | u       | UNIQUE (user_id, coupon_id)
+(1 row)
+
+          indexname          |                                                indexdef                                                 
+-----------------------------+---------------------------------------------------------------------------------------------------------
+ idx_user_coupons_coupon_id  | CREATE INDEX idx_user_coupons_coupon_id ON public.user_coupons USING btree (coupon_id)
+ idx_user_coupons_user_id    | CREATE INDEX idx_user_coupons_user_id ON public.user_coupons USING btree (user_id)
+ uk_user_coupons_user_coupon | CREATE UNIQUE INDEX uk_user_coupons_user_coupon ON public.user_coupons USING btree (user_id, coupon_id)
+ user_coupons_pkey           | CREATE UNIQUE INDEX user_coupons_pkey ON public.user_coupons USING btree (id)
+(4 rows)
+
+BEGIN
+INSERT 0 1
+INSERT 0 1
+ROLLBACK
+---- stderr ----
+psql:<stdin>:109: ERROR:  duplicate key value violates unique constraint "uk_user_coupons_user_coupon"
+DETAIL:  Key (user_id, coupon_id)=(1, 999999) already exists.
+
