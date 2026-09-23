@@ -1,94 +1,9 @@
 ==========================================================================
 Day 18 骨架门禁 —— 路由 + 权限矩阵前三层
 ==========================================================================
-应用可达: 是（等待 0.0s，探测 /api/hello）
 
-[1] 登录
-      demo(C端)   : OK
-      admin(超管) : OK
-      op_order    : OK
-      op_product  : OK
-
-[2] 9 端点 × 5 身份
-
-  GET    /api/admin/products
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  GET    /api/admin/products/1
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  POST   /api/admin/products
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  PUT    /api/admin/products/1
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  DELETE /api/admin/products/1
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  GET    /api/admin/categories/tree
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  POST   /api/admin/categories
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  PUT    /api/admin/categories/1
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-  DELETE /api/admin/categories/1
-      ✅ 匿名           HTTP 401  期望 401         {"code":401,"message":"未登录或登录已过期","data":null}
-      ✅ demo(C端)     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_order     HTTP 403  期望 403         {"code":403,"message":"没有权限访问","data":null}
-      ✅ op_product   HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-      ✅ admin(超管)    HTTP 200  期望 NOT-401/403 {"code":500,"message":"fail","data":null}
-
-[3] ★ 白名单红线：C 端两条公开 GET 必须匿名可读（回归）
-      ✅ GET    /api/products?current=1&size=1     匿名 HTTP 200
-      ✅ GET    /api/categories/tree               匿名 HTTP 200
-
-[4] 迁移探测（信息性，不作断言）—— C 端写接口是否已迁走
-      ★ 载荷故意缺 name：迁移前 admin 落在 400(@Valid)，迁移后应变成 405(方法没了)
-      迁移完成后期望：匿名 401 / demo 403 / admin 405
-      POST   /api/products      匿名           HTTP 401  {"code":401,"message":"未登录或登录已过期","data":null}
-      POST   /api/products      demo(C端)     HTTP 200  {"code":400,"message":"名称不能为空","data":null}
-      POST   /api/products      admin(超管)    HTTP 200  {"code":400,"message":"名称不能为空","data":null}
-
-==========================================================================
-VERDICT: OK
-  路由 9/9 生效；匿名全 401、C 端与 op_order 全 403
-  —— 权限矩阵前三层成立。
-  op_product / 超管侧落在 500：那是骨架期方法体 TODO 的 throw，属【预期】。
-  填完逻辑后，这两侧应变成 200 / 400（不再是 500）。
+⛔ 已拒绝执行：源码里已无 UnsupportedOperationException（骨架期已过）。
+   本脚本第 2 节会真的调用 POST/PUT/DELETE —— 实现填完后跑它就是在写库。
+   （2026-09-23 真写过：新建商品 id=31、分类 36/37，并软删了商品 1。）
+   ⇒ 请改跑 day18-b/c/d/e-*-verify.py 与 day17-m1-regression.py。
 ==========================================================================

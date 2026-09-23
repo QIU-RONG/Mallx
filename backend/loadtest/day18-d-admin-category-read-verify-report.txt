@@ -1,0 +1,45 @@
+==============================================================================
+Day 18 链路 D -- 管理端分类读（树 + 权限矩阵）
+target : http://127.0.0.1:8080/api/admin/categories/tree
+==============================================================================
+
+[0] BASELINE (psql)
+  counters: brands=7, categories=7, product_images=4, product_skus=7, products=5
+
+[1] 登录 + 权限矩阵
+  demo        code=200 token_len=191
+  op_order    code=200 token_len=311
+  op_product  code=200 token_len=515
+  admin       code=200 token_len=596
+  匿名       -> http=401 {"code":401,"message":"未登录或登录已过期","data":null}
+  demo       -> http=403 {"code":403,"message":"没有权限访问","data":null}
+  op_order   -> http=403 {"code":403,"message":"没有权限访问","data":null}
+  op_product -> http=200 ；admin -> http=200
+
+[2] 树的结构（DB 对账）
+  顶层 id = [1, 2, 3]
+  children = {1: [11, 12], 2: [21], 3: [31]}
+
+[3] 红线 + 只读性
+
+==============================================================================
+PASS #1 基线：categories == 7
+PASS #2 基线：products 活行 == 5
+PASS #3 四个身份全部登录成功
+PASS #4 匿名读树被拒：真 HTTP 401
+PASS #5 C 端 token（无 perms）→ 403
+PASS #6 ★ op_order（只有 order:*）→ 403（category:* 是新权限，没补发就永远 403）
+PASS #7 op_product 与超管都 200
+PASS #8 ★ op_product 与超管的树【逐字节相同】（同一口径，无数据权限过滤）
+PASS #9 顶层 3 个且 id == 1,2,3（sort_order 升序）
+PASS #10 二级挂载正确：1→[11,12] ；2→[21] ；3→[31]
+PASS #11 二级节点 children == []（两层封顶，不会无限嵌套）
+PASS #12 CategoryVO 字段完整（id/name/parentId/sortOrder 都在）
+PASS #13 ★ 红线：匿名 GET /api/categories/tree 仍 200（白名单没被误伤）
+PASS #14 C 端树与管理端树结构一致（同 3 个顶层）
+PASS #15 只读性：跑完 categories 仍 7
+PASS #16 只读性：products/skus/images/brands 计数全部不变
+------------------------------------------------------------------------------
+16/16 passed
+★ 满额自校验：FULL_TOTAL = 16 ；实得 16 ；一致
+VERDICT: ADMIN-CATEGORY-READ OK

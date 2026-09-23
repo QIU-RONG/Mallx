@@ -1,0 +1,93 @@
+==============================================================================
+Day 18 链路 C -- 管理端商品写（新增/改/上下架/软删）+ C 端写接口迁移证据
+target : http://127.0.0.1:8080/api/admin/products
+accounts: demo(C端,无perms) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin(超管)
+==============================================================================
+
+[0] BASELINE (psql)
+  products 活行=5 全表=5 高水位=5
+  counters: brands=7, cart_items=0, categories=7, inventory_logs=0, order_items=9, orders=8, payments=5, product_images=4, product_skus=7, products=5
+
+[1] 登录四个身份
+  demo        code=200 token_len=191
+  op_order    code=200 token_len=311
+  op_product  code=200 token_len=515
+  admin       code=200 token_len=596
+
+[2] 权限矩阵（写端点 · ★ 一律带合法载荷，否则测到的是 @Valid 不是权限）
+  匿名   POST /api/admin/products -> http=401 {"code":401,"message":"未登录或登录已过期","data":null}
+  demo   POST /api/admin/products -> http=403 code=403
+  op_ord POST /api/admin/products -> http=403 code=403
+
+[3] 新增（op_product —— 有 product:create，反向对照 op_order 的 403）
+  op_pro POST /api/admin/products -> http=200 code=200 {"code":200,"message":"success","data":27}
+  DB 新行: category|brand|name|status = 11|1|FX-WRITE-PRODUCT|1
+  详情 skus=2 images=2
+
+[4] ★ sku_code 撞库 → 整体回滚（不留半成品商品）
+  admin  POST（撞 FX-SKU-A）-> http=200 code=500 {"code":500,"message":"fail","data":null}
+
+[5] 改 + 下架（PUT —— 不单独开上下架端点）
+  admin  PUT /api/admin/products/27 -> http=200 code=200
+  C端 total=5  管理端 total=6
+
+[6] 软删（DELETE —— @TableLogic 改写为 UPDATE is_deleted=1）
+  admin  DELETE /api/admin/products/27 -> http=200 code=200
+
+[7] ★★ C 端写接口迁移证据 —— 405 = 「路径还在、方法没了」
+  匿名   POST /api/products -> http=401
+  demo   POST /api/products -> http=405
+  admin  POST /api/products -> http=405
+  admin  PUT  /api/products/1 -> http=405
+  admin  DEL  /api/products/1 -> http=405
+
+[8] 清理夹具（物理删，按高水位 5）+ 回基线
+  高水位以上残留 products=0 ；活行=5
+
+==============================================================================
+PASS #1 基线：products 活行 == 5
+PASS #2 基线：categories == 7
+PASS #3 基线：种子 5 条商品全部 is_deleted=0（无历史脏行干扰本次计数）
+PASS #4 四个身份全部登录成功
+PASS #5 匿名新增被拒：真 HTTP 401
+PASS #6 ★ C 端 token（无 perms）新增 → 403（不是 400 —— 载荷合法，拦在 @PreAuthorize）
+PASS #7 ★ op_order（只有 order:*）新增 → 403
+PASS #8 匿名改被拒：真 HTTP 401
+PASS #9 op_order 删除 → 403（★ 没真删掉商品 1，见 #41 基线复核）
+PASS #10 匿名删除被拒：真 HTTP 401
+PASS #11 ★ op_product 新增成功：code=200 且返回新 id
+PASS #12 DB：products 活行 +1
+PASS #13 DB：新行字段与提交一致（category=11 / brand=1 / name=FX-WRITE-PRODUCT / status=1）
+PASS #14 DB：2 个 SKU 已落库且编码正确
+PASS #15 DB：2 张图已落库且 sort_order = 数组下标 0,1
+PASS #16 详情回读：skus=2 且 images=2（三张表同一事务都已提交）
+PASS #17 撞库被拒：code != 200
+PASS #18 ★ DB：活行数未变（主表那行也被回滚了，不是『有商品无 SKU』的半成品）
+PASS #19 ★ DB：不存在 name='FX-DUP-SHOULD-ROLLBACK' 的残留行
+PASS #20 DB：sku_code=FX-SKU-A 全库只有 1 行（没有半插入的重复）
+PASS #21 修改成功 code=200
+PASS #22 DB：name 已改为 FX-WRITE-PRODUCT-RENAMED
+PASS #23 DB：status == 0（下架）
+PASS #24 ★ 下架商品：C 端列表看不到（total=5），管理端看得到（total=6）
+PASS #25 管理端详情仍可读到下架商品（不判 status）
+PASS #26 重新上架：code=200 且 DB status 回 1
+PASS #27 删除成功 code=200
+PASS #28 DB：products.is_deleted == 1（软删，不是物理删）
+PASS #29 DB：活行数回落 5
+PASS #30 ★ DB：SKU 行原封不动（软删主表不碰子表）
+PASS #31 管理端分页不再列出（total 回 5）
+PASS #32 匿名 POST /api/products → 401（白名单只放 GET）
+PASS #33 ★ C 端 token POST /api/products → 405
+PASS #34 ★ 超管 POST /api/products → 405（写能力已迁走，管理员也不能走老路）
+PASS #35 超管 PUT /api/products/1 → 405
+PASS #36 超管 DELETE /api/products/1 → 405
+PASS #37 ★ 红线：匿名 GET /api/products 仍 200（白名单没被误伤）
+PASS #38 登录用户 GET /api/products 仍 200
+PASS #39 高水位以上零残留
+PASS #40 活行数回基线 5
+PASS #41 ★ 5 条种子商品逐字节不变
+PASS #42 收尾计数与基线一致（products/skus/images/categories/brands）
+------------------------------------------------------------------------------
+42/42 passed
+★ 满额自校验：FULL_TOTAL = 42 ；实得 42 ；一致
+VERDICT: ADMIN-PRODUCT-WRITE + MIGRATION OK

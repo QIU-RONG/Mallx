@@ -126,9 +126,56 @@ def login(path, username, password):
     return j["data"]["token"], "OK"
 
 
+# ---------------------------------------------------------------- 骨架期护栏
+# ★★ 2026-09-23 事故：实现填完之后又跑了一次本脚本，第 2 节的 POST/PUT/DELETE
+#    不再撞 throw，而是真的写进了库（新建商品 id=31、分类 36/37；把商品 1 软删、
+#    把分类 1 的 sort_order 改成 99）。骨架门禁的前提是「方法体还是 throw」，
+#    前提不成立却照跑，它就从只读探测变成破坏性脚本。
+#    ⇒ 开跑前先数一遍源码里还有没有 UnsupportedOperationException：
+#      一个都没有 = 骨架期已过 = 立刻停（写端点一个都不许打）。
+SKELETON_SCAN_DIRS = [
+    r"D:\MallX\backend\mallx\mall-product\src\main\java",
+    r"D:\MallX\backend\mallx\mall-admin\src\main\java",
+    r"D:\MallX\backend\mallx\mall-order\src\main\java",
+    r"D:\MallX\backend\mallx\mall-inventory\src\main\java",
+]
+
+
+def skeleton_remaining():
+    n = 0
+    import os
+    for d in SKELETON_SCAN_DIRS:
+        for root, _dirs, files in os.walk(d):
+            for fn in files:
+                if not fn.endswith(".java"):
+                    continue
+                try:
+                    with open(os.path.join(root, fn), encoding="utf-8",
+                              errors="replace") as f:
+                        n += f.read().count("UnsupportedOperationException")
+                except OSError:
+                    pass
+    return n
+
+
 say("=" * 74)
 say("Day 18 骨架门禁 —— 路由 + 权限矩阵前三层")
 say("=" * 74)
+
+_throws = skeleton_remaining()
+if _throws == 0:
+    say("")
+    say("⛔ 已拒绝执行：源码里已无 UnsupportedOperationException（骨架期已过）。")
+    say("   本脚本第 2 节会真的调用 POST/PUT/DELETE —— 实现填完后跑它就是在写库。")
+    say("   （2026-09-23 真写过：新建商品 id=31、分类 36/37，并软删了商品 1。）")
+    say("   ⇒ 请改跑 day18-b/c/d/e-*-verify.py 与 day17-m1-regression.py。")
+    say("=" * 74)
+    print("\n".join(lines))
+    with open(REPORT, "w", encoding="utf-8") as _f:
+        _f.write("\n".join(lines) + "\n")
+    raise SystemExit(0)
+say("骨架期确认：源码中仍有 %d 处 UnsupportedOperationException（写端点不会真写库）"
+    % _throws)
 
 ok, secs = wait_app()
 say("应用可达: %s（等待 %.1fs，探测 /api/hello）" % ("是" if ok else "否", secs))

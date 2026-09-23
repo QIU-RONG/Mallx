@@ -1,0 +1,139 @@
+==============================================================================
+Day 18 链路 B -- 管理端商品读（分页含下架 / status 可选过滤 / 详情 / 权限矩阵）
+target : http://127.0.0.1:8080/api/admin/products  与  /api/admin/products/{id}
+accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin(SUPER_ADMIN)
+fixture : 1 条 status=0 商品（直接 INSERT，不走写接口 —— 保持 B 与 C 相互独立）
+==============================================================================
+
+[0] BASELINE (psql)
+  products 活行 = 5 ；全表 5 行 ；高水位 = 5
+  counters: brands=7, cart_items=0, categories=7, inventory_logs=0, order_items=9, orders=8, payments=5, product_images=4, product_skus=7, products=5
+  分类拓扑：顶级 [1,2,3] ；二级 [11,12,21,31]
+
+[1] 匿名（★ Security 层写响应 ⇒ 真 HTTP 401，不是 body.code）
+  匿名 GET /api/admin/products        -> http=401 {"code":401,"message":"未登录或登录已过期","data":null}
+  匿名 GET /api/admin/products/1      -> http=401 {"code":401,"message":"未登录或登录已过期","data":null}
+
+[2] 登录四个身份（token 只在内存里，不落盘）
+  demo        code=200 token_len=191
+  op_order    code=200 token_len=311
+  op_product  code=200 token_len=515
+  admin       code=200 token_len=596
+
+[3] ★ 权限矩阵（关掉白名单后，管理端【读也要权限】—— 与 C 端 GET 公开正好相反）
+  demo(C 端 token，perms 空集)  http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+  op_order(ORDER_ADMIN)        http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+     ★ 它有 order:* 但【故意没有】product:* ⇒ 应该是 403
+  op_order 打详情              http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
+  op_product(PRODUCT_ADMIN)    http=200 code=200
+  admin(SUPER_ADMIN)           http=200 code=200
+
+[4] 分页口径（造夹具【之前】：此刻库里全是上架，两个端应该看到同样多）
+  管理端(不筛选) records=5 total=5 current=1 size=10
+  C 端(匿名)     total=5
+
+[5] ★★ 造夹具：INSERT 1 条 status=0 商品（库里原有 5 条全是上架）
+  INSERT rc=0 returncode=0 ；新 id = 30
+  管理端总览 total=6 ids=[30, 5, 4, 3, 2, 1]
+  C 端总览   total=5 ids=[5, 4, 3, 2, 1]
+
+[6] ★★ status 可选过滤：eq(status != null, 列, 值) 的 condition 必须写对
+     写错成 .eq(Product::getStatus, 1) 写死 → 不传时也会少掉下架（#25 会当场抓住）
+  status=0 -> total=1 ids=[30]
+  status=1 -> total=5 ids=[5, 4, 3, 2, 1]
+
+[7] 详情：管理端必须能看【下架】商品（C 端 getDetail 不判 status，恰好复用）
+  管理端 GET /30 -> http=200 code=200 status=0 name=FX-OFFLINE-PRODUCT
+  管理端 GET /1  -> http=200 code=200 id=1 skus=3 images=2
+  管理端 GET /99999999 -> http=200 code=404 {"code":404,"message":"商品不存在","data":null}
+  管理端 GET /abc -> http=200 code=400 {"code":400,"message":"参数 id 格式不正确","data":null}
+
+[8] ★ categoryId 过滤：沿用「自己 + 直接子分类」的展开口径（expandCategoryIds）
+     种子分布：商品 1/2/3 属分类 11（父 1）；商品 4/5 属分类 21（父 2）；夹具属 11
+  categoryId=11       -> total=4   records=4    (二级分类本身：3 种子 + 夹具)
+  categoryId=1        -> total=4   records=4    (★ 顶级 1 必须【展开】到子分类 11 ⇒ 与上一条同结果)
+  categoryId=2        -> total=2   records=2    (顶级 2 + 子分类 21：种子 4/5 两条)
+  categoryId=999999   -> total=0   records=0    (★ 不存在的分类 → 空列表，不 500)
+
+[9] keyword 模糊匹配
+  keyword=iPhone      -> total=1 names=['Apple iPhone 17 Pro']
+  keyword=NOSUCH...   -> total=0
+
+[10] ★★ 夹紧四态（MP 的两个静默坑：size=0 返空列表、size<0 查全表）
+     本方法的夹紧写在 Service（pageAdminProducts）里，与 Day 17 的 listSkus 同层
+  size=0      -> 回传 size=1    records=1  total=6     (size=0 夹到 1（不夹时 MP 返回空列表）)
+  size=-5     -> 回传 size=1    records=1  total=6     (size=-5 夹到 1（不夹时 MP 不执行分页、查全表）)
+  size=99999  -> 回传 size=100  records=6  total=6     (size>100 夹到 MAX_PAGE_SIZE=100)
+  size=1      -> 回传 size=1    records=1  total=6     (原样)
+  size=6      -> 回传 size=6    records=6  total=6     (原样)
+  current=0 -> 回传 current=1
+  四种边界下的 total：[6, 6, 6, 6, 6]
+
+[11] ★★ 9 字段逐行与 DB 对账（不信接口自报）
+  API 条数 = 6 ；DB 活行 = 6
+  C 端 9 字段对账：api=5 行 / db(status=1)=5 行
+
+[12] 只读性 + CLEANUP（本链路不得改动任何业务行）
+  5 条种子快照：逐字节相同
+  计数差异（清理前）：{'products': (5, 6)}
+  DELETE rc=0 ；夹具残留 = 0 行 ；products 6 -> 5
+  收尾：管理端 total=5 ；C 端 total=5
+
+==============================================================================
+ASSERTIONS：实得 51 条
+==============================================================================
+  [PASS] #1 基线：products 活行 == 5
+  [PASS] #2 基线：categories == 7（3 个顶级 + 4 个二级）
+  [PASS] #3 ★ 基线：5 条种子商品 status 全为 1 —— 『下架商品』这条边界原先不存在，夹具必须自造
+  [PASS] #4 基线：顶级 == 1,2,3 ；二级 == 11,12,21,31（categoryId 展开断言的依据）
+  [PASS] #5 匿名分页被拒：真 HTTP 401
+  [PASS] #6 匿名详情被拒：真 HTTP 401
+  [PASS] #7 四个身份全部登录成功
+  [PASS] #8 C 端 token 被拒：真 HTTP 403
+  [PASS] #9 ★ op_order（有 order:* 无 product:list）被拒：真 HTTP 403
+  [PASS] #10 ★ 详情端点同样按权限把关（product:detail）：真 HTTP 403
+  [PASS] #11 op_product（有 product:*）通过：HTTP 200 + code 200
+  [PASS] #12 admin（超管）通过：HTTP 200 + code 200
+  [PASS] #13 ★★ 两种身份的响应体【逐字节相同】—— 管理端不做归属过滤（数据权限反转的正向证据）
+  [PASS] #14 管理端不筛选时 total == 库里活商品数 5
+  [PASS] #15 C 端匿名分页 total == 5（此刻两端一致 —— 差异要等夹具进来才显形）
+  [PASS] #16 ★ 每条 record 的 key 集合 == ProductVO 的 9 个字段（无多无少、null 也照回）
+  [PASS] #17 不传 page/size 时走 defaultValue：current=1 / size=10
+  [PASS] #18 夹具落库：products 活行 5 -> 6，且该行 status=0
+  [PASS] #19 ★★ 管理端 total == 6（含下架那条）
+  [PASS] #20 ★★ C 端 total 仍 == 5（下架对 C 端不可见）
+  [PASS] #21 ★★ 管理端 records 里能取到夹具 id（含下架的直接证据）
+  [PASS] #22 ★★ C 端 records 里取不到夹具 id（反向对照，缺了这条「含下架」就没被证明）
+  [PASS] #23 status=0 只命中夹具那一条
+  [PASS] #24 status=1 命中 5 条且不含夹具
+  [PASS] #25 ★★ 不传 status == 两者都要（total 6）—— 若被写成写死 status=1 这里会掉到 5
+  [PASS] #26 ★★ 下架商品的详情可读：HTTP 200 + code 200 + status==0
+  [PASS] #27 种子商品详情：id 正确且含 skus / images 两个子结构（复用 getDetail）
+  [PASS] #28 不存在的商品 -> code 404（本项目业务异常走 HTTP 200 + body.code）
+  [PASS] #29 路径参数类型不匹配 -> HTTP 200 + code 400
+  [PASS] #30 categoryId=11（子分类）命中 4 条
+  [PASS] #31 ★ categoryId=1（顶级）也命中 4 条 == categoryId=11 —— 父子展开生效
+  [PASS] #32 categoryId=2 命中 2 条（2 与 21）
+  [PASS] #33 categoryId=999999 -> 0 条且 HTTP 200（IN (空集) 不报错）
+  [PASS] #34 keyword=iPhone 命中 1 条
+  [PASS] #35 keyword 无命中 -> 0 条且不 500
+  [PASS] #36 size=0 回传 size==1 且【仍有 1 条记录】（不夹则 0 条）
+  [PASS] #37 size=-5 回传 size==1 且【只有 1 条】（不夹则查全表）
+  [PASS] #38 size=99999 回传 size==100
+  [PASS] #39 current=0 回传 current==1（page<1 归一到 1）
+  [PASS] #40 ★ 夹紧只影响页大小、不改总数：四种边界的 total 恒为 6
+  [PASS] #41 size=1 / size=6 原样回传（夹紧不是无脑钳到两端）
+  [PASS] #42 管理端全量条数 == 6（5 种子 + 夹具）
+  [PASS] #43 ★★ 6 条 × 9 字段【逐字段】与 DB 相同（含 categoryName / brandName 的补齐）
+  [PASS] #44 按 id 严格降序（orderByDesc(Product::getId) 生效）
+  [PASS] #45 ★ 每条 categoryName 都非空（fillNames 批量补齐生效，不是 N+1 也不是漏补）
+  [PASS] #46 ★ C 端列表 9 字段同样与 DB 一致（证明【没顺手改坏】C 端口径）
+  [PASS] #47 ★ 5 条种子商品逐字节未变（本脚本只 INSERT 自己的夹具）
+  [PASS] #48 除 products 多出夹具 1 行外，其余 9 张表计数全未变
+  [PASS] #49 ★ 夹具物理删净：按 id 查 0 行，且活行回 5
+  [PASS] #50 ★ 十张表计数全部回基线（M1 回归 198/198 的前提）
+  [PASS] #51 ★ 收尾后两端 total 都回 5（管理端「含下架」的能力仍在，只是库里已无下架样本）
+
+RESULT: 51/51 passed
+★ 满额自校验：FULL_TOTAL = 51 ；实得 51 ；一致
+VERDICT: ADMIN-PRODUCT-READ OK -- 权限矩阵有区分度、含下架口径与 C 端形成对照、status 可选过滤成立、父子分类展开生效、9 字段与 DB 逐字段一致
