@@ -12,15 +12,23 @@
 |---|---|---|---|---|---|
 | L1 | C 端商品列表无分页夹紧 | 接口健壮性 | 2 行 | 低 | ✅ 已修（33/33） |
 | L2 | C 端商品详情不判上架（★ 有耦合） | 数据可见性 | 拆方法 | 低 | ✅ 已修（33/33） |
-| L3 | 搜索的中文兜底漏了 `description` | 召回完整性 | 1 行 SQL（★ 连带改断言） | 中 | ⬜ |
-| L4 | 搜索的 `categoryId` 不展开子分类 | 两入口口径不一 | 改签名 + XML | 中 | ⬜ |
-| L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ⬜ |
+| L3 | 搜索的中文兜底漏了 `description` | 召回完整性 | 1 行 SQL（★ 连带改断言） | 中 | ✅ 已修（day19 58/58） |
+| L4 | 搜索的 `categoryId` 不展开子分类 | 两入口口径不一 | 改签名 + XML | 中 | ✅ 已修（day19 58/58） |
+| L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ✅ ① 已做（brand 24/24）；② CRUD 未做 |
+| L6 | 不存在的路径被兜底吞成 200+code=500 | 可观测性 | 1 个 handler | 低 | ✅ 已修（L5 验收顺带挖出） |
 | T1 | `MAX_PAGE_SIZE` 已复制 5 份 | 可维护性 | 跨模块重构 | 中 | ⏸️ |
 
 **关键前提（已核实）**：M1 回归三个脚本（`day14-e2e-walk.py` / `day15-ship-confirm.py` /
 `day16-review-e2e.py`）对 `/api/products` 的**全部访问只有 `/api/products/{id}/reviews`**
 （grep 实证），**不打 C 端商品列表、也不打商品详情**
 ⇒ L1 / L2 的改动**不在 M1 覆盖率内，回归零风险**；L3 / L4 必须改脚本断言（见各条）。
+
+**L6 是收尾时【新挖出来】的**（原清单没有）：写 L5 验收脚本时给「不存在的路径」断言 404，
+结果实测拿到 **HTTP 200 + body.code=500 + message="fail"**。日志定位到
+`NoResourceFoundException`（Spring 6.1+ 对无 handler 匹配的请求抛这个），
+被 `GlobalExceptionHandler` 的 `Exception.class` 兜底先吃掉 —— 与 Day 18 修的
+「405 被吞成 200+500」**是同一个坑的两个出口**。按项目自己的判据
+（405 与 401/403 同类，都是框架层拒绝 ⇒ 给真实 HTTP 码）补了专用 handler。
 
 ---
 
@@ -50,6 +58,49 @@
 所以验收脚本里临时造了 150 条（`name` 前缀 `L1-TEMP-` 隔离 + 高水位线清理），
 造到 155 条之后「`size<0` = 不限量」这个洞才暴露得出来。
 （`size=0` 是意外好用的免费判据：夹紧后 1 条、未夹紧 0 条，不需要造数据就能区分。）
+
+---
+
+### L3 / L4 / L5① / L6（Day 20 收尾「先清支线」一轮做完）
+
+| 文件 | 改动 |
+|---|---|
+| `ProductMapper.xml` | `searchProducts` 召回加 `OR p.description ILIKE ...`（L3）；`categoryId` 等值 → `IN` + `<foreach>`（L4） |
+| `ProductMapper.java` | `@Param("categoryId") Long` → `@Param("categoryIds") Collection<Long>`（L4）+ import `java.util.Collection` |
+| `ProductServiceImpl.java` | `searchProducts` 传 `expandCategoryIds(categoryId)` 的集合（L4）；清掉「骨架，方法体由你写」的过期 javadoc |
+| `BrandVO / BrandService / BrandServiceImpl / BrandController / AdminBrandController`（新建 5 个） | L5①：`GET /api/brands`（公开，仅 status=1）+ `GET /api/admin/brands`（brand:list，含停用） |
+| `SecurityConfig.java` | 白名单加**精确路径** `GET /api/brands` |
+| `sql/10-brand-permissions.sql`（新建） | `brand:list` = id **21**，发 role 1 + role 2，role 3 刻意不给；含序列校准与三段自检 |
+| `GlobalExceptionHandler.java` | L6：加 `NoResourceFoundException` 专用 handler → 真实 HTTP **404**（原先被兜底吞成 200+code=500） |
+| `day19-search-verify.py` | 48 → **58** 断言：B10 改口径 + B11 新增（纯 fts 替代证据）、E 组 6→8、新增 I 组 7 条（categoryId 同口径） |
+| `day20-l5-brand-verify.py`（新建） | **24** 断言：C 端字典 / 白名单三态 / 权限矩阵 / 两端口径差异 / 清理回基线 |
+| `day20-l5-perm-apply.py`（新建） | 权限落地 + 幂等（照 `day18-perm-apply.py` 模板） |
+| `day14-reconcile.py` | `[4]` 段那行 `VERDICT:` 改标签为 `[4] BYPASS-AUDIT (expected false):`（见附一①） |
+
+**验收结果**（同一轮内跑完，应用只起一次）：
+
+| 脚本 | 结果 |
+|---|---|
+| `day19-search-verify.py` | **58 / 58**（含 L3 的 E3「笔记本 0→2」、L4 的 I1/I2「父分类与列表同答案」） |
+| `day20-l5-brand-verify.py` | **24 / 24** |
+| `day20-l5-perm-apply.py` | **VERDICT: OK** —— 幂等成立，`1/1/1/0` 四列全中 |
+| `day14-reconcile.py` | **27 / 27**（定性见附一①） |
+| `day17-m1-regression.py` | **198 / 198** + `BASELINE RESTORED: YES` |
+| `day19-xml-check.py` | XML 良构 **3/3**、Java↔XML 双向一致、SQL 停在 TODO **0** 条 |
+
+**★★ 本轮最值钱的三条**
+
+1. **断言必须对着「设计」写，但「设计」要先确认** —— L5 脚本初版给「不存在的路径」断言 404，
+   实测却是 **200 + code=500**。这里正确的做法不是「照实测改脚本」（那会把一个缺陷写进
+   验收基线），而是先查日志（`NoResourceFoundException`）确认这是**兜底的漏网**，
+   再按项目自己的判据（405 与 401/403 同类 ⇒ 给真实 HTTP 码）补 handler。
+   **实测值 ≠ 设计，两者不一致时先定性，再决定改哪边。**
+2. **L3 的「副作用」比 L3 本身更值得记** —— 补一列 ILIKE 把 Day 19 那条
+   「纯全文召回」的证据链打断了。改召回范围前要先问：**还有哪些断言是靠
+   『这条路径命不中』成立的？** 替代证据（B11：直接对 DB 断言 `ts_rank` 值）已经补上。
+3. **「停止条件下沉到数据里」能省掉一整套反向对照** —— L5 只要造 **1 条 status=0 的品牌**，
+   就让「C 端看不见 / 管理端看得见」变成可断言的差异（D1/D2/D3）；
+   库里 7 条品牌全是 status=1 时，这条断言**恒真**，等于没验（同 L1 的「样本量陷阱」）。
 
 ---
 
@@ -259,11 +310,26 @@ ILIKE 又不看 description ⇒ **永远搜不到**。
 
 ## 附一、两条与清单相邻的提醒
 
-**① 一份报告里的 `VERDICT: false`**
+**① 一份报告里的 `VERDICT: false`** —— ✅ **已定性：误读，不是问题**
 扫描 `backend/loadtest/*-report.txt` 时看到 `day14-reconcile-report.txt` 里写着 `VERDICT: false`。
 它与当前 `day17-m1-regression.py` **198/198** 的状态不一致。
 两种可能：报告是 Day 14 当时的产物（**陈旧**），或该脚本现在仍会失败（**真问题**）。
 ⇒ 建议**复跑一次 `day14-reconcile.py`** 定性；在复跑之前不要改动它、也不要把它当结论引用。
+
+**【复跑结果（Day 20 收尾）】** `python day14-reconcile.py` → **27 / 27 passed**（rc=0）。
+那个 `false` 既不是陈旧产物也不是真问题，而是 **`[4]` 段故意制造出来的**：
+脚本在一个会 ROLLBACK 的事务里先做一次合法变动给账本打底，再做一次**绕过服务的裸
+`UPDATE inventories`**（只改库存、不留流水），然后断言审计**必须**报 `false` ——
+这正是「账本能抓到绕过应用的写」的正面证据。**断言是 `"VERDICT: f" in raw`，
+也就是说那行 false 是 PASS 的条件。**
+
+真正的坑是**标签本身的措辞**：报告里孤零零一行 `VERDICT: false`，
+`grep VERDICT` 的人（包括当年的我）会把它当脚本失败 —— 和脚本末尾
+`ASSERTIONS: 27 / 27 passed` 直接矛盾，于是去找一个不存在的 bug。
+⇒ **已改**：标签改为 `[4] BYPASS-AUDIT (expected false): false`（期望值写进标签、断言同步改），
+并在报告末尾加了三行阅读提示。报告已重新生成。
+★ 一般化：**凡是「故意失败」的演示，输出里必须自带「这是故意的」字样**，
+否则它一定会被后来的自动化或人误判。同 Day 20 那个「空语句体假过」是同一类问题的镜像。
 
 **② 工作区残留目录**
 仓库根有 `dsh-skin-v2/`、`dsh-themes/` 两个未跟踪目录，与本项目无关（未提交、未加 `.gitignore`）。
@@ -279,11 +345,23 @@ L1（2 行，独立）─┐  ✅ 已完成
 L2（拆方法）────┘  ✅ 已完成
                     ↓
 L3（改 SQL）──→ 改 day19-search-verify.py 的 promotion 口径 ──→ 跑 day19 全绿
-                    ↓
 L4（改签名+XML）──→ 跑 day19 + day18-b（两端 total 对照）全绿
                     ↓
 L5①（新端点 + 权限 id 21 + 精确白名单）──→ 门禁脚本照 Day 20 的 25 项模板再加 4 项
 ```
+
+**实际执行记录（Day 20 收尾）**：上面这条链已全部走完，但有两处与计划不同，
+写下来给下次参考 ——
+
+| 计划 | 实际 | 为什么 |
+|---|---|---|
+| L3 → 单独跑一轮 → L4 → 再单独跑一轮 | **L3 + L4 一起改、一起跑** | 两者改的是**同一段 SQL**（`searchProducts` 的 `<where>`）。按原计划分两轮，编译与起应用的成本要付两遍，而收益（隔离变量）在本例里是假的 —— 真正需要隔离的是**断言**，不是 SQL：L3 打翻的是 B10/E1/E2/E3，L4 动的是新加的 I 组，两者在断言层面本来就分得开 |
+| 「门禁脚本照模板再加 4 项」 | **新写 `day20-l5-brand-verify.py`（24 项）** | 原话指代不清（项目里没有一份 25 项的「门禁模板」）。实际做法：以 `day17-d-inventory-list-verify.py` 的权限矩阵 + `day20-coupon-verify.py` 的造数清理为底，按 L5 自己的语义设计 24 条 |
+
+★ 另外**多出来一条 L6**（不在原清单）：L5 验收脚本要求「不存在的路径 → 404」，
+实测却是 `200 + code=500`，顺着日志挖到了 `NoResourceFoundException` 被兜底吞掉。
+**这是「写验收脚本」的额外收益**：为了让断言写对，必须先问清「设计上应该是什么」，
+问的过程就撞出了一个真缺陷。写验收时不要顺着实测糊过去了事。
 
 **每条做完都要做的三件事**（项目铁律，已固化在 `day1N-*` 脚本与记忆里）：
 1. `dayNN-xml-check.py`（XML 良构 + Java↔XML 名字对齐）；
