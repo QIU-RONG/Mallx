@@ -10,8 +10,8 @@
 
 | 编号 | 条目 | 影响面 | 改动量 | 风险 | 状态 |
 |---|---|---|---|---|---|
-| L1 | C 端商品列表无分页夹紧 | 接口健壮性 | 2 行 | 低 | ⬜ |
-| L2 | C 端商品详情不判上架（★ 有耦合） | 数据可见性 | 拆方法 | 低 | ⬜ |
+| L1 | C 端商品列表无分页夹紧 | 接口健壮性 | 2 行 | 低 | ✅ 已修（33/33） |
+| L2 | C 端商品详情不判上架（★ 有耦合） | 数据可见性 | 拆方法 | 低 | ✅ 已修（33/33） |
 | L3 | 搜索的中文兜底漏了 `description` | 召回完整性 | 1 行 SQL（★ 连带改断言） | 中 | ⬜ |
 | L4 | 搜索的 `categoryId` 不展开子分类 | 两入口口径不一 | 改签名 + XML | 中 | ⬜ |
 | L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ⬜ |
@@ -20,7 +20,36 @@
 **关键前提（已核实）**：M1 回归三个脚本（`day14-e2e-walk.py` / `day15-ship-confirm.py` /
 `day16-review-e2e.py`）对 `/api/products` 的**全部访问只有 `/api/products/{id}/reviews`**
 （grep 实证），**不打 C 端商品列表、也不打商品详情**
-⇒ L1 / L2 的改动**不在 M1 覆盖率内**，回归零风险；L3 / L4 必须改脚本断言（见各条）。
+⇒ L1 / L2 的改动**不在 M1 覆盖率内，回归零风险**；L3 / L4 必须改脚本断言（见各条）。
+
+---
+
+## ✅ 已完成记录
+
+### L1 + L2（Day 20 当天完成）
+
+| 文件 | 改动 |
+|---|---|
+| `ProductServiceImpl.java` | `pageProducts` 加两行夹紧（`:82-83`）；类头 `MAX_PAGE_SIZE` 注释订正（原文写「C 端没有夹紧、属已知遗留」已过时） |
+| `ProductServiceImpl.java` | `getDetail` 收紧为 C 端口径（加 `status != 1` → 伪装 404）；抽出 `getAdminDetail`；装配逻辑下沉到私有 `assembleDetail(Product)` 共用 |
+| `ProductService.java` | 新增 `getAdminDetail(Long)` 声明 |
+| `AdminProductController.java` | `detail` 改调 `getAdminDetail`（原来误调 C 端的 `getDetail`） |
+| `day20-l1l2-verify.py`（新建） | **33 条断言**，含造数 + 高水位线清理；报告 `day20-l1l2-verify-report.txt` |
+
+**验收结果**：`day20-l1l2-verify.py` **33 / 33 全绿**；`day17-m1-regression.py` **198 / 198**
+＋ `BASELINE RESTORED: YES`。
+
+**★ 本次最值钱的一条实测教训**：`size=-1` 夹紧后返回 **1 条**，不是 100 条。
+夹紧公式 `min(max(size, 1), 100)` 把**负数夹到【下限 1】**（与 Day 18/19 那三处同一个公式）。
+我第一版断言写的是「负数 → 上限 100」，**脚本错了、代码没错** ——
+按铁律「断言对着【设计】写，脚本与设计打架时改脚本」修的是脚本。
+⇒ 两个方向要分别钉：`size=-1 → 1`（下限）、`size=1000 → 100`（上限）。
+
+**★ 可复用的方法论**：验证「夹紧/上限」这类改动时，**样本量必须超过上限才有区分度**。
+库里只有 5 条商品，`size=-1` 夹紧前后都是 5 条 —— **用现有数据根本区分不出来**。
+所以验收脚本里临时造了 150 条（`name` 前缀 `L1-TEMP-` 隔离 + 高水位线清理），
+造到 155 条之后「`size<0` = 不限量」这个洞才暴露得出来。
+（`size=0` 是意外好用的免费判据：夹紧后 1 条、未夹紧 0 条，不需要造数据就能区分。）
 
 ---
 
@@ -47,10 +76,13 @@
 是 Day 19 链路 B 的**对照组前提**（`GET /api/products?keyword=iphone` 期望 **0 条**，
 用来反衬 `/api/products/search` 的全文召回）。只加夹紧，不碰过滤。
 
-**验收断言**
-1. `GET /api/products?current=1&size=-1` → 返回 `records` 长度 ≤ 100，且 `total` 与真实行数一致；
-2. `GET /api/products?current=1&size=0` → `records` 为空、`total` 仍为 5（口径不变）；
-3. 回归：`day19-search-verify.py` 链路 B 仍 0 条（证明确实没动 `like`）。
+**验收断言**（★ 前两条在本节初稿里都写错了，以「已完成记录」的实测为准）
+1. `GET /api/products?current=1&size=-1` → `records` **恰好 1 条**（负数被夹到下限 1），
+   `total` 与真实行数一致；★ **未夹紧时这里会返回全表**，这才是要堵的洞；
+2. `GET /api/products?current=1&size=0` → `records` **恰好 1 条**（`Math.max(0,1)=1`），
+   `total` 仍为真实值（夹紧不改过滤口径）；
+3. 上限方向：临时造到 155 条后 `size=1000` → `records` 恰好 100 条；
+4. 回归：`day19-search-verify.py` 链路 B 仍 0 条（证明确实没动 `like`）。
 
 ---
 
@@ -242,9 +274,9 @@ ILIKE 又不看 description ⇒ **永远搜不到**。
 ## 附二、建议的执行顺序
 
 ```
-L1（2 行，独立）─┐
-                 ├─→ 跑 M1 198/198 + day19 全绿  ← 一次「纯增量」改动，先拿到干净基线
-L2（拆方法）────┘
+L1（2 行，独立）─┐  ✅ 已完成
+                 ├─→ 跑 M1 198/198 + day20-l1l2 33/33  ← 一次「纯增量」改动，已拿到干净基线
+L2（拆方法）────┘  ✅ 已完成
                     ↓
 L3（改 SQL）──→ 改 day19-search-verify.py 的 promotion 口径 ──→ 跑 day19 全绿
                     ↓
