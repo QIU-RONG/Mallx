@@ -93,33 +93,33 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     @Override
     public Page<ProductVO> pageAdminProducts(long current, long size, Long categoryId,
                                              String keyword, Integer status) {
-        // TODO(你写) pageAdminProducts —— 与 Day 17 的 InventoryServiceImpl.listSkus 同构，三步：
-        //
-        //   ① 夹紧（★ 必须在 new Page<>() 之前，同 mall-order / mall-inventory 的规矩）：
-        //        long safePage = Math.max(current, 1);
-        //        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
-        //      · size=0 → MP 返回【空列表】（total 正常，但看起来像"没数据"）
-        //      · size<0 → MP 【不执行分页、查全表】
-        //      · size>100 → 没有上限，MP 照做（所以 MAX_PAGE_SIZE 必须自己截）
-        //
-        //   ② 条件查询：与上面的 pageProducts 只差【一行过滤口径】——
-        //        C 端    ：.eq(Product::getStatus, 1)                         // 写死：只看上架
-        //        管理端  ：.eq(status != null, Product::getStatus, status)     // 条件：不传就全都要
-        //      其余整段照抄 pageProducts（用 safePage / safeSize）：
-        //        · .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
-        //        · .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
-        //        · .orderByDesc(Product::getId)
-        //        · this.page(new Page<>(safePage, safeSize), wrapper)
-        //
-        //   ③ 换壳：BeanUtils.copyProperties 逐个搬进 ProductVO → fillNames(voList, records)
-        //      → new Page<>(page.getCurrent(), page.getSize(), page.getTotal()) 再 setRecords
-        //      （★ total/current/size 必须搬过去，否则前端看到 total=0）
-        //
-        //   ★ status 是 Integer 而不是 int —— 只有 null 才表达得出「不过滤」。
-        //     写成 int 的话方法签名就强制调用方给值，「不传」这条路直接被堵死。
-        //   ★ fillNames 是同一个类里的私有方法，直接调，不用抽接口。
-        //   ★ 不用为「管理端」新建 VO：ProductVO 里已经有 status 字段。
-        throw new UnsupportedOperationException("TODO: ProductServiceImpl.pageAdminProducts");
+        // 与 C 端 pageProducts 的【唯一差别】就是 status 的过滤口径：
+        //   C 端  ：.eq(Product::getStatus, 1)                      // 写死：只看上架
+        //   管理端：.eq(status != null, Product::getStatus, status) // 条件：不传就全都要（含下架）
+        // ★ status 用 Integer 而非 int —— 只有 null 才表达得出「不过滤」；
+        //   写成 int，方法签名会强制调用方给值，「不传」这条路直接被堵死。
+        // ★ 夹紧只在【本方法】生效：C 端 pageProducts（Day 09-11）没有夹紧，属已知遗留，本日不动。
+        // ★ 不用为管理端新建 VO：ProductVO 里已有 status 字段。
+        long safePage = Math.max(current, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
+                .eq(status != null, Product::getStatus, status)
+                .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
+                .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
+                .orderByDesc(Product::getId);
+        Page<Product> page = this.page(new Page<>(safePage, safeSize), wrapper);
+        List<Product> records = page.getRecords();
+        List<ProductVO> voList = new ArrayList<>();
+        for (Product p : records) {
+            ProductVO vo = new ProductVO();
+            BeanUtils.copyProperties(p, vo);
+            voList.add(vo);
+        }
+        fillNames(voList, records);
+        Page<ProductVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        voPage.setRecords(voList);
+        // ★ 返回 voPage 而不是 page：后者是 Page<Product>，类型不对，也没补 categoryName/brandName
+        return voPage;
     }
 
     /**

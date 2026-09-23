@@ -36,10 +36,9 @@ import java.util.List;
  *       ③ 都没有才物理删（{@code categories} 表没有 {@code is_deleted}，是真删）。</li>
  * </ol>
  * <p>
- * 【骨架说明（★ 填实现时必读）】
- * 填实现时请<b>整段替换方法体，包括删掉最后那行 throw</b>；只加 return 不删 throw
- * 会得到 {@code [行,列] 无法访问的语句}。
- * ⚠️ 另外：本类有 4 处长得一模一样的 throw，<b>只删你正在填的那个方法的 throw</b>。
+ * 【实现要点】{@code createCategory} 返回新 id，可直接 {@code return Result.ok(...)}；
+ * 而 {@code updateCategory} / {@code deleteCategory} 返回 <b>void</b>，
+ * 必须拆成「调用一句 + {@code return Result.ok();}」两句。
  */
 @Tag(name = "管理端-分类")
 @RestController
@@ -56,34 +55,29 @@ public class AdminCategoryController {
     @GetMapping("/tree")
     @PreAuthorize("hasAuthority('category:list')")
     public Result<List<CategoryVO>> tree() {
-        // TODO(你写)：return Result.ok(categoryService.tree());
-        //   ★ 直接复用 C 端那个 tree() —— 管理端的「看」与 C 端的「看」结构一致，
-        //     差别只在【能不能不经鉴权看】：C 端公开，管理端要 category:list。
-        throw new UnsupportedOperationException("TODO: AdminCategoryController.tree");
+        return Result.ok(categoryService.tree());
     }
 
     @Operation(summary = "新增分类（需 category:create）")
     @PostMapping
     @PreAuthorize("hasAuthority('category:create')")
     public Result<Long> create(@RequestBody @Valid CategoryCreateDTO dto) {
-        // TODO(你写)：return Result.ok(categoryService.createCategory(dto));
-        //   注意返回值是 Result<Long>（新建分类的 id）—— 与商品新增保持一致
-        throw new UnsupportedOperationException("TODO: AdminCategoryController.create");
+        return Result.ok(categoryService.createCategory(dto));
     }
 
     @Operation(summary = "修改分类（需 category:update，局部更新语义）")
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('category:update')")
     public Result<Void> update(@PathVariable Long id, @RequestBody @Valid CategoryUpdateDTO dto) {
-        // TODO(你写)：categoryService.updateCategory(id, dto); return Result.ok();
-        throw new UnsupportedOperationException("TODO: AdminCategoryController.update");
+        categoryService.updateCategory(id, dto);
+        return Result.ok();
     }
 
     @Operation(summary = "删除分类（需 category:delete，物理删 + 三重校验）")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('category:delete')")
     public Result<Void> delete(@PathVariable Long id) {
-        // TODO(你写)：categoryService.deleteCategory(id); return Result.ok();
-        throw new UnsupportedOperationException("TODO: AdminCategoryController.delete");
+        categoryService.deleteCategory(id);
+        return Result.ok();
     }
 }

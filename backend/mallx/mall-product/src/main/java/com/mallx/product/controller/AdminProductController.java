@@ -38,11 +38,10 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>每个端点一个权限码，且<b>读也要权限</b>（与 C 端「GET 公开」正好相反）。</li>
  * </ol>
  * <p>
- * 【骨架说明（★ 填实现时必读）】
- * 下面每个方法体都是 {@code throw new UnsupportedOperationException(...)}。
- * 填实现时请<b>整段替换方法体，包括删掉最后那行 throw</b> ——
- * 若只在 TODO 下面加 return 而把 throw 留在后面，会得到
- * {@code [行,列] 无法访问的语句}（unreachable statement，编译直接失败）。
+ * 【实现要点】{@code createProduct} 返回新 id、{@code getDetail} / {@code pageAdminProducts}
+ * 有返回值，可直接 {@code return Result.ok(...)}；而 {@code updateProduct} / {@code deleteProduct}
+ * 返回 <b>void</b>，必须拆成「调用一句 + {@code return Result.ok();}」两句 ——
+ * Java 不允许把 void 方法的调用当实参。
  */
 @Tag(name = "管理端-商品")
 @RestController
@@ -80,45 +79,39 @@ public class AdminProductController {
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer status) {
-        // TODO(你写)：一行转发即可 ——
-        //   ★ 页码/页大小夹紧【不在这层】做：它在 Service（pageAdminProducts）里，
-        //     与 Day 17 的 AdminInventoryController 同构 —— Controller 只管转，Service 管口径。
-        //   return Result.ok(PageResult.of(
-        //           productService.pageAdminProducts(current, size, categoryId, keyword, status)));
-        throw new UnsupportedOperationException("TODO: AdminProductController.page");
+
+        return Result.ok(PageResult.of(productService.pageAdminProducts(current, size, categoryId, keyword, status)));
     }
 
     @Operation(summary = "商品详情（管理端：下架商品也能看）")
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('product:detail')")
     public Result<ProductDetailVO> detail(@PathVariable Long id) {
-        // TODO(你写)：直接复用 productService.getDetail(id) —— 它不判 status，天然满足管理端
-        throw new UnsupportedOperationException("TODO: AdminProductController.detail");
+        return Result.ok(productService.getDetail(id));
     }
 
     @Operation(summary = "新增商品（需 product:create）")
     @PostMapping
     @PreAuthorize("hasAuthority('product:create')")
     public Result<Long> create(@RequestBody @Valid ProductCreateDTO dto) {
-        // TODO(你写)：复用 productService.createProduct(dto)（它已含「分类存在」校验与三表事务）
-        throw new UnsupportedOperationException("TODO: AdminProductController.create");
+        return Result.ok(productService.createProduct(dto));
     }
 
     @Operation(summary = "修改商品（含上下架：{\"status\":0} 即下架）")
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('product:update')")
     public Result<Void> update(@PathVariable Long id, @RequestBody @Valid ProductUpdateDTO dto) {
-        // TODO(你写)：复用 productService.updateProduct(id, dto)
-        //   ★ 本日【不】为上下架单独开端点：ProductUpdateDTO 里已有 status，
-        //     单字段更新走 PUT 语义上就是「编辑商品」。
-        throw new UnsupportedOperationException("TODO: AdminProductController.update");
+        // ★ 本日【不】为上下架单独开端点：ProductUpdateDTO 里已有 status，
+        //   单字段更新走 PUT 语义上就是「编辑商品」。
+        productService.updateProduct(id, dto);
+        return Result.ok();
     }
 
     @Operation(summary = "删除商品（软删主表）")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('product:delete')")
     public Result<Void> delete(@PathVariable Long id) {
-        // TODO(你写)：复用 productService.deleteProduct(id)
-        throw new UnsupportedOperationException("TODO: AdminProductController.delete");
+        productService.deleteProduct(id);
+        return Result.ok();
     }
 }

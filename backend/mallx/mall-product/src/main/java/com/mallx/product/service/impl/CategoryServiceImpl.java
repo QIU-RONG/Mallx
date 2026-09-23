@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-  @Service
+@Service
 public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements CategoryService {
 
     /**
@@ -63,73 +63,102 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
     }
 
     // ==========================================================================
-    // 以下三个为 Day 18 管理端新增（骨架：TODO 待填）
+    // Day 18 管理端新增
     // --------------------------------------------------------------------------
-    // ★ 填实现时请【整段替换方法体，包括删掉最后那行 throw】——
-    //   只加 return 不删 throw 会得到「[行,列] 无法访问的语句」，编译直接失败。
-    // ★ 本类有三处长得一模一样的 throw，只删你正在填的那一个。
+    // 【三个方法共用的两条规则】
+    //   ① 「两级」约束：父分类自身必须是顶级（parentId == null），否则就成了三级。
+    //      这与 C 端 ProductServiceImpl.expandCategoryIds 的「两层单层扫描」假设一致 ——
+    //      约束写在这里，等于把那个隐含假设显式钉住。
+    //   ② 每个方法都带 @Transactional：存在性/引用「检查」与「写入」之间不能被插队
+    //      （否则就是「先查后改」的 TOCTOU：用陈旧的检查结果去执行删除）。
     // ==========================================================================
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long createCategory(CategoryCreateDTO dto) {
-        // TODO(你写) createCategory：
-        //   ① 两级校验（parentId != null 才做）：
-        //        Category parent = this.getById(dto.getParentId());
-        //        · parent == null                         → new BusinessException(ResultCode.NOT_FOUND.getCode(), "父分类不存在")
-        //        · parent.getParentId() != null            → new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "只支持两级分类")
-        //      ★ 为什么要有第二条：C 端 ProductServiceImpl.expandCategoryIds 用的是
-        //        「两层单层扫描」（自己 + 直接子分类），三级分类会让它的假设失效。
-        //        约束写在这里，等于把那个隐含假设显式钉住。
-        //   ② Category c = new Category(); BeanUtils.copyProperties(dto, c);
-        //   ③ this.save(c);          ← 保存后 c.getId() 才有值（自增主键回填）
-        //   ④ return c.getId();
-        //   ★ status 不用管：DTO 里没有它，null 字段不会被拼进 INSERT，走 DDL 默认值 1。
-        //   ⚠️ 本表没有 is_deleted，是真删表，所以不需要 @Transactional？
-        //      —— 需要。理由与「存在性检查 + 删除」配对出现有关：检查与写入之间不能被插队。
-        throw new UnsupportedOperationException("TODO: CategoryServiceImpl.createCategory");
+        // ① 两级校验（只有传了 parentId 才需要查父分类；null = 新建顶级分类）
+        if (dto.getParentId() != null) {
+            Category parent = this.getById(dto.getParentId());
+            if (parent == null) {
+                throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "父分类不存在");
+            }
+            if (parent.getParentId() != null) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "只支持两级分类");
+            }
+        }
+
+        // ② 拷字段 → ③ 保存（★ 自增 id 在 save 之后才回填到 c.getId()）
+        //    status 不管：DTO 里没有它，null 不会被拼进 INSERT，走 DDL 默认值 1。
+        Category c = new Category();
+        BeanUtils.copyProperties(dto, c);
+        this.save(c);
+        return c.getId();
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateCategory(Long id, CategoryUpdateDTO dto) {
-        // TODO(你写) updateCategory：
-        //   ① 存在性检查：this.getById(id) == null → BusinessException(NOT_FOUND, "分类不存在")
-        //      （不检查的话 updateById 会「静默成功」：影响 0 行，接口照样 200）
-        //   ② 空串检查：dto.getName() != null && dto.getName().isBlank() → 400 "分类名称不能为空"
-        //      （DTO 上只挂了 @Size，空串要靠 Service 显式挡 —— 与商品 updateProduct 同一写法）
-        //   ③ parentId 真的要改才校验（dto.getParentId() != null 且不等于当前值）：
-        //        · dto.getParentId().equals(id)            → 400 "不能把自己设为父分类"
-        //        · 父分类不存在                             → 404 "父分类不存在"
-        //        · 父分类自己不是顶级                       → 400 "只支持两级分类"
-        //        · ★ 我自己还有子分类（本类 count 一下 parentId = id）→ 400 "该分类下有子分类，不能移动"
-        //          （两级约束下，这一条就等价于「不成环」；否则会出现层级被拉成三层）
-        //   ④ Category u = new Category(); BeanUtils.copyProperties(dto, u); u.setId(id);
-        //      this.updateById(u);   ← null 字段不会被拼进 SET，天然就是局部更新
-        //   ⚠️ 但 parentId 的 null 在本日约定为「不动」（见 CategoryUpdateDTO 类注释）。
-        //      copyProperties 拷过去就是 null，MP 会跳过它 —— 恰好与我们想要的语义一致，白送。
-        throw new UnsupportedOperationException("TODO: CategoryServiceImpl.updateCategory");
+        // ① 存在性：不检查的话 updateById 会「静默成功」（影响 0 行，接口照样 200）
+        Category existing = this.getById(id);
+        if (existing == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "分类不存在");
+        }
+
+        // ② 空串检查：DTO 上只有 @Size 管长度，空串要 Service 显式挡
+        //    （与商品 updateProduct 同一写法）
+        if (dto.getName() != null && dto.getName().isBlank()) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "分类名称不能为空");
+        }
+
+        // ③ parentId 真的要改时才校验 —— 本日约定 parentId == null 一律按「不动」处理
+        Long newParentId = dto.getParentId();
+        if (newParentId != null && !newParentId.equals(existing.getParentId())) {
+            if (newParentId.equals(id)) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "不能把自己设为父分类");
+            }
+            Category parent = this.getById(newParentId);
+            if (parent == null) {
+                throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "父分类不存在");
+            }
+            if (parent.getParentId() != null) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "只支持两级分类");
+            }
+            // ★ 我自己还有子分类，就不许被挂到别人下面 ——
+            //   两级约束下这一条就等价于「不成环」（否则层级会被拉成三层）
+            long childCount = this.count(new LambdaQueryWrapper<Category>().eq(Category::getParentId, id));
+            if (childCount > 0) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该分类下有子分类，不能移动");
+            }
+        }
+
+        // ④ 局部更新：copyProperties 之后 null 字段不会被拼进 SET，天然就是「没传 = 不动」
+        Category u = new Category();
+        BeanUtils.copyProperties(dto, u);
+        u.setId(id);
+        this.updateById(u);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void deleteCategory(Long id) {
-        // TODO(你写) deleteCategory —— 三重校验，缺一不可：
-        //   ① 存在性：this.getById(id) == null → 404 "分类不存在"
-        //   ② 有子分类吗：this.count(new LambdaQueryWrapper<Category>().eq(Category::getParentId, id)) > 0
-        //        → 400 "该分类下有子分类，请先删除子分类"
-        //   ③ ★ 有商品引用吗：productMapper.countByCategoryId(id) > 0
-        //        → 400 "该分类下有商品，不能删除"
-        //      ★ 用 countByCategoryId（含已软删商品），不要用 selectCount —— 见字段上的注释。
-        //        这一条是本日最容易写错、且报错最难看的一处：漏算了已软删商品，
-        //        校验以为空着 → removeById 真删 → PG 抛
-        //        「update or delete on table "categories" violates foreign key constraint
-        //          fk_product_category on table "products"」→ 500。
-        //   ④ this.removeById(id);    ← ★ 真删（本表无 @TableLogic，不会被改写成 UPDATE）
-        //   ★ 为什么整个方法要 @Transactional：②③ 是「检查」，④ 是「写入」。
-        //     检查与写入之间若被别的请求插进去（正好新建了一个商品），
-        //     就会用陈旧的检查结果去执行删除 —— 这正是「先查后改」的 TOCTOU 形态。
-        //     事务隔离把这三步包成一个原子观察窗口，让检查结果在删除时仍然成立。
-        throw new UnsupportedOperationException("TODO: CategoryServiceImpl.deleteCategory");
+        // ① 存在性
+        if (this.getById(id) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "分类不存在");
+        }
+
+        // ② 有子分类 → 拒
+        long childCount = this.count(new LambdaQueryWrapper<Category>().eq(Category::getParentId, id));
+        if (childCount > 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该分类下有子分类，请先删除子分类");
+        }
+
+        // ③ ★ 有商品引用吗 —— 必须用 countByCategoryId（含已软删商品），
+        //     用 selectCount 会漏算已软删的，放行物理删后撞 fk_product_category → 500
+        if (productMapper.countByCategoryId(id) > 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该分类下有商品，不能删除");
+        }
+
+        // ④ 真删（本表没有 @TableLogic，removeById 不会被改写成 UPDATE）
+        this.removeById(id);
     }
 }
