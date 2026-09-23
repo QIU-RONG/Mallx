@@ -3,7 +3,7 @@
 ==========================================================================
   ✅ WELL_FORMED   namespace=com.mallx.product.mapper.ProductMapper
              <select id=countByCategoryId>
-     ★ TODO <select id=searchProducts>
+             <select id=searchProducts>
 
   本日新增 statement：
      ✅ searchProducts
@@ -50,8 +50,7 @@
 ==========================================================================
   XML 良构              : 3 / 3
   本日新增 statement    : 1 个，缺失 0 个
-  SQL 仍停在 TODO       : 1 条
-      · mall-product（Day 19 主角）#searchProducts
-  → 骨架期正常。全部填完后本栏应为 0 —— 只要非 0，那些接口必然 500。
+  SQL 仍停在 TODO       : 0 条
+  → ✅ 所有 SQL 都已填写，可以进入「起应用 + 跑 e2e」阶段。
   Java 有 / XML 无      : 0 个 
   XML 有 / Java 无      : 0 个 

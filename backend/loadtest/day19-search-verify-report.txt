@@ -1,0 +1,97 @@
+==========================================================================
+Day 19 验收：C 端商品搜索（GET /api/products/search）
+==========================================================================
+
+[等待应用就绪] 127.0.0.1:8080 ...
+  应用已就绪。
+  库基线：products=5  product_skus=7  categories=7
+
+--------------------------------------------------------------------------
+A 路由与字段映射（{id} vs search 谁优先 + 下划线别名是否真映射上）
+--------------------------------------------------------------------------
+  [PASS] A1 HTTP 200
+  [PASS] A2 body.code == 200 （★ 若是 400 说明路由落到了 /{id}）
+  [PASS] A3 total == DB 存活商品数 (5)
+  [PASS] A4 records 条数 == 5
+  [PASS] A5 id 列表与 DB 一致 [1, 2, 3, 4, 5]
+  [PASS] A6 categoryName 逐条 == DB（LEFT JOIN categories 生效）
+  [PASS] A7 mainImage 逐条 == DB（★ 下划线别名确实映射上了，没静默 null）
+  [PASS] A8 minPrice 逐条 == DB（标量子查询生效）
+
+--------------------------------------------------------------------------
+B ★核心对照：同一关键词 iphone，新路 vs 旧路（大小写铁证）
+--------------------------------------------------------------------------
+  [PASS] B1 新路 ?keyword=iphone → total == 1
+  [PASS] B2 新路命中 id == 1
+  [PASS] B3 旧路 GET /api/products?keyword=iphone → total == 0（LIKE 大小写敏感）
+  [PASS] B4 旧路 ?keyword=iPhone → total == 1（证明只差大小写，不是没数据）
+  [PASS] B5 DB 对账 LIKE '%iphone%' == 0
+  [PASS] B6 DB 对账 ILIKE '%iphone%' == 1
+
+--------------------------------------------------------------------------
+B2 ★纯全文证据：promotion 只存在于 description（ILIKE 两条兜底都命不中）
+--------------------------------------------------------------------------
+  [PASS] B7 ?keyword=promotion → total == 1
+  [PASS] B8 promotion 命中 id == 1
+  [PASS] B9 promotion 的 searchRank > 0（说明走的是 ts_rank，不是恒 0）
+  [PASS] B10 DB 对账 promotion：fts=1 且 name ILIKE=0 且 subtitle ILIKE=0 ⇒ 全文是唯一解释
+
+--------------------------------------------------------------------------
+C 相关性排序：pro 在两件商品里的 ts_rank 有真实高低差
+--------------------------------------------------------------------------
+  [PASS] C1 ?keyword=pro → total == 2
+  [PASS] C2 顺序 == [1, 2]（id=1 含 pro 两处：name(A) + subtitle(B)）
+  [PASS] C3 searchRank 严格降序（rank[0] > rank[1]）
+  [PASS] C4 rank(商品1) ≈ 0.668720（DB 对账）
+  [PASS] C5 rank(商品2) ≈ 0.607927（DB 对账）
+
+--------------------------------------------------------------------------
+D JSONB 属性筛选（EXISTS + jsonb_build_object）
+--------------------------------------------------------------------------
+  [PASS] D1 attrKey=color&attrValue=黑色 → total == 1 且 id == 1
+  [PASS] D2 attrKey=color&attrValue=原色钛金属 → total == 1 且 id == 1（sku 3）
+  [PASS] D3 attrKey=color&attrValue=白色 → total == 1 且 id == 3（sku 5）
+  [PASS] D4 keyword=iphone + color=原色钛金属 → total == 1（关键词与属性 AND 叠加）
+  [PASS] D5 keyword=iphone + color=曜金黑 → total == 0（曜金黑属于商品 2）
+  [PASS] D6 DB 对账 color=黑色 → {1}
+
+--------------------------------------------------------------------------
+E 中文边界：simple 字典不切词 ⇒ 中文只能靠 ILIKE 兜底（如实打表）
+--------------------------------------------------------------------------
+  [PASS] E1 ?keyword=轻薄 → total == 1（fts=0，靠 ILIKE subtitle 兜底）
+  [PASS] E2 轻薄命中 id == 4（subtitle『商务轻薄本 2.2K 屏』）
+  [PASS] E3 ?keyword=笔记本 → total == 0 ★已知限制（只在 description，两条 ILIKE 都不覆盖）
+  [PASS] E4 ?keyword=徕卡 → total == 2（fts=0，ILIKE subtitle 命中 2 条）
+  [PASS] E5 徕卡命中 ids == [2, 3]
+  [PASS] E6 DB 对账 轻薄：fts=0 且 subtitle ILIKE=1
+
+--------------------------------------------------------------------------
+F 健壮性：成对校验 / tsquery 特殊字符 / 分页夹紧
+--------------------------------------------------------------------------
+  [PASS] F1 只给 attrKey → HTTP 200 + code=400（成对校验）
+  [PASS] F2 只给 attrValue → HTTP 200 + code=400（成对校验）
+  [PASS] F3 keyword='iphone & | !' → code=200 且不 500（plainto_tsquery 把它当纯文本）
+  [PASS] F4 size=999 → data.size 夹到 100
+  [PASS] F5 size=0 → data.size 夹到 1
+  [PASS] F6 size=-1 → data.size 夹到 1
+  [PASS] F7 current=0 → data.current 夹到 1
+  [PASS] F8 attrKey=&attrValue=（都给但都空）→ total == 5（视为不筛选，不报错）
+
+--------------------------------------------------------------------------
+G 索引可达性（★ 小表陷阱：必须把查询剥到只剩 fts 谓词，否则会被 btree 索引截走）
+--------------------------------------------------------------------------
+  [PASS] G1 GIN 索引 idx_products_search 被选中（出现 Bitmap Index Scan on idx_products_search）
+  [PASS] G2 trgm 索引 idx_products_name_trgm 被选中（pg_trgm 这条路也通）
+  [记录] 完整生产 SQL 在 5 行小表上规划器选的是：Seq Scan on products p  (cost=0.00..1.09 rows=1 width=8)
+
+--------------------------------------------------------------------------
+H 零写入校验（验收全程不得改动数据）
+--------------------------------------------------------------------------
+  [PASS] H1 products 行数未变 == 5
+  [PASS] H2 product_skus 行数未变 == 7
+  [PASS] H3 categories 行数未变 == 7
+
+==========================================================================
+TOTAL: PASS=48  FAIL=0   （期望断言数 48）
+VERDICT: OK 全绿
+==========================================================================
