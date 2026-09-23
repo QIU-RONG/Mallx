@@ -15,6 +15,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @Slf4j
@@ -61,6 +62,34 @@ public class GlobalExceptionHandler {
         log.warn("参数类型不匹配: name={}, value={}", e.getName(), e.getValue());
         return Result.error(ResultCode.VALIDATE_FAILED.getCode(),
                 "参数 " + e.getName() + " 格式不正确");
+    }
+
+    /**
+     * 【HTTP 方法不被支持】：如 {@code POST /api/products}（该路径只剩 GET 映射）。
+     * <p>
+     * 【为什么必须单独接一个 —— Day 18 实测发现的真实缺陷】
+     * Spring 抛的是 {@link HttpRequestMethodNotSupportedException}，它同样是 Exception 的子类，
+     * 会被下面的 {@link #handleException(Exception)} 兜走 ⇒
+     * 客户端收到「HTTP 200 + code=500 系统繁忙」，还会在服务端打一条 ERROR 级堆栈。
+     * 后果有两个，都不轻：
+     * <ol>
+     *   <li>「调用方用错了方法」被误报成「服务端故障」，排障方向直接被带偏；</li>
+     *   <li>Day 18 迁移 C 端写接口后，本应用 405 证明「路径还在、方法没了」，
+     *       被兜成 500 之后就与「路径根本不存在」无法区分 —— 断言失去分辨力。</li>
+     * </ol>
+     * <p>
+     * 【为什么这里用真实 HTTP 405，而不是项目惯用的 200 + code】
+     * 405 与 401/403 同类：都是<b>框架/协议层</b>的拒绝，不是业务结果。
+     * 业务码那套约定覆盖的是「请求合法、但业务不同意」，方法不被支持连请求都不合法。
+     * <b>body 里仍带 code=405</b>，前端沿用「只看 code」的习惯也能工作。
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    @ResponseStatus(HttpStatus.METHOD_NOT_ALLOWED)
+    public Result<Void> handleMethodNotSupported(HttpRequestMethodNotSupportedException e){
+        log.warn("请求方法不支持: {}", e.getMessage());
+        String allow = e.getSupportedHttpMethods() == null
+                ? "" : e.getSupportedHttpMethods().toString();
+        return Result.error(HttpStatus.METHOD_NOT_ALLOWED.value(), "请求方法不支持，支持的方法：" + allow);
     }
 
     @ExceptionHandler(Exception.class)
