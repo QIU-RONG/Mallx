@@ -1,0 +1,65 @@
+==========================================================================
+L5① 品牌权限补发 —— D:\MallX\backend\sql\10-brand-permissions.sql
+==========================================================================
+SQL 文件 5352 字符 / 124 行
+
+[1] 执行前快照
+      perm_total         = 20
+      perm_brand         = 0
+      rp_total           = 36
+      rp_brand_role1     = 0
+      rp_brand_role2     = 0
+      rp_brand_role3     = 0
+      brand_paths        = NULL
+      perm_max_id        = 20
+
+[2] 第一次执行  rc=0
+      ✅ 执行成功（含文件末尾三段自检 SELECT，输出见下）
+
+      INSERT 0 1
+      INSERT 0 1
+      INSERT 0 1
+      21
+      21|brand:list|品牌列表|/api/admin/brands|GET
+      ORDER_ADMIN|4|order:cancel, order:detail, order:list, order:ship
+      PRODUCT_ADMIN|13|brand:list, category:create, category:delete, category:list, category:update, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN|21|brand:list, category:create, category:delete, category:list, category:update, coupon:create, coupon:delete, coupon:list, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:list
+      1|1|1|0
+
+[3] 第一次执行后的变化（before -> after1）
+      brand_paths        NULL -> brand:list=/api/admin/brands
+      perm_brand         0 -> 1
+      perm_max_id        20 -> 21
+      perm_total         20 -> 21
+      rp_brand_role1     0 -> 1
+      rp_brand_role2     0 -> 1
+      rp_total           36 -> 38
+
+[4] 第二次执行（幂等验证）  rc=0
+
+[5] 第二次执行后的变化（after1 -> after2）—— ★ 必须为空
+      ✅ 无任何变化 —— SQL 是幂等的
+
+[6] 权限清单（brand:*）
+      21 | brand:list | 品牌列表 | /api/admin/brands | GET
+
+[7] 每个角色拿到了多少权限（整体）
+      ORDER_ADMIN | 4 | order:cancel, order:detail, order:list, order:ship
+      PRODUCT_ADMIN | 13 | brand:list, category:create, category:delete, category:list, category:update, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN | 21 | brand:list, category:create, category:delete, category:list, category:update, coupon:create, coupon:delete, coupon:list, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:list
+
+[8] ★ 交叉核对（对着 EXPECT_CROSS 断言；最后一列期望为 0）
+      [PASS] brand_perms_total          实际=1   期望=1
+      [PASS] granted_to_super_admin     实际=1   期望=1
+      [PASS] granted_to_product_admin   实际=1   期望=1
+      [PASS] granted_to_order_admin     实际=0   期望=0
+
+[9] ★ 元数据核对 —— brand:list 的 path 必须与端点逐字一致
+      [PASS] brand:list     path=/api/admin/brands
+
+[10] ★ 残留检查：brand 权限里 path 不指向 /api/admin/ 的条数（期望 0）
+      [PASS] 实际=0 期望=0
+
+==========================================================================
+VERDICT: OK —— 品牌权限已补发 + 幂等
+==========================================================================

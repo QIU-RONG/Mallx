@@ -54,6 +54,11 @@ public class SecurityConfig {
                 //   不认「同一个 Controller 里的不同方法」⇒ 会【静默公开】别人的券。
                 //   精确路径只放行 /api/coupons 本身，/api/coupons/my 照样被 anyRequest() 兜住。
                 .requestMatchers(HttpMethod.GET, "/api/coupons").permitAll()
+                // ★ L5（Day 20 补漏）：品牌字典是纯公开数据（C 端品牌筛选下拉框的可选值来源）。
+                //   ⚠️ 同样用【精确路径】而不是 "/api/brands/**"：白名单只认「路径 + 方法」，
+                //      写 /** 之后这个前缀下将来新增的任何 GET 都会被【静默公开】
+                //      （与上面 /api/coupons 那条同一个坑，Day 20 实测过）。
+                .requestMatchers(HttpMethod.GET, "/api/brands").permitAll()
                 .anyRequest().authenticated()
             )
             // ⑤ 认证失败返回 401、授权失败返回 403，统一 JSON（一次配全，别拆成两次调用）
