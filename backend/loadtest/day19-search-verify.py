@@ -9,8 +9,25 @@ Day 19 验收：C 端商品搜索  GET /api/products/search
   4. 满额断言写死常量（EXPECTED），防止断言被静默跳过。
 
 覆盖链路 A–H（见 docs/daily/Day-19-商品搜索.md §七）：
-  A 路由与字段映射 / B+ 大小写对照 / B2 纯全文证据 / C 相关性排序
+  A 路由与字段映射 / B+ 大小写对照 / B2 全文与 ILIKE 的证据边界 / C 相关性排序
   D JSONB 属性筛选 / E 中文边界 / F 健壮性 / G 索引可达性 / H 零写入校验
+  I ★ L4 补漏：categoryId 展开子分类（search 与列表两端 total 必须相等）
+
+★★ Day 20 补漏（L3 / L4）改了什么、为什么断言必须跟着改：
+
+  L3 —— 召回条件补了 OR p.description ILIKE ...（修「搜索黑洞」：只出现在
+         description 里的中文词此前永远搜不到）。★ 连带代价：promotion 不再是
+         「纯全文召回」的证据 —— 它只存在于 description，补完之后 ILIKE 也能命中它
+         ⇒ B10 的旧口径（「fts=1 且两条 ILIKE 都命不中 ⇒ 全文是唯一解释」）不成立。
+         ★★ 更根本地：ILIKE 的列范围现在 == 全文的列范围（且只会更宽）
+         ⇒ 在 C 端搜索接口上再也造不出「纯全文召回」这类证据。
+         替代证据 = B11：直接对 DB 断言 ts_rank 值（ILIKE 命中不会抬高 ts_rank）。
+         另外 E 组有两处必然变化：轻薄 1→2（商品 5 的 desc 也含「轻薄」）、
+         笔记本 0→2（L3 修复的活例）。
+
+  L4 —— categoryId 由「等值比较」改成「展开成集合 + IN」。
+         ★ 改动前 I1 / I2 必然失败（父分类返回 0 条），这正是要钉住的口径漂移：
+         /api/products?categoryId=1 有 3 条，而 /api/products/search?categoryId=1 是 0 条。
 
 运行：python day19-search-verify.py
 """
@@ -30,7 +47,7 @@ DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docke
 PSQL = [DOCKER, "exec", "mallx-postgres", "psql", "-U", "mallx", "-d", "mallx",
         "-t", "-A", "-F", "|"]
 
-EXPECTED = 48                     # 满额断言条数（写死）
+EXPECTED = 58                     # 满额断言条数（写死）
 
 _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 LINES = []
@@ -202,10 +219,10 @@ n_ilike = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
 check("B5 DB 对账 LIKE '%iphone%' == 0", n_like == 0, "实际 %d" % n_like)
 check("B6 DB 对账 ILIKE '%iphone%' == 1", n_ilike == 1, "实际 %d" % n_ilike)
 
-# ---------------------------------------------------------------- B2 纯全文
+# ------------------------------------------- B2 全文 / ILIKE 的证据边界（L3 后）
 say()
 say("-" * 74)
-say("B2 ★纯全文证据：promotion 只存在于 description（ILIKE 两条兜底都命不中）")
+say("B2 ★L3 后的证据边界：promotion 同时被 fts 与 description ILIKE 命中")
 say("-" * 74)
 
 st, jp, _ = search(keyword="promotion")
@@ -224,9 +241,25 @@ p_nm = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
                 + " AND p.name ILIKE '%promotion%'"))
 p_sub = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
                  + " AND p.subtitle ILIKE '%promotion%'"))
-check("B10 DB 对账 promotion：fts=1 且 name ILIKE=0 且 subtitle ILIKE=0 "
-      "⇒ 全文是唯一解释", (p_fts, p_nm, p_sub) == (1, 0, 0),
-      "实际 fts=%d nm=%d sub=%d" % (p_fts, p_nm, p_sub))
+p_dsc = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
+                 + " AND p.description ILIKE '%promotion%'"))
+check("B10 ★口径已改（L3 后）：promotion 的 fts=1，但 description ILIKE 也=1 "
+      "⇒ 它【不再是】「纯全文召回」的证据",
+      (p_fts, p_nm, p_sub, p_dsc) == (1, 0, 0, 1),
+      "实际 fts=%d nm=%d sub=%d dsc=%d" % (p_fts, p_nm, p_sub, p_dsc))
+
+# ★ L3 的替代证据：直接对 DB 断言 ts_rank 值本身。
+#   理由：ILIKE 命中不会让 ts_rank 变大 ⇒ 接口返回的 search_rank 若与 DB 的 ts_rank
+#   逐位相等，就说明这个分数确实由 fts 算出、与 ILIKE 无关（C 组那条相关性排序同理）。
+p_rank_db = float(sql1("SELECT round(ts_rank(p.search_vector, "
+                       "plainto_tsquery('simple','promotion'))::numeric, 6)::text "
+                       "FROM products p WHERE p.id = 1"))
+p_rank_api = (jp["data"]["records"][0].get("searchRank")
+              if (jp and jp.get("data") and jp["data"].get("records")) else None)
+check("B11 ★promotion 的 searchRank ≈ DB 的 ts_rank 值（%.6f）—— L3 后仍然成立的纯 fts 证据"
+      % p_rank_db,
+      p_rank_api is not None and abs(round(p_rank_api, 6) - p_rank_db) < 1e-4,
+      "接口 %s / DB %.6f" % (p_rank_api, p_rank_db))
 
 # ---------------------------------------------------------------- C 相关性
 say()
@@ -301,30 +334,115 @@ say("E 中文边界：simple 字典不切词 ⇒ 中文只能靠 ILIKE 兜底（
 say("-" * 74)
 
 st, je1, _ = search(keyword="轻薄")
-check("E1 ?keyword=轻薄 → total == 1（fts=0，靠 ILIKE subtitle 兜底）",
-      bool(je1) and je1["data"]["total"] == 1,
+check("E1 ★口径已改（L3 后）：?keyword=轻薄 → total == 2"
+      "（subtitle 命中商品 4 + ★description 命中商品 5）",
+      bool(je1) and je1["data"]["total"] == 2,
       "实际 %s" % (je1["data"]["total"] if je1 and je1.get("data") else "?"))
-check("E2 轻薄命中 id == 4（subtitle『商务轻薄本 2.2K 屏』）",
-      bool(je1) and ids_of(je1) == [4], "实际 %s" % (ids_of(je1) if je1 else "?"))
+check("E2 轻薄命中 ids == [4, 5]（fts=0 两条 ⇒ search_rank 都是 0，退化成按 id 升序）",
+      bool(je1) and ids_of(je1) == [4, 5], "实际 %s" % (ids_of(je1) if je1 else "?"))
 
 st, je2, _ = search(keyword="笔记本")
-check("E3 ?keyword=笔记本 → total == 0 ★已知限制（只在 description，两条 ILIKE 都不覆盖）",
-      bool(je2) and je2["data"]["total"] == 0,
+check("E3 ★L3 修复的活例：?keyword=笔记本 → total == 2（修复前恒 0 —— 搜索黑洞）",
+      bool(je2) and je2["data"]["total"] == 2,
       "实际 %s" % (je2["data"]["total"] if je2 and je2.get("data") else "?"))
+check("E4 笔记本命中 ids == [4, 5]（『笔记本』只出现在这两条的 description 里）",
+      bool(je2) and ids_of(je2) == [4, 5], "实际 %s" % (ids_of(je2) if je2 else "?"))
 
 st, je3, _ = search(keyword="徕卡")
-check("E4 ?keyword=徕卡 → total == 2（fts=0，ILIKE subtitle 命中 2 条）",
+check("E5 ?keyword=徕卡 → total == 2（fts=0，ILIKE subtitle 命中 2 条）",
       bool(je3) and je3["data"]["total"] == 2,
       "实际 %s" % (je3["data"]["total"] if je3 and je3.get("data") else "?"))
-check("E5 徕卡命中 ids == [2, 3]", bool(je3) and ids_of(je3) == [2, 3],
+check("E6 徕卡命中 ids == [2, 3]", bool(je3) and ids_of(je3) == [2, 3],
       "实际 %s" % (ids_of(je3) if je3 else "?"))
 
 e_fts = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
                  + " AND p.search_vector @@ plainto_tsquery('simple','轻薄')"))
 e_sub = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
                  + " AND p.subtitle ILIKE '%轻薄%'"))
-check("E6 DB 对账 轻薄：fts=0 且 subtitle ILIKE=1",
-      (e_fts, e_sub) == (0, 1), "实际 fts=%d sub=%d" % (e_fts, e_sub))
+e_dsc = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
+                 + " AND p.description ILIKE '%轻薄%'"))
+check("E7 DB 对账 轻薄：fts=0 且 subtitle ILIKE=1 且 description ILIKE=1"
+      "（商品 5 是 L3 之后才进来的）",
+      (e_fts, e_sub, e_dsc) == (0, 1, 1),
+      "实际 fts=%d sub=%d dsc=%d" % (e_fts, e_sub, e_dsc))
+
+b_nm = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
+                + " AND p.name ILIKE '%笔记本%'"))
+b_sub = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
+                 + " AND p.subtitle ILIKE '%笔记本%'"))
+b_dsc = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
+                 + " AND p.description ILIKE '%笔记本%'"))
+check("E8 ★DB 对账 笔记本：name=0 且 subtitle=0 且 description=2 "
+      "⇒ E3 那 2 条【只可能】由 description 兜底召回（L3 的直接证据）",
+      (b_nm, b_sub, b_dsc) == (0, 0, 2),
+      "实际 nm=%d sub=%d dsc=%d" % (b_nm, b_sub, b_dsc))
+
+# ---------------------------------------------------------------- I categoryId
+say()
+say("-" * 74)
+say("I ★L4 补漏：search 的 categoryId 必须与列表【同口径】（展开「自己 + 直接子分类」）")
+say("-" * 74)
+# 分类树：1(手机通讯) → 11(智能手机) / 12(手机配件)；2(电脑办公) → 21(笔记本电脑)
+# 商品归属：1/2/3 在 11；4/5 在 21
+# ⇒ categoryId=1 与 =2 是【父分类】，只有「展开」才查得到商品（改前必然 0 条）；
+#   =11 / =21 是叶子，改前改后一样 —— 所以「父子都要验，只验一边证明不了展开」。
+CAT_MEMBERS = {1: "1,11,12", 2: "2,21", 11: "11", 21: "21"}
+
+
+def total_of(path, **params):
+    st_, j_, raw_ = search(path=path, **params)
+    return (j_["data"]["total"] if (j_ and j_.get("data")) else None), st_, raw_
+
+
+db_cat = {cid: int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
+                        + " AND p.category_id IN (%s)" % members))
+          for cid, members in CAT_MEMBERS.items()}
+db_cat_none = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE))
+say("  [基线] DB 存活商品：不限分类=%d；category_id∈{1,11,12}=%d、∈{2,21}=%d、=11=%d、=21=%d"
+    % (db_cat_none, db_cat[1], db_cat[2], db_cat[11], db_cat[21]))
+
+s1, _st, _raw = total_of("/api/products/search", categoryId=1)
+l1, _st, _raw = total_of("/api/products", categoryId=1)
+check("I1 ★search?categoryId=1（父分类）total == %d，且与列表 /api/products?categoryId=1 【相等】"
+      % db_cat[1],
+      s1 == db_cat[1] and s1 == l1, "search=%s 列表=%s DB=%d" % (s1, l1, db_cat[1]))
+
+s2, _st, _raw = total_of("/api/products/search", categoryId=2)
+l2, _st, _raw = total_of("/api/products", categoryId=2)
+check("I2 ★search?categoryId=2（父分类，子分类是 21）total == %d，且与列表相等" % db_cat[2],
+      s2 == db_cat[2] and s2 == l2, "search=%s 列表=%s DB=%d" % (s2, l2, db_cat[2]))
+
+s11, _st, _raw = total_of("/api/products/search", categoryId=11)
+l11, _st, _raw = total_of("/api/products", categoryId=11)
+check("I3 search?categoryId=11（叶子）total == %d 且与列表相等"
+      "（父子都验，只验一边证明不了「展开」）" % db_cat[11],
+      s11 == db_cat[11] and s11 == l11, "search=%s 列表=%s DB=%d" % (s11, l11, db_cat[11]))
+
+s21, _st, _raw = total_of("/api/products/search", categoryId=21)
+l21, _st, _raw = total_of("/api/products", categoryId=21)
+check("I4 search?categoryId=21（叶子）total == %d 且与列表相等" % db_cat[21],
+      s21 == db_cat[21] and s21 == l21, "search=%s 列表=%s DB=%d" % (s21, l21, db_cat[21]))
+
+_st, js1, raw_i5 = search(categoryId=1)
+i_ids = ids_of(js1) if js1 else None
+db_ids_cat1 = [int(r.split("|")[0]) for r in
+               sql("SELECT p.id FROM products p WHERE " + ALIVE
+                   + " AND p.category_id IN (1,11,12) ORDER BY p.id")]
+check("I5 search?categoryId=1 的 id 序列逐条 == DB 的 {1,11,12} 集合 %s"
+      % db_ids_cat1, i_ids == db_ids_cat1, "接口 %s" % (i_ids if i_ids else raw_i5[:80]))
+
+_st, jn2, raw_none = search()
+check("I6 ★不传 categoryId → total == %d（不受限）—— 空集合分支没被误触发"
+      "（误触发会生成 IN () 直接 500）" % db_cat_none,
+      bool(jn2) and jn2["data"]["total"] == db_cat_none,
+      "实际 %s %s" % (jn2["data"]["total"] if jn2 and jn2.get("data") else "?",
+                      raw_none[:80]))
+
+eq_only = int(sql1("SELECT count(*) FROM products p WHERE " + ALIVE
+                   + " AND p.category_id = 1"))
+check("I7 ★反证：DB 里 category_id = 1 的商品有 %d 条 ⇒ 修复前走【等值】时 "
+      "search?categoryId=1 必然返回 0 条（所以 I1 那 3 条只能是「展开」的功劳）" % eq_only,
+      eq_only == 0, "实际 %d" % eq_only)
 
 # ---------------------------------------------------------------- F 健壮性
 say()

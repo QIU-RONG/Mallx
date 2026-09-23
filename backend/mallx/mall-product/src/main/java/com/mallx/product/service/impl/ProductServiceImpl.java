@@ -131,25 +131,33 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     }
 
     /**
-     * ★★★ C 端商品搜索（Day 19）—— <b>骨架</b>，方法体由你写（本日唯一的核心实现）。
+     * ★★★ C 端商品搜索（Day 19 实写通过；Day 20 补 L4 的 categoryId 展开）。
      *
      * <p>三步，顺序不能换：
      * <pre>
-     *   ① 归一化 keyword：
-     *        keyword = (keyword == null) ? "" : keyword.trim();
-     *      ★ 归一化必须在这里做完 —— SQL 侧不接受 null，
-     *        理由见 ProductService#searchProducts 的「PG 类型推断」段落。
-     *   ② 成对校验：
-     *        attrKey / attrValue 只有一个非空 →
-     *            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
-     *                                        "attrKey 与 attrValue 必须成对出现");
-     *      ★ 两个都为空是【合法】的（= 不做属性筛选），别写成「必须都有值」。
-     *   ③ 夹紧 + 调用（★ 夹紧必须在 new Page 之前）：
+     *   ① 归一化 keyword 与成对字段：
+     *        keyword 空/null → ""（★ SQL 侧不接受 null，理由见 ProductService#searchProducts）
+     *        attrKey / attrValue 恰好一个非空 → 400；两个都空是【合法】的（= 不筛属性）
+     *   ② 夹紧（★ 必须在 new Page 之前）：
      *        long safePage = Math.max(current, 1);
      *        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+     *   ③ L4：把 categoryId 展开成集合再下传
+     *        Set&lt;Long&gt; catIds = expandCategoryIds(categoryId);
      *        return baseMapper.searchProducts(new Page&lt;&gt;(safePage, safeSize),
-     *                                         keyword, categoryId, attrKey, attrValue);
+     *                                         kw, catIds, key, val);
      * </pre>
+     *
+     * <p>★★ <b>为什么第③步必须复用 {@code expandCategoryIds} 而不是在 XML 里写
+     * {@code category_id = #{categoryId}} 或自己拼子查询</b>：
+     * C 端列表（{@code pageProducts}）早就用 {@code expandCategoryIds} 展开成
+     * 「自己 + 直接子分类」；搜索若走等值，就会出现<b>同一个 C 端、同一个诉求、两个入口给不同答案</b>：
+     * <pre>
+     *   GET /api/products?categoryId=1        → 含二级分类 11 下的商品（3 条）
+     *   GET /api/products/search?categoryId=1 → 0 条        ← 修复前
+     * </pre>
+     * 这类不一致不报错、不 500，属于最难被发现的一类缺陷。复用同一个方法 ⇒ 口径**不可能**再漂移。
+     * ★ {@code expandCategoryIds} 内部已经把 null 挡成空集合，这里不用再判一次
+     * （空集合由 XML 的 {@code size() > 0} 处理成「不限分类」）。
      *
      * <p>★ <b>本方法不需要换壳</b>：与上面两个分页方法不同 ——
      * 它们要 {@code Page<Product>} → {@code Page<ProductVO>}（{@code this.page()} 只能吐实体）；
@@ -172,8 +180,9 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         }
         long safePage = Math.max(current, 1);
         long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        Set<Long> catIds = expandCategoryIds(categoryId);
         return baseMapper.searchProducts(new Page<>(safePage, safeSize),
-                kw, categoryId, key, val);
+                kw, catIds, key, val);
     }
 
     /**

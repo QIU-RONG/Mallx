@@ -29,12 +29,13 @@ B ★核心对照：同一关键词 iphone，新路 vs 旧路（大小写铁证�
   [PASS] B6 DB 对账 ILIKE '%iphone%' == 1
 
 --------------------------------------------------------------------------
-B2 ★纯全文证据：promotion 只存在于 description（ILIKE 两条兜底都命不中）
+B2 ★L3 后的证据边界：promotion 同时被 fts 与 description ILIKE 命中
 --------------------------------------------------------------------------
   [PASS] B7 ?keyword=promotion → total == 1
   [PASS] B8 promotion 命中 id == 1
   [PASS] B9 promotion 的 searchRank > 0（说明走的是 ts_rank，不是恒 0）
-  [PASS] B10 DB 对账 promotion：fts=1 且 name ILIKE=0 且 subtitle ILIKE=0 ⇒ 全文是唯一解释
+  [PASS] B10 ★口径已改（L3 后）：promotion 的 fts=1，但 description ILIKE 也=1 ⇒ 它【不再是】「纯全文召回」的证据
+  [PASS] B11 ★promotion 的 searchRank ≈ DB 的 ts_rank 值（0.121585）—— L3 后仍然成立的纯 fts 证据
 
 --------------------------------------------------------------------------
 C 相关性排序：pro 在两件商品里的 ts_rank 有真实高低差
@@ -58,12 +59,26 @@ D JSONB 属性筛选（EXISTS + jsonb_build_object）
 --------------------------------------------------------------------------
 E 中文边界：simple 字典不切词 ⇒ 中文只能靠 ILIKE 兜底（如实打表）
 --------------------------------------------------------------------------
-  [PASS] E1 ?keyword=轻薄 → total == 1（fts=0，靠 ILIKE subtitle 兜底）
-  [PASS] E2 轻薄命中 id == 4（subtitle『商务轻薄本 2.2K 屏』）
-  [PASS] E3 ?keyword=笔记本 → total == 0 ★已知限制（只在 description，两条 ILIKE 都不覆盖）
-  [PASS] E4 ?keyword=徕卡 → total == 2（fts=0，ILIKE subtitle 命中 2 条）
-  [PASS] E5 徕卡命中 ids == [2, 3]
-  [PASS] E6 DB 对账 轻薄：fts=0 且 subtitle ILIKE=1
+  [PASS] E1 ★口径已改（L3 后）：?keyword=轻薄 → total == 2（subtitle 命中商品 4 + ★description 命中商品 5）
+  [PASS] E2 轻薄命中 ids == [4, 5]（fts=0 两条 ⇒ search_rank 都是 0，退化成按 id 升序）
+  [PASS] E3 ★L3 修复的活例：?keyword=笔记本 → total == 2（修复前恒 0 —— 搜索黑洞）
+  [PASS] E4 笔记本命中 ids == [4, 5]（『笔记本』只出现在这两条的 description 里）
+  [PASS] E5 ?keyword=徕卡 → total == 2（fts=0，ILIKE subtitle 命中 2 条）
+  [PASS] E6 徕卡命中 ids == [2, 3]
+  [PASS] E7 DB 对账 轻薄：fts=0 且 subtitle ILIKE=1 且 description ILIKE=1（商品 5 是 L3 之后才进来的）
+  [PASS] E8 ★DB 对账 笔记本：name=0 且 subtitle=0 且 description=2 ⇒ E3 那 2 条【只可能】由 description 兜底召回（L3 的直接证据）
+
+--------------------------------------------------------------------------
+I ★L4 补漏：search 的 categoryId 必须与列表【同口径】（展开「自己 + 直接子分类」）
+--------------------------------------------------------------------------
+  [基线] DB 存活商品：不限分类=5；category_id∈{1,11,12}=3、∈{2,21}=2、=11=3、=21=2
+  [PASS] I1 ★search?categoryId=1（父分类）total == 3，且与列表 /api/products?categoryId=1 【相等】
+  [PASS] I2 ★search?categoryId=2（父分类，子分类是 21）total == 2，且与列表相等
+  [PASS] I3 search?categoryId=11（叶子）total == 3 且与列表相等（父子都验，只验一边证明不了「展开」）
+  [PASS] I4 search?categoryId=21（叶子）total == 2 且与列表相等
+  [PASS] I5 search?categoryId=1 的 id 序列逐条 == DB 的 {1,11,12} 集合 [1, 2, 3]
+  [PASS] I6 ★不传 categoryId → total == 5（不受限）—— 空集合分支没被误触发（误触发会生成 IN () 直接 500）
+  [PASS] I7 ★反证：DB 里 category_id = 1 的商品有 0 条 ⇒ 修复前走【等值】时 search?categoryId=1 必然返回 0 条（所以 I1 那 3 条只能是「展开」的功劳）
 
 --------------------------------------------------------------------------
 F 健壮性：成对校验 / tsquery 特殊字符 / 分页夹紧
@@ -92,6 +107,6 @@ H 零写入校验（验收全程不得改动数据）
   [PASS] H3 categories 行数未变 == 7
 
 ==========================================================================
-TOTAL: PASS=48  FAIL=0   （期望断言数 48）
+TOTAL: PASS=58  FAIL=0   （期望断言数 58）
 VERDICT: OK 全绿
 ==========================================================================

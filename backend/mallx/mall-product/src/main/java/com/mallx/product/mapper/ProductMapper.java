@@ -7,6 +7,8 @@ import com.mallx.product.vo.ProductSearchVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.Collection;
+
 
 public interface ProductMapper extends BaseMapper<Product> {
 
@@ -55,7 +57,15 @@ public interface ProductMapper extends BaseMapper<Product> {
      *       空串表示「不限关键词」。不要在 XML 里判 {@code #{keyword} IS NULL} ——
      *       MyBatis 对 null 参数用 {@code setNull(JdbcType.OTHER)}，
      *       PostgreSQL 无法推断类型会直接报 {@code could not determine data type of parameter}。</li>
-     *   <li>{@code categoryId}：null 表示「不限分类」。</li>
+     *   <li>{@code categoryIds}：★ <b>L4（Day 20 补漏）</b>已由 {@code Long categoryId} 改成
+     *       {@code Collection<Long>} —— View 层仍收单个 {@code categoryId}，
+     *       由 Service 用 {@code expandCategoryIds} 展开成「自己 + 直接子分类」的集合再传进来，
+     *       与 C 端列表 <b>完全同源</b>（同一个方法，不可能漂移）。
+     *       ★ <b>空集合表示「不限分类」</b>，XML 用 {@code categoryIds.size() > 0} 挡掉 ——
+     *       不挡会生成 {@code IN ()} 直接语法错。
+     *       <b>改前是等值比较</b> ⇒ {@code /api/products/search?categoryId=1}（父分类）返回 0 条，
+     *       而 {@code /api/products?categoryId=1} 返回该父分类下全部商品 —— 一个不报错、
+     *       不 500 的口径漂移（本项目最难发现的一类缺陷）。</li>
      *   <li>{@code attrKey} / {@code attrValue}：★ 成对 —— Service 已保证
      *       「要么两个都有值、要么两个都是 null」，XML 里只需判其中一个。</li>
      *   <li>{@code page}：★ <b>首参必须是 IPage</b>，分页插件靠它决定是否改写 SQL 加 LIMIT/OFFSET，
@@ -70,7 +80,7 @@ public interface ProductMapper extends BaseMapper<Product> {
      */
     IPage<ProductSearchVO> searchProducts(IPage<ProductSearchVO> page,
                                           @Param("keyword") String keyword,
-                                          @Param("categoryId") Long categoryId,
+                                          @Param("categoryIds") Collection<Long> categoryIds,
                                           @Param("attrKey") String attrKey,
                                           @Param("attrValue") String attrValue);
 }

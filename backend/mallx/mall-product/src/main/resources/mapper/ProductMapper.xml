@@ -24,10 +24,10 @@
     </select>
 
     <!--
-      searchProducts：C 端商品搜索（Day 19）—— ★ 骨架期占位实现，真正的 SQL 由你写。
+      searchProducts：C 端商品搜索（Day 19 实写通过；Day 20 补 L3 + L4 两处漏）。
 
       要求见 ProductMapper.java#searchProducts，七条要点见 docs/daily/Day-19-商品搜索.md §五。
-      下面把该踩的坑集中列一遍，写 SQL 时逐条对照：
+      下面把该踩的坑集中列一遍，读 SQL 时逐条对照：
 
         · 表别名统一 p（products）、c（categories）；★ 别名一律下划线形式：
               p.main_image AS main_image、c.name AS category_name
@@ -46,10 +46,33 @@
               中文/子串兜底（★ 没有索引，会全表扫，这是第一版有意的取舍）：
                   OR p.name ILIKE '%' || #{keyword} || '%'
                   OR p.subtitle ILIKE '%' || #{keyword} || '%'
+                  OR p.description ILIKE '%' || #{keyword} || '%'
           ⚠️ 用 plainto_tsquery 而不是 to_tsquery：前者把用户输入当纯文本，
              后者把 & | ! 当语法，遇到 "iphone &" 会抛 syntax error in tsquery。
+          ★★ L3（Day 20 补漏）：description 这一行【必须有】，不是锦上添花。
+             召回列必须与 search_vector 的构建列对称 —— 触发器按 name(A) + subtitle(B)
+             + description(C) 三列建向量，兜底只兜两列就会出现「搜索黑洞」：
+             description 里的【中文】词，全文匹配不了（simple 字典不切中文，整段成一个 token），
+             ILIKE 又不看 description ⇒ 永远搜不到。实测活例：keyword=笔记本 修复前 0 条。
+             ⚠️ 代价：这条查询本来就全表扫（前导 % 废掉索引），多一列不改变复杂度。
+             ⚠️ 副作用：补上之后 ILIKE 的列范围 == 全文的列范围（且只会更宽）
+                ⇒ 在 C 端搜索接口上再也造不出「纯全文召回」的证据。
+                promotion 原来是那条证据（只存在于 description），现在会被 ILIKE 命中；
+                替代证据改成直接对 DB 断言 ts_rank 值（day19-search-verify.py B11）。
 
-        · categoryId 过滤：<if test="categoryId != null"> AND p.category_id = #{categoryId} </if>
+        · categoryIds 过滤 —— ★ L4（Day 20 补漏）：走【集合 + IN】，不走等值：
+              <if test="categoryIds != null and categoryIds.size() > 0">
+                  AND p.category_id IN
+                  <foreach collection="categoryIds" item="cid" open="(" separator="," close=")">
+                      #{cid}
+                  </foreach>
+              </if>
+          ★★ 只判 categoryIds != null 是不够的：Service 传的是 expandCategoryIds(categoryId)
+             的返回值，没传分类时它返回【空集合】而不是 null ⇒ 条件成立、foreach 生成
+             "IN ()" ⇒ PG 语法错直接 500。空集合必须用 size() > 0 挡掉，这是本段唯一的陷阱。
+          ★ 口径与 C 端列表同源（同一个 expandCategoryIds）：修复前 search 走等值
+             ⇒ /api/products/search?categoryId=1（父分类）返回 0 条，
+             而 /api/products?categoryId=1 返回 3 条 —— 安静的口径漂移。
 
         · attrKey / attrValue（★ 成对，Service 已保证；XML 判 attrKey != null 即可）：
               AND EXISTS (SELECT 1 FROM product_skus s
@@ -91,6 +114,7 @@
             <if test="keyword != ''"> AND ( p.search_vector @@ plainto_tsquery('simple', #{keyword})
                 OR p.name ILIKE '%' || #{keyword} || '%'
                 OR p.subtitle ILIKE '%' || #{keyword} || '%'
+                OR p.description ILIKE '%' || #{keyword} || '%'
                 )
             </if>
             <if test="attrKey != null">
@@ -99,7 +123,12 @@
                               AND s.is_deleted = 0 AND s.status = 1
                               AND s.attributes @> jsonb_build_object(#{attrKey}, #{attrValue}))
             </if>
-            <if test="categoryId != null"> AND p.category_id = #{categoryId} </if>
+            <if test="categoryIds != null and categoryIds.size() > 0">
+                AND p.category_id IN
+                <foreach collection="categoryIds" item="cid" open="(" separator="," close=")">
+                    #{cid}
+                </foreach>
+            </if>
         </where>
         ORDER BY search_rank DESC, p.id ASC
     </select>
