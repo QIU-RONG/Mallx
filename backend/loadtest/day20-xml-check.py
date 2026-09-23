@@ -217,7 +217,8 @@ for s in empty_sql:
 
 # ---- 4. Java 侧骨架占位计数 -----------------------------------------------
 todos = count_java_todos(TODO_SCAN_DIR)
-say("  Java 骨架占位         : %d 处（预期基线 %d）" % (len(todos), TODO_BASELINE))
+say("  Java 骨架占位         : %d 处（骨架交付时 %d 处 → 已填 %d 处）"
+    % (len(todos), TODO_BASELINE, max(0, TODO_BASELINE - len(todos))))
 for fn, ln, _txt in todos:
     say("      · %s:%d" % (fn, ln))
 
