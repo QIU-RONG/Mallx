@@ -202,7 +202,7 @@ DDL 补丁没跑，这条 SQL **直接报 `there is no unique or exclusion const
 
 ```sql
 SELECT id, name, type, discount_amount, discount_rate, min_amount,
-       total_count, received_count, start_time, end_time
+       total_count, received_count, start_time, end_time, status
   FROM coupons
  WHERE status = 1
    AND start_time <= CURRENT_TIMESTAMP
@@ -210,6 +210,11 @@ SELECT id, name, type, discount_amount, discount_rate, min_amount,
    AND received_count < total_count      -- ★ 抢光的就不展示了
  ORDER BY id DESC
 ```
+
+> ★ **列清单以 `CouponMapper.xml` 的注释为准（含 `status`）**。
+> 理由：`CouponVO` 是**管理端与 C 端共用**的，`status` 是管理端区分上架/下架的唯一字段；
+> C 端这一路 `status` 恒为 1，漏解不会出错，但字段会是 `null` —— 属于「安静的不对」。
+> （本文档初稿此处曾漏写 `status`，已订正。）
 
 ★ 三个条件与 §4.1 的 CAS 守卫**逐字对应** —— 列表里**展示得出来的，就是领得到的**。
 这是「口径一致」的一条硬规矩：两边写岔了，用户会看到「列表里有、点进去说抢光了」。
