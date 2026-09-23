@@ -242,7 +242,7 @@ SELECT 'LEGIT: available=' || available_stock || '  sku%d ledger rows='
 UPDATE inventories SET available_stock = available_stock - 1 WHERE sku_id = %d;
 SELECT 'MUTATED: available is now ' || available_stock FROM inventories WHERE sku_id = %d;
 %s
-SELECT 'VERDICT: ' || (COALESCE(f.before_stock, i.available_stock) + COALESCE(f.sum_change, 0)
+SELECT '[4] BYPASS-AUDIT (expected false): ' || (COALESCE(f.before_stock, i.available_stock) + COALESCE(f.sum_change, 0)
         = i.available_stock) FROM inventories i
   LEFT JOIN (SELECT sku_id, before_stock, sum_change FROM (
         SELECT sku_id, before_stock, SUM(change_quantity) OVER (PARTITION BY sku_id) sum_change,
@@ -254,8 +254,12 @@ SELECT 'AFTER ROLLBACK: available is ' || available_stock FROM inventories WHERE
 """ % (tgt, tgt, tgt, tgt, tgt, tgt, tgt, tgt, AUDIT_SQL, tgt, tgt))
     for line in raw.splitlines():
         say("  %s" % line)
-    chk("★ audit reported DRIFT while the bypassed write was in effect",
-        "VERDICT: f" in raw)
+    # ★ 标签里带着 "(expected false)" 一起断言 —— 这一行"必须是 false"，
+    #   它就是"审计有牙齿"的正面证据。曾经的坑：报告里那行裸的 `VERDICT: false`
+    #   被 grep VERDICT 的人当成脚本失败（docs/backlog.md 附一① 就是这条误读）。
+    chk("★ audit reported DRIFT while the bypassed write was in effect "
+        "(label 自带 expected false，不再会被误读成脚本失败)",
+        "[4] BYPASS-AUDIT (expected false): f" in raw)
     after = rows("SELECT available_stock FROM inventories WHERE sku_id=%d" % tgt, 1)[0][0]
     say("  sku%d available: %s -> %s (rolled back)" % (tgt, before, after))
     chk("rollback restored the value (zero side effects)", before == after)
@@ -265,6 +269,11 @@ SELECT 'AFTER ROLLBACK: available is ' || available_stock FROM inventories WHERE
     total = len(checks)
     say("\n" + "=" * 78)
     say("ASSERTIONS: %d / %d passed" % (passed, total))
+    say("★ 阅读提示：本报告里唯一出现 false 的地方是 [4] 段的 "
+        "\"[4] BYPASS-AUDIT (expected false): false\"。")
+    say("  那一行【必须是 false】—— 它是「审计能抓到绕过服务的裸写」的正面证据：")
+    say("  脚本在事务里故意做一次不记账的 UPDATE，审计若报 true 就说明它没有牙齿。")
+    say("  换句话说：grep 这个报告时不要拿 false 当失败判据，看本行和 [4] 段标签。")
     if passed != total:
         say("\nFAILED:")
         for name, ok in checks:

@@ -50,11 +50,15 @@ Day 14 Step 5 -- reconciliation: inventory_logs vs inventories, per SKU
   5|117|-1|0|117|-1|t|t
   6|40|-1|0|40|-1|t|t
   7|90|-1|0|90|-1|t|t
-  VERDICT: false
+  [4] BYPASS-AUDIT (expected false): false
   ROLLBACK
   AFTER ROLLBACK: available is 147
   sku4 available: 147 -> 147 (rolled back)
 
 ==============================================================================
 ASSERTIONS: 27 / 27 passed
+★ 阅读提示：本报告里唯一出现 false 的地方是 [4] 段的 "[4] BYPASS-AUDIT (expected false): false"。
+  那一行【必须是 false】—— 它是「审计能抓到绕过服务的裸写」的正面证据：
+  脚本在事务里故意做一次不记账的 UPDATE，审计若报 true 就说明它没有牙齿。
+  换句话说：grep 这个报告时不要拿 false 当失败判据，看本行和 [4] 段标签。
 ==============================================================================
