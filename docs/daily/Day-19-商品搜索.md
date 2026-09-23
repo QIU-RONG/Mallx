@@ -180,8 +180,12 @@ PostgreSQL 会报 **`could not determine data type of parameter`** —— 这是
 **④ `ORDER BY search_rank DESC, p.id ASC`**（`p.id` 兜底保证**顺序稳定**，同库存对账视图的思路）。
 ★ `rank` 是 **PostgreSQL 保留字**，不能直接当列别名 → 用 `search_rank`，Java 字段 `searchRank`（下划线自动映射）。
 
-**⑤ 别名一律下划线**（`main_image AS main_image`）。写成 `AS mainImage` 会被 PG 折成
-`mainimage` → 字段**静默为 null**、不报错。这条已在 `InventoryMapper.xml` 反复标红。
+**⑤ 别名一律下划线**（`main_image AS main_image`）—— 这是**统一风格**，不是「不这么写就会 null」。
+★ 机制真相（Day 19 用真实 VO 实测，见 §九.4）：MyBatis 查属性时**大小写不敏感**，
+所以 PG 把 `AS mainImage` 折成 `mainimage` 之后**照样映射得上**；
+反过来说，下划线别名只在 `map-underscore-to-camel-case: true` 时才成立 ——
+真正「两种 mapper 配置下都成立」的写法**只有下划线这一种**，这才是坚持它的理由。
+（旧记载「驼峰别名 ⇒ 字段静默为 null」已被本次实测推翻，详见 §九.4。）
 
 **⑥ JSONB 筛选必须用 `jsonb_build_object(#{attrKey}, #{attrValue})`**，
 **禁止**拼字符串（`'{"' || #{k} || '":...'`）—— 那是注入口 + 转义地狱。
@@ -215,9 +219,11 @@ PostgreSQL 会报 **`could not determine data type of parameter`** —— 这是
 |---|---|---|
 | **A 路由/骨架** | `/api/products/search` 命中谁 | ★ `code=500`（**不是 400**）⇒ 字面量优先于 `{id}` |
 | **B ★核心对照** | `keyword=iphone` | 新接口 **≥1 条**（含商品 1）；旧接口 `GET /api/products?keyword=iphone` **0 条** ⇒ 大小写铁证 |
-| **C 相关性** | `keyword=徕卡` | 商品 2/3 命中，且 `searchRank` 降序可断言 |
+| **C 相关性** | `keyword=pro` | 商品 1/2 命中；`ts_rank` 分别 0.668720 / 0.607927 ⇒ **降序真实可断言** |
+| **C2 中文兜底** | `keyword=徕卡` | 命中商品 2/3 ★ 但走的是 ILIKE（fts=0）—— 中文只能这样 |
 | **D JSONB 属性** | `attrKey=color&attrValue=黑色` | 命中商品 1；换 `attrValue=原色钛金属` 命中商品 1（sku 3） |
-| **E 中文边界** | `keyword=笔记本` | ★ **如实打表**：全文 0 条 / ILIKE 2 条（商品 4、5）⇒ 记录 `simple` 字典限制 |
+| **E 中文边界** | `keyword=轻薄` | 命中商品 4（fts=0 / ILIKE subtitle=1）⇒ 全文抓不住中文，**ILIKE 兜底救回** |
+| **E2 已知限制** | `keyword=笔记本` | ★ **0 条**：该词只落在 `description`，两条 ILIKE 都不覆盖 ⇒ 如实记录为限制 |
 | **F 健壮性** | ① `attrKey` 单给 → `code=400`；② `keyword=iphone & \| !` → **不 500**（`plainto_tsquery` 的证据）；③ `size=999` → 夹到 100；④ `size=0/-1` | 逐条断言 |
 | **G 索引** | `EXPLAIN` 三件索引 | ★ 见下方「小表陷阱」说明 |
 | **H M1 回归** | `day17-m1-regression.py` | **198/198** + `BASELINE RESTORED YES` |
@@ -234,8 +240,19 @@ SET LOCAL enable_seqscan = off;   -- 只是「逼」规划器暴露备选方案�
 EXPLAIN SELECT ... ;
 ```
 
-断言计划里出现 `Bitmap Index Scan on idx_products_search` ⇒ 证明**索引本身可用**。
-同时诚实记录：真实数据量到几万行时，规划器会**自己**改选索引。
+★ 但**光加 `enable_seqscan=off` 还不够**（Day 19 实测）：完整查询里的 `is_deleted = 0` 自己有
+btree 索引，规划器会挑它、把 fts 谓词降级成 `Filter`，GIN 照样不露面。正确做法是
+**把查询剥到只剩 fts 谓词**（去掉 `is_deleted` / `status` 这些带索引的条件）：
+
+```sql
+BEGIN; SET LOCAL enable_seqscan = off;
+EXPLAIN SELECT id FROM products WHERE search_vector @@ plainto_tsquery('simple','iphone');
+COMMIT;
+```
+
+这一步才出现 `Bitmap Index Scan on idx_products_search` ⇒ 证明**索引本身可用**（trgm 同理）。
+同时诚实记录：完整生产 SQL 在 5 行小表上，规划器选的是 `Seq Scan`；
+真实数据量到几万行时它会**自己**改选索引。
 
 ★ 绝不为了"让 EXPLAIN 好看"往库里插几千行测试数据 —— Day 18 的污染事故（误建商品 31 / 分类 36-37）
 就是这么来的。**验收脚本一律零写入。**
@@ -252,3 +269,68 @@ EXPLAIN SELECT ... ;
 5. `search_vector` 是**触发器**维护的 ⇒ 商品名改了它会自动跟着变，**只有绕过触发器的写入
    （如直接 `UPDATE ... SET search_vector`）才会不同步** —— 本日不碰。
 6. 起应用验收时：端口**显式** `--server.port=8080`，「起应用 + 跑完验收」**必须在同一轮内**完成。
+
+---
+
+## 九、验收结果（实测回填，2026-09-23）
+
+### 9.1 总览
+
+| 项 | 结果 |
+|---|---|
+| `day19-xml-check.py` | 3/3 良构、Java↔XML **双向一致**、SQL 无 TODO 残留 |
+| `day19-search-verify.py`（本日新建） | **48 / 48 PASS**，`VERDICT: OK 全绿` |
+| `day17-m1-regression.py` | **198 / 198** + `BASELINE RESTORED: YES` |
+| 构建 | `BUILD SUCCESS` |
+| 数据零写入 | products=5 / product_skus=7 / categories=7，验收前后一致 |
+
+### 9.2 三条「设计预期被实测修正」的记录
+
+① **链路 C 原写「`keyword=徕卡` 验相关性降序」→ 实测不成立。**
+「徕卡」在库里是 `徕卡影像`（商品 2 subtitle）、`徕卡光学`（商品 3 subtitle）两个**整词**，
+`simple` 字典不切中文 ⇒ `fts = 0`，命中的两条全靠 ILIKE ⇒ `searchRank` 恒为 0，**降不了序**。
+改用 `keyword=pro`：商品 1 的 `pro` 出现在 name(A) + subtitle(B) 两处，商品 2 只在 name(A)
+⇒ `ts_rank` 0.668720 > 0.607927，**降序真实可断言**。`徕卡` 降级为「中文 ILIKE 兜底」用例。
+
+② **链路 E 原写「`keyword=笔记本` → ILIKE 2 条」→ 实测 0 条。**
+逐列探明：`笔记本` **只出现在 `description`**（商品 4：`14 英寸商务笔记本`；商品 5：
+`轻薄笔记本`），而两条 ILIKE 只覆盖 `name` + `subtitle`。改用 `keyword=轻薄`
+（命中商品 4 的 subtitle `商务轻薄本`）⇒ **fts=0 / ILIKE=1**，一次同时证明
+「全文抓不住中文」与「ILIKE 兜底确实生效」。`笔记本` 保留为**已知限制**断言（0 条）。
+
+③ **链路 G 原写「`enable_seqscan=off` 后就能看到 GIN」→ 实测不够。**
+完整查询里 `is_deleted = 0` 有独立 btree 索引，规划器选它并把 fts 谓词降级为 `Filter`。
+必须**把查询剥到只剩 fts 谓词**，GIN 才露面 —— 已改写进 §七 的小表陷阱段落。
+
+### 9.3 意外收获：`promotion` 是「纯全文召回」的干净证据
+
+`promotion` 只存在于商品 1 的 `description`，且 `name` / `subtitle` 两条 ILIKE **都命不中**。
+而 `?keyword=promotion` 返回 **1 条**且 `searchRank > 0`
+⇒ **全文检索独立召回的确定性证据**（不可能是 ILIKE 或大小写侥幸）。
+
+### 9.4 推翻一条旧「铁律」：驼峰别名并不会静默为 null
+
+用真实 `ProductSearchVO` + MyBatis 3.5.19，经与 `DefaultResultSetHandler#applyAutomaticMappings`
+**同构**的入口 `SystemMetaObject.forObject(vo).findProperty(col, camel)` 实测：
+
+| 到达 MyBatis 的列名 | `camel=true` | `camel=false` |
+|---|---|---|
+| `main_image` | `mainImage` | **null** |
+| `mainimage`（PG 折小写后的驼峰） | `mainImage` | `mainImage` |
+| `search_rank` / `searchrank` | `searchRank` / `searchRank` | `null` / `searchRank` |
+
+结论：MyBatis 查属性**大小写不敏感** ⇒ `AS mainImage` 被 PG 折成 `mainimage` 后
+**照样映射得上**；反倒是下划线别名只在 `camel=true` 时成立。
+⇒ 「别名一律下划线」由「必须」降级为「**统一风格**」，但理由更强：
+它是**唯一在两种 mapper 配置下都成立**的写法。
+
+★ 证据等级：本条为**机制层实测**（真实 VO + 真实调用路径），未做端到端（需临时改 XML 重启）；
+且结论与 camel 配置无关，故未重复验证。
+
+### 9.5 遗留（转 Day 20 评估）
+
+1. `description` 未纳入 ILIKE 兜底 ⇒ 只在描述里的中文词搜不到（`笔记本` 即活例）。
+   补一列即可，代价是 TEXT 列全表扫（本查询本就是全表扫，性质不变）。
+2. `categoryId` 目前是**精确等值**，不展开子分类（与 C 端 `pageProducts` 的
+   `expandCategoryIds` 口径不同）。若要含子分类，Mapper 签名需改 `List<Long>` + `<foreach>`。
+3. Day 18 §6.6 两条旧遗留仍在（C 端 `pageProducts` 无夹紧、`getDetail` 不判 `status`）。
