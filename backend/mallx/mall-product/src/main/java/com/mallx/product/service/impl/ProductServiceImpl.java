@@ -46,9 +46,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
      * <p>★ 仍不抽到 {@code mall-common}：那是一次跨模块重构，与本步无关；
      * 各处留一份、注释互相指明，等真有需要时再抽。
      *
-     * <p>★ 夹紧只对本日新增的 {@code pageAdminProducts} 生效。
-     * C 端 {@code pageProducts}（Day 09-11）<b>没有夹紧</b> —— 属于已知遗留，
-     * 本日不动它：那条路被 M1 回归覆盖着，改口径要单独评估。
+     * <p>★ 夹紧对本类的<b>三个</b>分页方法都生效：{@code pageProducts}（Day 20 补漏 L1）、
+     * {@code pageAdminProducts}（Day 18）、{@code searchProducts}（Day 19 起就有）。
+     * <p>★ 历史：C 端 {@code pageProducts} 从 Day 09 到 Day 19 一直<b>没有夹紧</b>
+     * （{@code size=-1} 会查全表），Day 20 补上 —— 它不在 M1 回归的覆盖范围内
+     * （M1 三个脚本只打 {@code /api/products/{id}/reviews}），所以补漏零回归风险。
      */
     private static final long MAX_PAGE_SIZE = 100;
 
@@ -75,7 +77,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
                 .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
                 .orderByDesc(Product::getId);
 
-        Page<Product> page = this.page(new Page<>(current, size), wrapper);
+        // ★ L1（Day 20 补漏）：夹紧必须在 new Page<>(...) 之前 —— 写进构造参数里就晚了。
+        //   不夹的话 size=-1 会撞 MP 的「负数=不限量」语义，直接查全表。
+        long safePage = Math.max(current, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        Page<Product> page = this.page(new Page<>(safePage, safeSize), wrapper);
 
         List<Product> records = page.getRecords();
         List<ProductVO> voList = new ArrayList<>();
@@ -229,13 +235,50 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         }
     }
 
+    /**
+     * C 端商品详情 —— <b>只看上架</b>。
+     *
+     * <p>★★ L2（Day 20 补漏）：本方法与原 {@code getAdminDetail} 共用装配逻辑，
+     * 但<b>必须分开</b> —— 从 Day 05 到 Day 19，两者其实是同一个方法，
+     * 管理端的「下架商品也能看」是靠<b>碰巧没人加 status 判断</b>维持的。
+     * 谁要给 C 端加上架校验，就会顺手把管理端砸掉（管理员再也打不开自己下架的商品）。
+     *
+     * <p>★ 下架一律<b>伪装 404</b>：既不返回 403，也不说「存在但已下架」——
+     * 后者等于把「这个 id 有效、只是下架了」告诉任何人（同 {@code requireOwn} 的口径）。
+     */
     @Override
     public ProductDetailVO getDetail(Long id) {
         Product product = this.getById(id);
         if (product == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
+        if (product.getStatus() == null || product.getStatus() != 1) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        return assembleDetail(product);
+    }
 
+    /**
+     * 管理端商品详情 —— <b>下架商品也要能看</b>（Day 20 补漏时从 {@code getDetail} 拆出来）。
+     *
+     * <p>★ 这里<b>不判 status</b>：下架商品正是管理员要改价、要重新上架的对象。
+     * 唯一判空：软删商品连行都查不到（{@code @TableLogic} 已过滤），那才是真 404。
+     */
+    @Override
+    public ProductDetailVO getAdminDetail(Long id) {
+        Product product = this.getById(id);
+        if (product == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        return assembleDetail(product);
+    }
+
+    /**
+     * 详情装配（分类名 / 品牌名 / SKU / 图集）——
+     * 两条路唯一差别就在 status 判断，装配逻辑必须共用，否则字段会漂。
+     */
+    private ProductDetailVO assembleDetail(Product product) {
+        Long id = product.getId();
         ProductDetailVO vo = new ProductDetailVO();
         BeanUtils.copyProperties(product, vo);
 

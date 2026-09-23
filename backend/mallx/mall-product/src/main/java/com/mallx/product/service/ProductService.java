@@ -68,8 +68,22 @@ public interface ProductService extends IService<Product> {
     IPage<ProductSearchVO> searchProducts(long current, long size, String keyword,
                                           Long categoryId, String attrKey, String attrValue);
 
-//    商品详情
+    /**
+     * 商品详情（C 端）—— 只看上架；下架 / 已软删一律<b>伪装 404</b>。
+     *
+     * <p>★★ Day 20 补漏 L2：本方法与 {@link #getAdminDetail} 从 Day 05 到 Day 19 其实是
+     * <b>同一个方法</b>，管理端「下架商品也能看」的能力一直是靠「碰巧没人加 status 判断」维持的。
+     * 谁给 C 端加上架校验，就会顺手把管理端砸掉 —— 所以本次拆成两条路。
+     */
     ProductDetailVO getDetail(Long id);
+
+    /**
+     * 商品详情（管理端）—— <b>下架商品也要能看</b>；只有已软删（连行都查不到）才 404。
+     *
+     * <p>★ 之所以不写成 {@code getDetail(id, boolean forAdmin)}：布尔参数在调用点读不出语义，
+     * 而这两条路是<b>可分别断言</b>的两种行为（验收判据：同一 id、同一时刻，两个接口结果必须不同）。
+     */
+    ProductDetailVO getAdminDetail(Long id);
     //    创建商品
     Long createProduct(ProductCreateDTO productCreateDTO);
     //    修改商品（id 走路径，body 只带这次要改的字段）

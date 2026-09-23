@@ -83,11 +83,18 @@ public class AdminProductController {
         return Result.ok(PageResult.of(productService.pageAdminProducts(current, size, categoryId, keyword, status)));
     }
 
+    /**
+     * 商品详情（管理端：下架商品也能看）。
+     * <p>
+     * ★ Day 20 补漏 L2：此前这里调的是 C 端的 {@code getDetail} —— 两个入口共用一个方法，
+     * 于是「管理端能看下架商品」这件事<b>没有任何代码在保证</b>，只靠没人给 C 端加 status 判断。
+     * 现已拆成 {@code getAdminDetail}（不判 status）/ {@code getDetail}（判 status，C 端）。
+     */
     @Operation(summary = "商品详情（管理端：下架商品也能看）")
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('product:detail')")
     public Result<ProductDetailVO> detail(@PathVariable Long id) {
-        return Result.ok(productService.getDetail(id));
+        return Result.ok(productService.getAdminDetail(id));
     }
 
     @Operation(summary = "新增商品（需 product:create）")
