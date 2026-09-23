@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @Slf4j
 @RestControllerAdvice
@@ -90,6 +91,42 @@ public class GlobalExceptionHandler {
         String allow = e.getSupportedHttpMethods() == null
                 ? "" : e.getSupportedHttpMethods().toString();
         return Result.error(HttpStatus.METHOD_NOT_ALLOWED.value(), "请求方法不支持，支持的方法：" + allow);
+    }
+
+    /**
+     * 路径不存在（L6，Day 20 补漏）—— ★ 与 405 完全同类，所以放在它旁边。
+     * <p>
+     * 【为什么必须单独接一个】
+     * 下面的 {@link #handleException(Exception)} 是「什么都接」的兜底，
+     * 而 Spring 6.1+ 对「没有任何 handler 匹配的请求」抛的是
+     * {@code NoResourceFoundException}（它继承 ServletException，属于 Exception）
+     * ⇒ 会被兜底先吃掉，返回 <b>HTTP 200 + code=500 + message="fail"</b>。
+     * <p>
+     * 症状：<b>不存在的路径看起来像「服务端崩了」</b>。
+     * 实测（加本 handler 之前，L5 验收到处撞上）：
+     * <pre>
+     *   GET /api/brands/999       匿名     → HTTP 401（Security 先于路由，正常）
+     *   GET /api/brands/999       带 token → HTTP 200 + code=500 "fail"   ← 伪装成系统异常
+     *   GET /api/no-such-thing    带 token → HTTP 200 + code=500 "fail"   ← 同上
+     * </pre>
+     * 于是「前端写错了 URL」和「后端抛异常了」在监控上<b>长得一模一样</b>，
+     * 排查时先去翻服务端堆栈 —— 方向从一开始就错了（与 Day 18 那个
+     * 「405 被吞成 200+500」是同一个坑的两个出口）。
+     * <p>
+     * 【为什么这里用真实 HTTP 404，而不是项目惯用的 200 + code】
+     * 与 405 同一条理由：404 与 401/403 同类，都是<b>框架/协议层</b>的拒绝 ——
+     * 「压根没有这个资源」，不是「请求合法但业务不同意」。业务码那套约定覆盖的是后者。
+     * <b>body 里仍带 code=404</b>，前端沿用「只看 code」的习惯也能工作。
+     * <p>
+     * ★ 注意与<b>业务 404</b>的区别：商品下架 / 订单不属于你 这类「伪装的 404」
+     * 依旧走 {@code BusinessException(NOT_FOUND)} ⇒ HTTP 200 + body.code=404，
+     * 那是<b>故意</b>的（不泄露「这个 id 存在」）。本 handler 只处理「路径本身不存在」。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Result<Void> handleNoResourceFound(NoResourceFoundException e){
+        log.warn("路径不存在: {}", e.getMessage());
+        return Result.error(HttpStatus.NOT_FOUND.value(), "接口不存在");
     }
 
     @ExceptionHandler(Exception.class)
