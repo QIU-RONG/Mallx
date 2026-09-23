@@ -64,9 +64,7 @@ public class AdminCouponController {
             @RequestParam(required = false) Integer status,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        // TODO: AdminCouponController.list
-        //   一行转发 → return Result.ok(couponService.pageCoupons(status, page, size));
-        throw new UnsupportedOperationException("TODO: AdminCouponController.list");
+        return Result.ok(couponService.pageCoupons(status, page, size));
     }
 
     /**
@@ -80,9 +78,7 @@ public class AdminCouponController {
     @PostMapping
     @PreAuthorize("hasAuthority('coupon:create')")
     public Result<Long> create(@RequestBody @Valid CouponCreateDTO dto) {
-        // TODO: AdminCouponController.create
-        //   一行转发 → return Result.ok(couponService.createCoupon(dto));
-        throw new UnsupportedOperationException("TODO: AdminCouponController.create");
+        return Result.ok(couponService.createCoupon(dto));
     }
 
     /**
@@ -96,8 +92,7 @@ public class AdminCouponController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('coupon:delete')")
     public Result<Void> delete(@PathVariable Long id) {
-        // TODO: AdminCouponController.delete
-        //   两句式 → couponService.deleteCoupon(id); return Result.ok();
-        throw new UnsupportedOperationException("TODO: AdminCouponController.delete");
+        couponService.deleteCoupon(id);
+        return Result.ok();
     }
 }

@@ -33,7 +33,9 @@
       ⚠️ status 写死 'UNUSED' 字面量。⚠️ received_at 用 CURRENT_TIMESTAMP。
     -->
     <insert id="insertIgnore">
-        TODO: 见 docs/daily/Day-20-优惠券.md §4.2 与 UserCouponMapper.java#insertIgnore
+        insert into user_coupons (user_id, coupon_id, status, received_at)
+        values (#{userId}, #{couponId}, 'UNUSED', CURRENT_TIMESTAMP)
+        on conflict (user_id, coupon_id) do nothing
     </insert>
 
     <!--
@@ -59,7 +61,14 @@
       ★ 别名用下划线；不写 LIMIT。
     -->
     <select id="selectMyCoupons" resultType="com.mallx.marketing.vo.UserCouponVO">
-        TODO: 见 docs/daily/Day-20-优惠券.md §4.3 与 UserCouponMapper.java#selectMyCoupons
+        select uc.id, uc.coupon_id, c.name as coupon_name, c.type,
+               c.discount_amount, c.discount_rate, c.min_amount,
+               uc.status, uc.received_at, uc.used_at, uc.order_id,
+               c.end_time, (c.end_time &lt; current_timestamp) as expired
+        from user_coupons uc
+        join coupons c on c.id = uc.coupon_id
+        where uc.user_id = #{userId}
+        order by uc.id desc
     </select>
 
 </mapper>

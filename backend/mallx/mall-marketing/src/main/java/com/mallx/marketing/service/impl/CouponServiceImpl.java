@@ -99,10 +99,31 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      */
     @Override
     public PageResult<CouponVO> pageCoupons(Integer status, long page, long size) {
-        // TODO: CouponServiceImpl.pageCoupons
-        //   需要用到：new Page<>()、LambdaQueryWrapper、BeanUtils、ArrayList
-        //   （这些 import 本类已备好，直接用）
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.pageCoupons");
+        // ① 夹紧：★ 必须写在 new Page<>(...) 之前
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        // ② 条件 wrapper：status != null 才拼进 SQL —— 不传就是「全都要（含下架）」
+        LambdaQueryWrapper<Coupon> wrapper = new LambdaQueryWrapper<Coupon>()
+                .eq(status != null, Coupon::getStatus, status)
+                .orderByDesc(Coupon::getId);
+
+        // ③ 实体分页
+        Page<Coupon> entityPage = this.page(new Page<>(safePage, safeSize), wrapper);
+
+        // ④ 换壳 Page<Coupon> → Page<CouponVO>
+        List<CouponVO> voList = new ArrayList<>();
+        for (Coupon c : entityPage.getRecords()) {
+            CouponVO vo = new CouponVO();
+            BeanUtils.copyProperties(c, vo);
+            voList.add(vo);
+        }
+
+        // ★★ total/current/size 必须一起搬过来 —— 漏搬的话前端看到 total=0，分页器直接坏掉
+        Page<CouponVO> voPage = new Page<>(entityPage.getCurrent(), entityPage.getSize(),
+                entityPage.getTotal());
+        voPage.setRecords(voList);
+        return PageResult.of(voPage);
     }
 
     /**
@@ -134,9 +155,52 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      */
     @Override
     public Long createCoupon(CouponCreateDTO dto) {
-        // TODO: CouponServiceImpl.createCoupon
-        //   用到：CouponType.FIXED / CouponType.DISCOUNT、BusinessException、BeanUtils、this.save()
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.createCoupon");
+        // ============ 两条【关系】校验：@Valid 表达不了，只能在这里守 ============
+
+        // ① 时间窗：反过来的时间窗会让券「永远领不到」，而且不报错
+        if (!dto.getEndTime().isAfter(dto.getStartTime())) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    "结束时间必须晚于开始时间");
+        }
+
+        // ② 类型 ↔ 金额字段必须配对（见 CouponType 的注释）
+        //    ★ 不允许「两个都填」：一张券同时「减 20」和「打 8 折」，下单时按哪个算？
+        //      —— 歧义本身就是拒绝的理由（阶段二算金额时才发现就晚了）。
+        if (CouponType.FIXED.equals(dto.getType())) {
+            if (dto.getDiscountAmount() == null) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                        "满减券（FIXED）必须填写 discountAmount");
+            }
+            if (dto.getDiscountRate() != null) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                        "满减券（FIXED）不能同时填写 discountRate");
+            }
+        } else if (CouponType.DISCOUNT.equals(dto.getType())) {
+            if (dto.getDiscountRate() == null) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                        "折扣券（DISCOUNT）必须填写 discountRate");
+            }
+            if (dto.getDiscountAmount() != null) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                        "折扣券（DISCOUNT）不能同时填写 discountAmount");
+            }
+        } else {
+            // 理论上被 DTO 的 @Pattern 拦在外面，这里是「万一绕过参数层」的兜底
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    "券类型只能是 FIXED 或 DISCOUNT");
+        }
+
+        // ============ 落库 ============
+        Coupon coupon = new Coupon();
+        BeanUtils.copyProperties(dto, coupon);   // 同名字段（name/type/金额/时间窗/totalCount）
+        coupon.setStatus(1);                     // 可领；列有 DEFAULT 1，显式写更清楚
+        coupon.setReceivedCount(0);              // 列是 NOT NULL DEFAULT 0，别留 null
+
+        // ★ this.save() 走 MP 的 insert → 填充器生效，created_at / updated_at 不用管
+        this.save(coupon);
+
+        // ★ save 之后自增主键回填到实体，直接取
+        return coupon.getId();
     }
 
     /**
@@ -167,10 +231,25 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      */
     @Override
     public void deleteCoupon(Long id) {
-        // TODO: CouponServiceImpl.deleteCoupon
-        //   用到：this.getById()、userCouponMapper.selectCount()、LambdaQueryWrapper、
-        //        this.removeById()、BusinessException（NOT_FOUND / VALIDATE_FAILED）
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.deleteCoupon");
+        // ① 券在不在 —— 与「商品不存在」同一口径：先判 null 再说别的
+        if (this.getById(id) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "优惠券不存在");
+        }
+
+        // ② 被领取过就不许删。
+        //    ★ 不手写这一步的话，user_coupons.coupon_id 的 FK（NO ACTION）会抛违例，
+        //      被全局处理器兜成 code=500 —— 明明是「你的操作不允许」，却报成「服务器内部错误」。
+        //    ⚠️ user_coupons 没有 is_deleted 列 → 这个 selectCount 不会被 @TableLogic 改写，
+        //       查到的就是全部行。
+        long refs = userCouponMapper.selectCount(
+                new LambdaQueryWrapper<UserCoupon>().eq(UserCoupon::getCouponId, id));
+        if (refs > 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    "该优惠券已被领取，不能删除");
+        }
+
+        // ③ 两道守卫都过了才真删（物理删，本表无软删列）
+        this.removeById(id);
     }
 
     // ================================================================
@@ -232,13 +311,25 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void receive(Long userId, Long couponId) {
-        // TODO: CouponServiceImpl.receive
-        //   三步，见上面 Javadoc。
-        //   用到：baseMapper.increaseReceivedCount()、userCouponMapper.insertIgnore()、
-        //        BusinessException、this.diagnoseReceiveFailure()
-        //   ⚠️ 千万别写成「先 this.getById() 查一遍再判断能不能领」——
-        //      那是【先查后改】，并发下会超发。查只允许出现在失败之后的诊断里。
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.receive");
+        // ① 占名额（CAS）：影响行数就是答案 —— 0 行 = 领不到
+        //    ⚠️ 绝不「先 getById 查一遍再判断能不能领」—— 那是【先查后改】，并发下会超发。
+        //       查只允许出现在失败【之后】的诊断里。
+        int granted = baseMapper.increaseReceivedCount(couponId);
+        if (granted == 0) {
+            // 慢路径诊断：把「领不到」翻译成人话（不参与任何并发判断，只产出文案）
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    this.diagnoseReceiveFailure(couponId));
+        }
+
+        // ② 发到手：0 行 = 撞唯一约束 = 已经领过
+        //    ⚠️ 此时 ① 已加过名额，但抛异常会把整个事务回滚 → 名额自动退回，
+        //       不会出现「占了名额却没发到券」的泄漏。
+        int inserted = userCouponMapper.insertIgnore(userId, couponId);
+        if (inserted == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "您已领取过该优惠券");
+        }
+
+        // ③ 两步都成功 → 直接结束（返回 void）
     }
 
     /**
@@ -293,9 +384,29 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      * 必然有缝隙，缝隙里发生的事就是用它接住的 —— 否则方法会返回 null 消息。
      */
     private String diagnoseReceiveFailure(Long couponId) {
-        // TODO: CouponServiceImpl.diagnoseReceiveFailure
-        //   返回 String（错误消息）。五条分支见上面 Javadoc。
-        //   ⚠️ 用 if 逐条判断 + return，不要写成一长串三元表达式。
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.diagnoseReceiveFailure");
+        // 只查一次 —— 诊断不参与任何并发判断，快照不一致也不影响「这张券没领到」的结论
+        Coupon coupon = this.getById(couponId);
+        if (coupon == null) {
+            return "优惠券不存在";
+        }
+        if (coupon.getStatus() == null || coupon.getStatus() != 1) {
+            return "优惠券已下架";
+        }
+        LocalDateTime now = LocalDateTime.now();
+        // ⚠️ 时间字段判 null 再比：列是 NOT NULL，但实体字段仍可能是 null，防御一下不亏
+        if (coupon.getStartTime() != null && now.isBefore(coupon.getStartTime())) {
+            return "优惠券尚未开始发放";
+        }
+        if (coupon.getEndTime() != null && now.isAfter(coupon.getEndTime())) {
+            return "优惠券已过期";
+        }
+        // ⚠️ Integer 拆箱前先判 null，否则 NPE
+        if (coupon.getReceivedCount() != null && coupon.getTotalCount() != null
+                && coupon.getReceivedCount() >= coupon.getTotalCount()) {
+            return "优惠券已被抢光";
+        }
+        // ★ 兜底分支不能省：并发下「CAS 失败」与「这次查询看到的快照」之间必有缝隙，
+        //   缝隙里发生的事就靠它接住 —— 否则方法会返回 null 消息。
+        return "优惠券暂不可领取";
     }
 }

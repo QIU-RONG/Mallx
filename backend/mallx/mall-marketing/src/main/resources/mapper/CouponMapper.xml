@@ -34,7 +34,13 @@
       ★ 四条守卫缺一条都不报错，只是「多发了券」或「该领的领不到」—— 全靠你写对。
     -->
     <update id="increaseReceivedCount">
-        TODO: 见 docs/daily/Day-20-优惠券.md §4.1 与 CouponMapper.java#increaseReceivedCount
+        UPDATE coupons
+           SET received_count = received_count + 1
+         WHERE id = #{couponId}
+           AND status = 1
+           AND start_time &lt;= CURRENT_TIMESTAMP
+           AND end_time   &gt;= CURRENT_TIMESTAMP
+           AND received_count &lt; total_count
     </update>
 
     <!--
@@ -59,7 +65,13 @@
       ★ 不写 LIMIT；首参 IPage 由 Java 侧传。
     -->
     <select id="selectAvailableCoupons" resultType="com.mallx.marketing.vo.CouponVO">
-        TODO: 见 docs/daily/Day-20-优惠券.md §5.1 与 CouponMapper.java#selectAvailableCoupons
+        SELECT id,name,type,discount_amount,discount_rate,min_amount,total_count,received_count,start_time,end_time,status
+        FROM coupons
+       WHERE status = 1
+         AND start_time &lt;= CURRENT_TIMESTAMP
+         AND end_time   &gt;= CURRENT_TIMESTAMP
+         AND received_count &lt; total_count
+        ORDER BY id DESC
     </select>
 
 </mapper>

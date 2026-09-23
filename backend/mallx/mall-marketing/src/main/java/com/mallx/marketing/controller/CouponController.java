@@ -70,10 +70,7 @@ public class CouponController {
     public Result<PageResult<CouponVO>> listAvailable(
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        // TODO: CouponController.listAvailable
-        //   一行转发 → return Result.ok(couponService.listAvailable(page, size));
-        //   （夹紧在 Service 里做，Controller 不碰 page/size 的值）
-        throw new UnsupportedOperationException("TODO: CouponController.listAvailable");
+        return Result.ok(couponService.listAvailable(page, size));
     }
 
     /**
@@ -93,12 +90,12 @@ public class CouponController {
     @PostMapping("/coupons/{couponId}/receive")
     public Result<Void> receive(Authentication authentication,
                                 @PathVariable Long couponId) {
-        // TODO: CouponController.receive
-        //   ① Long userId = (Long) authentication.getPrincipal();
-        //   ② couponService.receive(userId, couponId);
-        //   ③ return Result.ok();
-        //   ★ 是「两句式」：Service 的 receive 返回 void，不能塞进 Result.ok(...)
-        throw new UnsupportedOperationException("TODO: CouponController.receive");
+        // ★ 取当前用户只有这一种写法：过滤器塞进 SecurityContext 的 principal 就是 Long userId
+        Long userId = (Long) authentication.getPrincipal();
+
+        // ★ 两句式：Service 的 receive 返回 void，不能塞进 Result.ok(...)
+        couponService.receive(userId, couponId);
+        return Result.ok();
     }
 
     /**
@@ -112,9 +109,6 @@ public class CouponController {
             Authentication authentication,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        // TODO: CouponController.listMine
-        //   一行转发 → return Result.ok(
-        //       couponService.listMine((Long) authentication.getPrincipal(), page, size));
-        throw new UnsupportedOperationException("TODO: CouponController.listMine");
+        return Result.ok(couponService.listMine((Long) authentication.getPrincipal(), page, size));
     }
 }
