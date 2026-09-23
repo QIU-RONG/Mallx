@@ -79,18 +79,8 @@
   本日新增 statement    : 4 个，缺失 0 个
   XML SQL 仍停在 TODO   : 0 条
   XML SQL 空实现        : 0 条
-  Java 骨架占位         : 9 处（骨架交付时 11 处 → 已填 2 处）
-      · AdminCouponController.java:69
-      · AdminCouponController.java:85
-      · AdminCouponController.java:101
-      · CouponController.java:76
-      · CouponController.java:101
-      · CouponController.java:118
-      · CouponServiceImpl.java:105
-      · CouponServiceImpl.java:139
-      · CouponServiceImpl.java:173
+  Java 骨架占位         : 0 处（骨架交付时 11 处 → 已填 11 处）
 
-  → 骨架期正常。XML 0 条 TODO + 0 条空实现 + Java 9 处 都填完后，本栏合计应为 0，
-    那时才能进「起应用 + 跑 e2e」。只要非 0，被路由到的端点必然 500。
+  → ✅ XML 与 Java 两侧占位都已清零，可以进入「起应用 + 跑 e2e」阶段。
   Java 有 / XML 无      : 0 个 
   XML 有 / Java 无      : 0 个 
