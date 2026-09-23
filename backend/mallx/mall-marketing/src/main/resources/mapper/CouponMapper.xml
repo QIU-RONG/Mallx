@@ -4,7 +4,7 @@
 <mapper namespace="com.mallx.marketing.mapper.CouponMapper">
 
     <!--
-      ★★★ Day 20 优惠券 SQL（2 条，骨架期留 TODO，由你写）
+      ★★★ Day 20 优惠券 SQL（2 条，已实写并通过验收：day20-coupon-verify.py 80/80）
 
       通用规矩（与全项目一致，逐条都踩过）：
         · 方法名与 id 必须【逐字符一致】，否则调用时报 Invalid bound statement，编译不报错
@@ -12,6 +12,9 @@
         · 别名一律用【下划线】：AS discount_amount 而不是 AS discountAmount
           （真正理由：下划线是唯一在 map-underscore-to-camel-case 开关两态下都成立的写法）
         · XML 注释里不能出现连续两个减号 → SAXParseException，编译通过、启动才炸
+        · ★★ SQL 里的【小于号】必须转义成 &lt;（`&gt;=` 反向同理；裸 `>` 不用转义）
+          裸写 `<` 会被解析器当成标签开始 → 编译通过、【启动才炸】。本日实写踩了三次
+          （increaseReceivedCount / selectAvailableCoupons / selectMyCoupons），先例见 mall-order/OrderMapper.xml:123
         · 分页 SQL 里不写 LIMIT：分页插件靠首参 IPage 改写 SQL，自己写会双重分页
     -->
 

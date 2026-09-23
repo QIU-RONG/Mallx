@@ -4,12 +4,14 @@
 <mapper namespace="com.mallx.marketing.mapper.UserCouponMapper">
 
     <!--
-      ★★★ Day 20 用户优惠券 SQL（2 条，骨架期留 TODO，由你写）
+      ★★★ Day 20 用户优惠券 SQL（2 条，已实写并通过验收：day20-coupon-verify.py 80/80）
 
       通用规矩见 CouponMapper.xml 顶部那段，同样适用：
         · 方法名与 id 逐字符一致
         · 别名一律下划线
         · XML 注释里不能出现连续两个减号
+        · ★ SQL 里的【小于号】必须转义成 &lt;（本文件 selectMyCoupons 的
+          `c.end_time &lt; CURRENT_TIMESTAMP` 就是活的例子 —— 裸写 `<` 启动才炸）
         · 自定义 XML 的 INSERT 不走 MetaObjectHandler → 时间戳手写
     -->
 
