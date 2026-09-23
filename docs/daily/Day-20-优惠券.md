@@ -3,6 +3,16 @@
 > 方向：**A 优惠券 · 阶段一**（H 不碰下单链路）。陪练模式：本文档 + 骨架 + 脚本由我出，**实现你亲手写**。
 > 阶段二（下单抵扣 + 核销）留 Day 21 —— 那个才会动 `OrderServiceImpl`、撞 M1 回归。
 
+> ✅ **状态：已完成并验收（2026-09-23）**
+> - 15 处 TODO 全部填完（Java 11 + XML 4）；编译 `mvn -o install -DskipTests` **12/12 SUCCESS**。
+> - `day20-coupon-verify.py` **80 / 80 全绿**（A–K 共 11 条链路；`PASS+FAIL == EXPECTED(80)`，**无断言被静默跳过**）。
+> - `day17-m1-regression.py` **198 / 198** + `BASELINE RESTORED: YES` ⇒ **阶段一不碰下单链路，零回归**（承诺兑现）。
+> - `day20-xml-check.py` rc=0：XML 良构 5/5、Java 占位 0、XML TODO 0、空实现 0。
+> - 提交：`d0c38a9`(feat 实现) / `af7232b`(test 报告) / `94a234d`(docs XML 铁律 ⑤)。
+> - ★ 本日实写最贵的三条教训：① XML 里裸写 `<` **启动才炸**（踩了三次）；
+>   ② 护栏要判「内容是否合法」，只判「占位文本还在不在」会漏掉「文本已删、内容未填」的中间态；
+>   ③ `this.getXxx(id)` 这种「按 id 取字段」写起来极像真 API —— MP 的 `ServiceImpl` 只有 `getById`。
+
 ---
 
 ## 一、为什么是这一块
