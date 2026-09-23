@@ -24,6 +24,16 @@
      光看 XML 会漏掉 Service / Controller 里还没填的方法。
      预期基线：**11 处**（AdminCouponController 3 + CouponController 3 + CouponServiceImpl 5）。
 
+  5. ★★ 本日新增：**XML 语句体「空实现」检测**。
+     起因是一个真实事故：把 `TODO: ...` 那行**删掉**、但 SQL 还没写 ——
+     语句体只剩空白。此时第 3 条【完全查不到】（没有 `TODO` 文本了），
+     本栏会把它当成「已实现」而放行 ⇒ 这是比 TODO 更危险的中间态：
+       · 编译过（Maven 只复制 XML）
+       · 启动过（MyBatis 解析出一个空 SqlSource，不报错）
+       · **被调用才炸**，且报的是 SQL 层错误，看着像业务 bug
+     判据：语句体去掉空白后，必须以 SQL 关键字（select / insert / update /
+     delete / with）开头。不满足 ⇒ 计入「空实现」并让脚本非 0 退出。
+
 再顺手做一次**双向**核对（Java ↔ XML）：
   · Java 有、XML 无 → 调用必然 Invalid bound statement
   · XML 有、Java 无 → MyBatis 启动**不报错**，静静躺着只能靠人工发现
@@ -82,6 +92,9 @@ REPORT = r"D:\MallX\backend\loadtest\day20-xml-check-report.txt"
 # 方法声明：行首 4 空格 + 返回类型开头，跨行到 ');'
 DECL_RE = re.compile(r"^ {4}\S[^;{}]*?(\w+)\s*\([^;{}]*\)\s*;", re.M)
 
+# ★ 语句体合法性：去空白后必须以 SQL 关键字开头（否则视为「空实现」）
+SPEC_SQL_RE = re.compile(r"(?i)^(select|insert|update|delete|with)\b")
+
 lines = []
 say = lines.append
 
@@ -123,6 +136,7 @@ def count_java_todos(root_dir):
 
 total_new = 0
 still_todo = []
+empty_sql = []
 not_wellformed = 0
 missing_stmt = []
 java_only = []
@@ -145,10 +159,19 @@ for mod in MODULES:
     ids = set()
     for tag, sid, sql in stmts:
         ids.add(sid)
-        flag = "★ TODO" if sql.upper().startswith("TODO") else "       "
+        if sql.upper().startswith("TODO"):
+            flag = "★ TODO"
+        elif not SPEC_SQL_RE.match(sql):
+            flag = "❌ 空实现"
+        else:
+            flag = "       "
         say("     %s <%s id=%s>" % (flag, tag, sid))
         if sql.upper().startswith("TODO"):
             still_todo.append("%s#%s" % (mod["name"], sid))
+        elif not SPEC_SQL_RE.match(sql):
+            empty_sql.append("%s#%s  ← 语句体=%s"
+                             % (mod["name"], sid,
+                                "空（只剩空白）" if not sql else repr(sql[:40])))
 
     # ---- 2. 本日新增的 statement 是否都在 --------------------------------
     say("")
@@ -188,6 +211,9 @@ say("  本日新增 statement    : %d 个，缺失 %d 个" % (total_new, len(mis
 say("  XML SQL 仍停在 TODO   : %d 条" % len(still_todo))
 for s in still_todo:
     say("      · %s" % s)
+say("  XML SQL 空实现        : %d 条" % len(empty_sql))
+for s in empty_sql:
+    say("      · %s" % s)
 
 # ---- 4. Java 侧骨架占位计数 -----------------------------------------------
 todos = count_java_todos(TODO_SCAN_DIR)
@@ -196,10 +222,13 @@ for fn, ln, _txt in todos:
     say("      · %s:%d" % (fn, ln))
 
 say("")
-if still_todo or todos:
-    say("  → 骨架期正常。XML %d 条 + Java %d 处都填完后，本栏合计应为 0，"
-        % (len(still_todo), len(todos)))
+if still_todo or todos or empty_sql:
+    say("  → 骨架期正常。XML %d 条 TODO + %d 条空实现 + Java %d 处 都填完后，本栏合计应为 0，"
+        % (len(still_todo), len(empty_sql), len(todos)))
     say("    那时才能进「起应用 + 跑 e2e」。只要非 0，被路由到的端点必然 500。")
+    if empty_sql:
+        say("    ⚠️ 「空实现」是比 TODO 更隐蔽的中间态：删了 TODO 文本、SQL 还没写。")
+        say("       编译过、启动过，被调用才炸 —— 靠人工看注释是发现不了的。")
 else:
     say("  → ✅ XML 与 Java 两侧占位都已清零，可以进入「起应用 + 跑 e2e」阶段。")
 say("  Java 有 / XML 无      : %d 个 %s" % (len(java_only), java_only if java_only else ""))
@@ -210,5 +239,5 @@ print(report)
 with open(REPORT, "w", encoding="utf-8") as fh:
     fh.write(report + "\n")
 
-ok = not_wellformed == 0 and not missing_stmt and not java_only
+ok = (not_wellformed == 0 and not missing_stmt and not java_only and not empty_sql)
 raise SystemExit(0 if ok else 1)

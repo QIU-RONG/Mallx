@@ -2,8 +2,8 @@
 模块 mall-marketing / CouponMapper（★ Day 20 主角）
 ==========================================================================
   ✅ WELL_FORMED   namespace=com.mallx.marketing.mapper.CouponMapper
-     ★ TODO <update id=increaseReceivedCount>
-     ★ TODO <select id=selectAvailableCoupons>
+             <update id=increaseReceivedCount>
+     ❌ 空实现 <select id=selectAvailableCoupons>
 
   本日新增 statement：
      ✅ increaseReceivedCount
@@ -16,7 +16,7 @@
 模块 mall-marketing / UserCouponMapper（★ Day 20 主角）
 ==========================================================================
   ✅ WELL_FORMED   namespace=com.mallx.marketing.mapper.UserCouponMapper
-     ★ TODO <insert id=insertIgnore>
+             <insert id=insertIgnore>
      ★ TODO <select id=selectMyCoupons>
 
   本日新增 statement：
@@ -77,11 +77,10 @@
 ==========================================================================
   XML 良构              : 5 / 5
   本日新增 statement    : 4 个，缺失 0 个
-  XML SQL 仍停在 TODO   : 4 条
-      · mall-marketing / CouponMapper（★ Day 20 主角）#increaseReceivedCount
-      · mall-marketing / CouponMapper（★ Day 20 主角）#selectAvailableCoupons
-      · mall-marketing / UserCouponMapper（★ Day 20 主角）#insertIgnore
+  XML SQL 仍停在 TODO   : 1 条
       · mall-marketing / UserCouponMapper（★ Day 20 主角）#selectMyCoupons
+  XML SQL 空实现        : 1 条
+      · mall-marketing / CouponMapper（★ Day 20 主角）#selectAvailableCoupons  ← 语句体=空（只剩空白）
   Java 骨架占位         : 11 处（预期基线 11）
       · AdminCouponController.java:69
       · AdminCouponController.java:85
@@ -95,7 +94,9 @@
       · CouponServiceImpl.java:241
       · CouponServiceImpl.java:299
 
-  → 骨架期正常。XML 4 条 + Java 11 处都填完后，本栏合计应为 0，
+  → 骨架期正常。XML 1 条 TODO + 1 条空实现 + Java 11 处 都填完后，本栏合计应为 0，
     那时才能进「起应用 + 跑 e2e」。只要非 0，被路由到的端点必然 500。
+    ⚠️ 「空实现」是比 TODO 更隐蔽的中间态：删了 TODO 文本、SQL 还没写。
+       编译过、启动过，被调用才炸 —— 靠人工看注释是发现不了的。
   Java 有 / XML 无      : 0 个 
   XML 有 / Java 无      : 0 个 

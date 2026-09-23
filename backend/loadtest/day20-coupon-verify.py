@@ -31,6 +31,7 @@ Day 20 优惠券（阶段一）验收：A–K 共 11 条链路。
 import atexit
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -269,8 +270,42 @@ atexit.register(_safe_cleanup)
 
 
 # ================================================================ 骨架期护栏
+SPEC_SQL_RE = re.compile(r"(?i)^(select|insert|update|delete|with)\b")
+
+
+def _xml_empty_stmts():
+    """★ 扫 XML 里【语句体为空】的 statement。
+
+    真实事故（2026-09-23 实写时踩到）：把 `TODO: ...` 那行删掉、SQL 还没写，
+    语句体只剩空白 —— 此时按 `TODO: ` 文本计数会得到 0，护栏【假过】。
+    这种中间态比 TODO 更坏：编译过、启动过（MyBatis 解析出空 SqlSource），
+    被调用才炸，且报的是 SQL 层错误，看着像业务 bug。
+    """
+    out = []
+    for root, _d, files in os.walk(XML_DIR):
+        for fn in files:
+            if not fn.endswith(".xml"):
+                continue
+            fp = os.path.join(root, fn)
+            try:
+                with open(fp, encoding="utf-8", errors="replace") as f:
+                    raw = f.read()
+            except OSError:
+                continue
+            for m in re.finditer(
+                    r"<(select|insert|update|delete)\b[^>]*\bid=\"([^\"]+)\"[^>]*>(.*?)</\1>",
+                    raw, re.S):
+                if m.group(3).strip().upper().startswith("TODO"):
+                    continue          # 仍停在 TODO 的由 TODO 计数覆盖，别重复报
+                if not SPEC_SQL_RE.match(m.group(3).strip()):
+                    body = m.group(3).strip()
+                    out.append("%s#%s（语句体=%s）"
+                               % (fn, m.group(2), "空／只剩空白" if not body else repr(body[:30])))
+    return out
+
+
 def impl_pending():
-    """返回 (java_throw_count, xml_todo_count)。非零 = 实现还没填完。"""
+    """返回 (java_throw_count, xml_todo_count, xml_empty_count)。任一非零 = 实现没填完。"""
     jn = 0
     for root, _d, files in os.walk(SRC_DIR):
         for fn in files:
@@ -289,7 +324,7 @@ def impl_pending():
                         xn += f.read().count("TODO: ")
                 except OSError:
                     pass
-    return jn, xn
+    return jn, xn, _xml_empty_stmts()
 
 
 say("=" * 74)
@@ -297,11 +332,13 @@ say("Day 20 优惠券（阶段一）验收：A 白名单 / B 接通 / C 发券 /
 say("                        F 时间窗 / G 我的券(IDOR) / H 权限矩阵 / I 健壮性 / J 清理")
 say("=" * 74)
 
-_jt, _xt = impl_pending()
-if _jt or _xt:
+_jt, _xt, _xe = impl_pending()
+if _jt or _xt or _xe:
     say()
     say("⛔ 已拒绝执行：mall-marketing 实现尚未填完。")
     say("   Java 里还有 %d 处 UnsupportedOperationException，XML 里还有 %d 处 TODO。" % (_jt, _xt))
+    for s in _xe:
+        say("   ⚠️ XML 语句体为空（删了 TODO 文本、SQL 还没写）：%s" % s)
     say("   ⇒ 半成品跑验收只会产出一份无法定性的噪音报告（分不清『没写』还是『写错』）。")
     say("   先填完 15 处 TODO，再回来跑本脚本。")
     say("=" * 74)
