@@ -54,7 +54,7 @@ public interface UserCouponMapper extends BaseMapper<UserCoupon> {
      * 我的券列表（需登录，分页）。
      *
      * <p>要做的：{@code user_coupons uc JOIN coupons c ON c.id = uc.coupon_id}，
-     * 取券面信息填充 {@link UserCouponVO}，并<b>现算</b>两个东西：
+     * 取券面信息填充 {@link UserCouponVO}，并<b>现算一个东西</b>（全 VO 里唯一不在表里的列）：
      * <pre>
      *   expired = (c.end_time &lt; CURRENT_TIMESTAMP)     ← 惰性过期，不落库
      * </pre>
