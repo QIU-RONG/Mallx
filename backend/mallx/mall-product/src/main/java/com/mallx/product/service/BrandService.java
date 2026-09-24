@@ -1,6 +1,8 @@
 package com.mallx.product.service;
 
 import com.baomidou.mybatisplus.spring.service.IService;
+import com.mallx.product.dto.BrandCreateDTO;
+import com.mallx.product.dto.BrandUpdateDTO;
 import com.mallx.product.entity.Brand;
 import com.mallx.product.vo.BrandVO;
 
@@ -32,4 +34,41 @@ public interface BrandService extends IService<Brand> {
 
     /** 管理端品牌字典：含【全部】品牌（含已停用），按 id 升序。 */
     List<BrandVO> listAll();
+
+    // ======================================================================
+    // Day 24 · L5②：管理端品牌 CRUD（三个写点）
+    // ----------------------------------------------------------------------
+    // 【与 listEnabled / listAll 的分工】
+    //   上面两个是【读】入口（C 端 / 管理端两套口径），返回 BrandVO；
+    //   下面三个是【写】入口，只走管理端。
+    //
+    // 【三条共同规则】
+    //   ① 每个方法都带 @Transactional：存在性/引用「检查」与「写入」之间不能被插队
+    //      （否则就是「先查后改」的 TOCTOU，同 CategoryServiceImpl 的三条注释）。
+    //   ② name 有 UNIQUE 约束（01-schema.sql:70）⇒ 重名必须翻译成【400 + 人话】，
+    //      不能让 23505 冒到兜底 handler 变成 500。
+    //   ③ brands 表【没有 is_deleted】⇒ 删除是物理删，与 categories 同族
+    //      （对照 products：那张表有软删，所以那边不存在「真删」这个动作）。
+    // ======================================================================
+
+    /**
+     * 新建品牌，返回新 id。
+     *
+     * @throws com.mallx.common.exception.BusinessException 名称重复（400）
+     */
+    Long createBrand(BrandCreateDTO dto);
+
+    /**
+     * 修改品牌（局部更新语义：DTO 里没传的字段 = 不动）。
+     *
+     * @throws com.mallx.common.exception.BusinessException 品牌不存在（404）/ 名称重复（400）
+     */
+    void updateBrand(Long id, BrandUpdateDTO dto);
+
+    /**
+     * 删除品牌（物理删，删前判「还有没有商品引用它」—— 含已软删商品）。
+     *
+     * @throws com.mallx.common.exception.BusinessException 品牌不存在（404）/ 有商品引用（400）
+     */
+    void deleteBrand(Long id);
 }

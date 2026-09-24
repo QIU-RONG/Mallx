@@ -30,6 +30,28 @@ public interface ProductMapper extends BaseMapper<Product> {
     Long countByCategoryId(@Param("categoryId") Long categoryId);
 
     /**
+     * 统计某品牌下挂着多少个商品 —— ★ 绕开 @TableLogic，含【已软删】的商品。
+     * <p>
+     * 【为什么需要第二条同族 SQL（Day 24 · L5②）】
+     * {@code countByCategoryId} 的注释已经把理由写透了，这里只补「为什么不复用」：
+     * 两条 SQL 的<b>结构完全一样、只有列不同</b>（{@code category_id} / {@code brand_id}），
+     * 但这<b>不能</b>合成一条带 {@code <if>} 的 SQL ——
+     * 那样调用方就要传「按哪个列数」，而这个选择由<b>业务语义</b>决定（删分类 vs 删品牌），
+     * 不是由数据决定。合成一条的结果是：调用方写错列名，编译期、运行期都不报错，
+     * 只是「拿分类的计数去判品牌能不能删」—— 一个永远为 0 的检查（同族：Day 19 的
+     * categoryId 两入口口径漂移）。
+     * <p>
+     * 【判据照抄】引用计数的口径必须与【外键的口径】一致：外键 {@code fk_product_brand}
+     * 不认识 {@code is_deleted}，所以计数也不能带它。
+     * <p>
+     * 实现在 {@code resources/mapper/ProductMapper.xml}。
+     *
+     * @param brandId 品牌 id
+     * @return 该品牌下的商品数（含已软删）
+     */
+    Long countByBrandId(@Param("brandId") Long brandId);
+
+    /**
      * ★★★ C 端商品搜索（Day 19）—— <b>SQL 在 XML 里，由你写</b>。
      *
      * <p>【为什么不用 MP 的 Wrapper】

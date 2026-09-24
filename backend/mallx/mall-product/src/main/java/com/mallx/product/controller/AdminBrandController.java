@@ -1,12 +1,20 @@
 package com.mallx.product.controller;
 
 import com.mallx.common.api.Result;
+import com.mallx.product.dto.BrandCreateDTO;
+import com.mallx.product.dto.BrandUpdateDTO;
 import com.mallx.product.service.BrandService;
 import com.mallx.product.vo.BrandVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,6 +34,10 @@ import java.util.List;
  * <p>
  * ★ 返回 <b>void 之外</b>的普通查询，一行转发即可（无「两句式」问题，
  * 那是 {@code updateXxx} / {@code deleteXxx} 返回 void 才有的）。
+ * <p>
+ * Day 24 · L5② 补齐三个写端点（需品牌 CRUD 三条权限码）。
+ * ★ 与 {@link AdminCategoryController} 的分工差异：分类那边删前要查「子分类 + 商品引用」，
+ * 品牌<b>没有层级</b>，所以只查「商品引用」一条 —— 见 {@code BrandServiceImpl#deleteBrand}。
  */
 @Tag(name = "管理端-品牌")
 @RestController
@@ -43,5 +55,28 @@ public class AdminBrandController {
     @PreAuthorize("hasAuthority('brand:list')")
     public Result<List<BrandVO>> list() {
         return Result.ok(brandService.listAll());
+    }
+
+    @Operation(summary = "新增品牌（需 brand:create）")
+    @PostMapping
+    @PreAuthorize("hasAuthority('brand:create')")
+    public Result<Long> create(@RequestBody @Valid BrandCreateDTO dto) {
+        return Result.ok(brandService.createBrand(dto));
+    }
+
+    @Operation(summary = "修改品牌（需 brand:update，局部更新语义）")
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('brand:update')")
+    public Result<Void> update(@PathVariable Long id, @RequestBody @Valid BrandUpdateDTO dto) {
+        brandService.updateBrand(id, dto);
+        return Result.ok();
+    }
+
+    @Operation(summary = "删除品牌（需 brand:delete，物理删 + 判商品引用）")
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('brand:delete')")
+    public Result<Void> delete(@PathVariable Long id) {
+        brandService.deleteBrand(id);
+        return Result.ok();
     }
 }

@@ -24,6 +24,24 @@
     </select>
 
     <!--
+      countByBrandId：统计某品牌下挂着多少个商品 —— ★ 含【已软删】的商品（Day 24 · L5②）。
+
+      ★ 与 countByCategoryId 是【同一个缺陷的两个出口】，理由完全一样：
+        Product 上有 @TableLogic ⇒ selectCount 会被自动追加 AND is_deleted = 0
+        ⇒ 漏算已软删商品 ⇒ 删除品牌的引用校验以为该品牌空着 ⇒ 物理删品牌
+        ⇒ 紧接着撞 fk_product_brand（NO ACTION）→ 现场 500。
+
+      ★ 本 statement 故意【不写】is_deleted 条件 —— 由「该 SQL 的语义」决定，不由实体决定。
+        （对照：searchProducts 要「只搜未删」，所以它【手动补上】p.is_deleted = 0。）
+
+      ⚠️ #{brandId} 必须与 Java 侧 @Param("brandId") 逐字一致 ——
+         不一致时编译期不报错，要到运行才炸 Invalid bound statement。
+    -->
+    <select id="countByBrandId" resultType="java.lang.Long">
+        SELECT count(*) FROM products WHERE brand_id = #{brandId}
+    </select>
+
+    <!--
       searchProducts：C 端商品搜索（Day 19 实写通过；Day 20 补 L3 + L4 两处漏）。
 
       要求见 ProductMapper.java#searchProducts，七条要点见 docs/daily/Day-19-商品搜索.md §五。
