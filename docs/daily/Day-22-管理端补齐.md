@@ -4,15 +4,23 @@
 > 陪练模式：本文档 + 结构改动 + 骨架由我出，**实现你亲手写**。
 > ★ 本日**额外挖出并当场修掉一个真漏洞**（见 §二），它不是计划内的工作。
 
-> 🔄 **状态：骨架已交付（2026-09-24），等你填 7 处**
+> ✅ **状态：已实现并验收通过（2026-09-24）**
 > - 新建 14 个文件 + 改 4 个文件（清单见 §四）；DDL **零改动**（`users.status` 等列早已存在）。
-> - `mvn -o install -DskipTests` → **12 / 12 BUILD SUCCESS**。
-> - `day22-xml-check.py`（新建）→ XML 良构 **7/7**、新增 statement **5/5**、双向一致 **0 差异**、
->   **空实现 5 条**（正是留空的 5 条 SQL）、**Java 占位 7 处**（正是 7 个 TODO）。`rc=1` 是骨架期正确长相。
-> - `day22-perm-apply.py`（新建）→ **7/7 PASS** + 幂等成立（`user:list` 的 path 已订正）。
-> - `day22-skeleton-smoke.py`（新建）→ **32 / 32**（含安全收口、权限矩阵、骨架三态、L7）。
-> - 回归：`day17-m1-regression.py` **198/198** + `BASELINE RESTORED: YES`；
->   `day17-a` **26/26**、`day17-b` **21/21**、`day20` **82/82**、`day21` **53/53**。
+> - **实现已完成**：7 处 Java（`AdminUserServiceImpl` 3 / `UserServiceImpl` 2 / `DashboardServiceImpl` 2）
+>   + `DashboardMapper.xml` 的 5 条 SQL 全部落地（要点见 §五）。
+> - `mvn -o install -DskipTests` → **12 / 12 BUILD SUCCESS**（27.6s）。
+> - `day22-xml-check.py` → XML 良构 **7/7**、新增 statement **5/5**、双向一致 **0 差异**、
+>   **空实现 0 条 / XML TODO 0 条 / Java 占位 0 处**。
+> - `day22-perm-apply.py` → **7/7 PASS** + 幂等成立（`user:list` 的 path 已订正）。
+> - `day22-admin-verify.py`（本日新建，A–F 六组）→ **67 / 67**；`EXPECTED=67` 护栏核过（无断言被跳过）、
+>   **基线还原 YES**。★ 断言预期值全是设计值，无一顺着实测改。
+> - `day22-skeleton-smoke.py` → 骨架期 **32 / 32**。★ 实现填完后它的 B/C 组会全部失效（500 → 200），
+>   这是**正常的**，见 §二末段「两个脚本方向相反」。
+> - 回归（同一轮内跑完，应用只起一次 7m19s）：**`day17-m1-regression.py` 198/198
+>   + `BASELINE RESTORED: YES`**；`day17-a` 26/26、`day17-b` 21/21、`day19-search` 58/58、
+>   `day20-l1l2` 33/33、`day20-l5-brand` 24/24、`day20` 82/82、`day21` 53/53。
+> - 提交：`55e4514`（fix user 收口）/ `937339a`（feat admin 骨架）/ `8248b59`（feat order L7）/
+>   `973cec2`（chore 权限 SQL + 脚本 + 文档）/ `ba675cc`（feat 实现）/ `6587d1e`（test 验收脚本 + 报告）。
 
 ---
 
@@ -130,7 +138,16 @@
 
 ---
 
-## 五、留给你的 7 处（`UnsupportedOperationException`）
+## 五、那 7 处实现（2026-09-24 已落地）
+
+> 骨架交付时是 7 处 `UnsupportedOperationException` + 5 条空 SQL；下面是**当初给实现者的要点**，
+> 保留原文以便对照「设计意图 → 实际落地」是否一致。
+> ★ 实际落地时**只做了一处补充决定**：手动 `UpdateWrapper` 的 UPDATE 不走自动填充器 ⇒
+> `users.updated_at` 会静默停在旧值，而实体声明的正是 `INSERT_UPDATE`。骨架把「补它」列为可选项，
+> 实现时**两处写点都显式补了** `.set(User::getUpdatedAt, LocalDateTime.now())`。
+> 不影响幂等（PG 按 `WHERE` 命中计数，值没变也算 1 行）—— 验收 B14 已钉住这条。
+> ⚠️ 这与同模块 `AddressServiceImpl` 的既定选择（`updateById` + 「审计字段业务不依赖，不管它」）
+> **不一致**，登记为待决项。
 
 | # | 文件 | 方法 | 关键点 |
 |---|---|---|---|
@@ -144,10 +161,15 @@
 | 8 | `DashboardMapper.xml` | 5 条 SQL | 形状与四个坑写在注释里（**日期骨架 LEFT JOIN 补 0** / 别名用下划线 / `to_char` 的格式串是单引号 / 两个 LEFT JOIN 各自独立） |
 
 ★ 加上 `DashboardMapper.xml` 那 5 条 SQL，实际是 **7 个 Java 方法 + 5 条 SQL**。
+★ 落地后 `day22-xml-check.py` 复跑：Java 占位 **0**、XML TODO **0**、空实现 **0**（三处同时清零）。
 
 ---
 
-## 六、验收计划（`day22-admin-verify.py`，等你填完我再落地）
+## 六、验收（`day22-admin-verify.py` —— 已落地，**67 / 67**）
+
+> ✅ 已按下面的规划实现并跑通：**67 / 67**、`EXPECTED=67` 护栏核过、基线还原 YES。
+> ★ 与骨架期的 `day22-skeleton-smoke.py` **方向相反**：那个期望「200 + code 500」，这个期望真数据；
+> 两个都留着各司其职（smoke 是骨架期门禁，本脚本是长期回归）。
 
 按 Day 20/21 的规格（造数 + 高水位线清理 + 逐条 `psql` 对账 + `EXPECTED` 常量护栏）：
 
