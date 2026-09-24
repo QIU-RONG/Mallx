@@ -40,13 +40,14 @@ M1 跑的就是**真实下单链路**（`day14-e2e-walk` / `day15-ship-confirm` 
 
 ---
 
-## 三、开工前定的三条设计决策（本日的「定性」）
+## 三、开工前定的四条设计决策（本日的「定性」）
 
 | 决策 | 选定 | 理由 / 代价 |
 |---|---|---|
 | **核销时机** | **下单即核销**（`createFromCart` 里就改 `USED`），取消退券 | 与 Day 20 的 `received_count` CAS **逐字同构**，状态机只有两态。代价：下单到付款之间券被占用，取消/超时才退回。若改成「支付成功才核销」，要多一个 `LOCKED` 态，取消 / 超时 / 支付三条边都要处理锁 —— V1.0 不值当 |
 | **优惠额落库** | **`orders` 加 `discount_amount NUMERIC(12,2) NOT NULL DEFAULT 0`** | 三个金额里知道两个能反推第三个，但「能反推」≠「该反推」：① 分不清「没用券」与「用了 0 元券」；② 对账/退款都要自己再算一遍，规则一变口径就漂。快照是**事实** |
 | **今日范围** | **核销 + 退券 + 验收，一次做完** | 退券与 `releaseLocked` 同构，放一起做能一次把「正向/逆向」两条边都验掉；拆开会多付一遍编译+起应用的成本 |
+| **窗口判据对齐** | **`calcDiscount` 增判「尚未开始」**（`start_time` 在未来 → 400） | ★ 第 4 条是 2026-09-24 写 `selectForUse` 时**补出来的**：领券侧的 CAS（`CouponMapper.xml:44-45`）**早就守了窗口两端**（`start_time <=` / `end_time >=`），而 `calcDiscount` 原稿只判「已过期」，`startTime` 取回来却无人消费（**死列**）⇒ 定性是**补口径漂移**，不是加新功能 —— 与 L4（`categoryId` 两端口径不一）**同一族**。★ 库里现有券 `start_time` **全在过去** ⇒ 缺这条永远不现形（**样本量陷阱**，同 L1 / L5①） |
 
 ★ 第三条的**代价**要认下来：本日会是 Day 12 之后第一次「改动已验收的下单链路」，
 所以验收里 M1 198/198 与 `BASELINE RESTORED: YES` 是**必跑项**，不是可选项。
@@ -94,7 +95,7 @@ OrderServiceImpl.createFromCart(userId, dto)                    @Transactional
   ③ 逐项失效判定
   ④ 算总额                    totalAmount = Σ(price × quantity)
   ④.5 ★ 算抵扣（只读）        couponService.calcDiscount(userId, userCouponId, totalAmount)
-                              └─ 校验：归属 / 状态 / 过期 / 券下架 / 门槛
+                              └─ 校验：归属 / 状态 / 已过期 / 尚未开始 / 券下架 / 门槛
                               └─ 算钱：FIXED → 面额；DISCOUNT → total × (1 − rate)
                               └─ 收口：封顶 totalAmount + setScale(2, HALF_UP)
          payAmount = totalAmount − deductionAmount
@@ -210,10 +211,19 @@ OrderServiceImpl.createFromCart(userId, dto)                    @Transactional
 13. 门槛：总额 99.99、`min_amount=100` → **400**（差一分也不能用）。
 
 **D 组 · 归属与状态（IDOR + 反向对照）**
-14. 拿**别人**的 `userCouponId` 下单（B 的 token 用 A 的券）→ **400/404**，
+14. 拿**别人**的 `userCouponId` 下单（B 的 token 用 A 的券）→ **404**，
     且 ★ 去 DB 核「那张券**原封不动**」（`status`/`order_id`/`used_at` 一个都没变）——
     **光看状态码证明不了任何事**；
-15. 已使用的券再用 → 400；已过期的券 → 400；下架的券 → 400；
+14b. ★★ 拿一个**根本不存在**的 `userCouponId`（如 999999）下单 → 也必须是 **404**，
+     且响应体与 14 的响应**逐字节相同** —— 这才是「伪装 404」的判据：
+     只要两者在码 / 文案 / 长度上有一丝差异，IDOR 防线就有裂缝（同 Day 20 的 IDOR 断言法）。
+     ★ **2026-09-24 订正**：本条原写「400/404」含糊两可，现定死 **404**。
+     依据 = 项目 IDOR 成文口径 `AddressServiceImpl#requireOwn:160-166`
+     （`addr == null || !addr.getUserId().equals(userId)` 合并成**同一个码 + 同一句文案**）。
+     ⇒ `calcDiscount` 里 `src == null` 必须用 `ResultCode.NOT_FOUND`，**不是** `VALIDATE_FAILED`；
+15. 已使用的券再用 → 400；已过期的券 → 400；**尚未开始的券** → 400；下架的券 → 400；
+    ★ 「尚未开始」必须**造一张 `start_time` 在未来的券**才验得到 ——
+      库里现有券的 `start_time` 全在过去，不造数据这条断言**恒真、等于没验**（样本量陷阱）。
 16. 不存在的 `userCouponId`（如 `99999999`）→ 与 14 的响应**逐字节相同**
     （不能区分「不存在」与「不是你的」）。
 
@@ -270,6 +280,19 @@ OrderServiceImpl.createFromCart(userId, dto)                    @Transactional
 10. ★ **`calcDiscount` 里允许用查询快照，但 `markUsed` 的守卫一条都不能省**。
     尤其**归属条件**：不能因为前面查过一次就省掉它 —— 查与改之间有时间缝，
     而且「C 端防线写在 SQL 里」是本项目的一贯口径，不因调用链长短而变。
+11. ★★ **补判据前先问「另一端有没有」**（2026-09-24 补进设计）。
+    本日发现 `calcDiscount` 漏判「尚未开始」时，第一反应是「加一条新判据」；
+    但查另一端后发现 **领券侧的 CAS 早就守了窗口两端**
+    （`CouponMapper.xml#increaseReceivedCount` 的 `start_time <=` / `end_time >=`）。
+    ⇒ 定性从「加功能」变成「**补口径漂移**」，改法与理由都不一样
+      （要跟领券侧**同源**，而不是自己新立一套）—— 与 L4 的 `categoryId` 同一族。
+    ★★ 同时暴露的隐患：`startTime` 被 `selectForUse` 取回来却无人消费，
+      是一根**死列**（Day 20 的「死查询」同一类）。
+    ⇒ 一般化：**凡「取回来的字段没有任何消费者」，要么补判据、要么删字段**，
+      不许以「储备列」的名义留在 VO 里。
+    ★ 附带认下的取舍：`markUsed` 的 CAS **不**重判窗口 —— 要判就得 JOIN `coupons`，
+      把单表 CAS 变成跨表 CAS；漏的只是「券在事务内那几毫秒里过期」，
+      **不可构造、不可断言**，V1.0 认下。若收紧，改 `markUsed` 的 WHERE 是唯一入口。
 
 ---
 
