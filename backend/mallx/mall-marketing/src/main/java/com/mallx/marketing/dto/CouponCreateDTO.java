@@ -52,9 +52,17 @@ public class CouponCreateDTO {
     @DecimalMin(value = "0.01", message = "满减金额必须大于 0")
     private BigDecimal discountAmount;
 
-    /** 折扣率：type=DISCOUNT 时必填（关系校验在 Service） */
+    /**
+     * 折扣率：type=DISCOUNT 时必填（关系校验在 Service）。
+     * ★ <b>应付比例系数</b>，{@code 0.80} = 打 8 折（实付 80%）；取值 {@code (0, 1]}。
+     *
+     * <p>⚠️ 这里的 {@code @DecimalMin("0.01")} 比业务判据 {@code (0,1]} 更严
+     * （把 {@code (0, 0.01)} 也挡了）—— 方向是安全的：<b>入口比业务严，只会少收
+     * 合法值，不会放过脏数据</b>。但业务侧的 {@code rate <= 0 || rate > 1}
+     * 仍然必须留着，它还要挡「绕过接口直接写库」的那类脏数据。
+     */
     @DecimalMin(value = "0.01", message = "折扣率必须大于 0")
-    @DecimalMax(value = "99.99", message = "折扣率必须小于 100")
+    @DecimalMax(value = "1.00", message = "折扣率不能大于 1（0.80 表示打 8 折）")
     private BigDecimal discountRate;
 
     /** 使用门槛（可选）。阶段一不参与计算，只是券面展示信息 */
