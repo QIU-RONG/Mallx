@@ -7,6 +7,8 @@ import com.mallx.common.api.PageResult;
 import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
 import com.mallx.inventory.service.InventoryService;
+import com.mallx.marketing.service.CouponService;
+import com.mallx.marketing.vo.CouponUseVO;
 import com.mallx.order.api.OrderItemBuyContext;
 import com.mallx.order.common.OrderStatus;
 import com.mallx.order.dto.OrderCreateDTO;
@@ -32,7 +34,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.stream.Collectors;
+
+
 
 @Slf4j
 @Service
@@ -44,7 +47,7 @@ public class OrderServiceImpl implements OrderService {
     private final OrderMapper orderMapper;
     private final OrderItemMapper orderItemMapper;
     private final InventoryService inventoryService;
-
+    private final CouponService couponService;
     /**
      * ★ 单笔取消逻辑的持有者（Day 14 第 3 步）。
      *
@@ -61,11 +64,15 @@ public class OrderServiceImpl implements OrderService {
     public OrderServiceImpl(OrderMapper orderMapper,
                             OrderItemMapper orderItemMapper,
                             InventoryService inventoryService,
-                            OrderCancelExecutor cancelExecutor) {
+                            OrderCancelExecutor cancelExecutor,
+                            CouponService couponService
+    ) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
         this.inventoryService = inventoryService;
         this.cancelExecutor = cancelExecutor;
+        this.couponService = couponService;
+
     }
 
     /**
@@ -126,9 +133,27 @@ public class OrderServiceImpl implements OrderService {
             totalAmount = totalAmount.add(s.getPrice().multiply(BigDecimal.valueOf(s.getQuantity())));
         }
 
+        // ④.5 算抵扣（Day 21）—— ★ 必须在 ④【之后】（要拿 totalAmount 当入参算），
+        //      且必须在 ⑤【之前】：这是一次只读的、便宜且注定失败的检查，
+        //      让「券不可用」在锁 inventories 的行之前就挡掉。
+        //      ★ 不用券（userCouponId == null）时 use 保持 null、discountAmount 保持 0 ——
+        //        全程不碰 marketing 域，老链路一行逻辑都没变（这是 M1 198 条能原样跑通的原因）。
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        CouponUseVO use = null;
+        if (dto.getUserCouponId() != null) {
+            // ★ 方法名叫 calcDiscount（只算、不写库）；真正的核销是下面的 ⑥.5 ——
+            //   这里是「快路径的预演」，成败最终由 ⑥.5 那条 CAS 决定。
+            //   ⚠️ 不要写成 use(...)：没有这个方法；也不要在这里改 user_coupons —— 那时订单 id 还不存在。
+            use = couponService.calcDiscount(userId, dto.getUserCouponId(), totalAmount);
+            discountAmount = use.getDeductionAmount();
+        }
+        // 实付 = 商品总额 - 抵扣额（恒等式，与 orders 表三列一致）
+        BigDecimal payAmount = totalAmount.subtract(discountAmount);
+
         // ⑤ 扣库存 —— 必须按 skuId 升序，让所有事务按同一顺序取行锁，消灭死锁
         List<OrderItemSourceVO> ordered = new ArrayList<>(sources);
         ordered.sort(Comparator.comparing(OrderItemSourceVO::getSkuId));
+
         for (OrderItemSourceVO s : ordered) {
             try {
                 inventoryService.deductForOrder(s.getSkuId(), s.getQuantity());
@@ -145,7 +170,10 @@ public class OrderServiceImpl implements OrderService {
         order.setOrderNo(generateOrderNo());
         order.setUserId(userId);
         order.setTotalAmount(totalAmount);
-        order.setPayAmount(totalAmount);                       // V1.0 无优惠
+        // ★ Day 21 起 payAmount 不再恒等于 totalAmount（用券时 = total - discount）；
+        //   ★ discountAmount 不用券时是 0，不是 null —— 三列必须满足 pay = total - discount。
+        order.setPayAmount(payAmount);
+        order.setDiscountAmount(discountAmount);
         order.setStatus(OrderStatus.PENDING_PAYMENT);
         order.setReceiverName(addr.getReceiverName());
         order.setReceiverPhone(addr.getReceiverPhone());
@@ -153,6 +181,20 @@ public class OrderServiceImpl implements OrderService {
         order.setReceiverAddress(addr.getProvince() + addr.getCity() + addr.getDistrict()
                 + addr.getDetailAddress());
         orderMapper.insert(order);                             // ★ 插入后 id 自动回填
+
+        // ⑥.5 核销（Day 21）—— ★★ 必须在 insert【之后】：要写进 user_coupons.order_id 的
+        //      是【落库后的真实订单 id】。放在 insert 之前的话 order.getId() 是 null，
+        //      markUsed 的 `WHERE id = null` 恒假 → 0 行 → 抛异常 → 整单回滚（永远下不了单）。
+        //      ★ 触发条件用 use != null（「真算过」的凭据），而不是 dto.getUserCouponId() != null ——
+        //        后者在「将来重构让 ④.5 被跳过」时会造出「券被核销了但没抵扣」
+        //        （markUsed 只要求 status='UNUSED'，照样返回 1 行），是结构性的防错。
+        //      ★ 失败必须抛出去（不 catch）：本方法带 @Transactional，只有抛出去才会把
+        //        「订单 + 库存 + 金额」一起回滚。
+        if (use != null) {
+            // ★ 用 use.getUserCouponId() 而不是 dto.getUserCouponId()：销的必须是【算过价的那一张】，
+            //   这样「算」与「销」永远指向同一行，不会因参数来源变化而错配。
+            couponService.useCoupon(userId, use.getUserCouponId(), order.getId());
+        }
 
         for (OrderItemSourceVO s : sources) {
             OrderItem item = new OrderItem();
