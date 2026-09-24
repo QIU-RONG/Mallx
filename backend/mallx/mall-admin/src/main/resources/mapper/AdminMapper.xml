@@ -3,13 +3,38 @@
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.mallx.admin.mapper.AdminMapper">
 
-    <!-- 管理员 → 角色 → 权限：穿过 admin_roles、role_permissions 两张中间表 -->
+    <!-- 管理员 → 角色 → 权限：穿过 admin_roles、role_permissions 两张中间表。
+
+         ★★ Day 23 修复：补上了 roles 的 JOIN 与 `AND r.status = 1`。
+
+         修复前的形状只有 `AND p.status = 1`，【没有】判角色状态 ⇒
+         「停用角色」这件事在旧代码里只生效了一半：
+           管理员【丢掉】ROLE_PRODUCT_ADMIN 这个权限位（selectRoleCodesByAdminId 判了 r.status）；
+           但【照旧拿到】该角色下的全部 product:* 权限码 ⇒
+           @PreAuthorize("hasAuthority('product:create')") 依然放行。
+
+         为什么这个缺陷能存活到 Day 23 而毫无报警：
+           ① 两条 SQL 的判法不对称（下面那条判了 r.status，这条没判），
+              而它们是相邻的两个 <select>，肉眼扫过去很像「一样的」；
+           ② 库里三个角色全是 status = 1 ⇒ 这条路径【从来没被走过】——
+              没有任何断言看得见它（同 L1「样本量陷阱」：
+              差异必须在数据里造出来才可断言）。
+         ⇒ 本日验收里专设 E 组：停用一个角色 → 重新登录 → 该角色的权限码必须消失。
+
+         ⚠️ 这条 SQL 在【登录链路】上（AdminAccountService#findByUsername 调它），
+            被 day14 / day15 / day16 三条 E2E 用到 ⇒ 改完必须重跑 M1（198/198）。
+
+         为什么在 FROM 里加 JOIN roles 而不是写 EXISTS 子查询：
+           两个 JOIN 已经在这条链上了，再挂一个等值 JOIN 是同一个执行计划
+           （都走主键），写成 EXISTS 反而多一层缩进、且 DISTINCT 的语义更难读。 -->
     <select id="selectPermissionCodesByAdminId" resultType="java.lang.String">
         SELECT DISTINCT p.code
         FROM admin_roles ar
-                 JOIN role_permissions rp ON rp.role_id = ar.role_id
-                 JOIN permissions p        ON p.id = rp.permission_id
+                 JOIN roles r              ON r.id  = ar.role_id
+                 JOIN role_permissions rp  ON rp.role_id = ar.role_id
+                 JOIN permissions p        ON p.id  = rp.permission_id
         WHERE ar.admin_id = #{adminId}
+          AND r.status = 1
           AND p.status = 1
     </select>
 
