@@ -5,7 +5,7 @@ L5① 验收：品牌字典（GET /api/brands + GET /api/admin/brands）
 [等待应用就绪] 127.0.0.1:8080 ...
   应用已就绪。
   库基线：brands 全部=7  status=1 的=7  max(id)=7
-  ★ 已插入临时【停用】品牌 id=11（它只应出现在管理端，不应出现在 C 端）
+  ★ 已插入临时【停用】品牌 id=19（它只应出现在管理端，不应出现在 C 端）
 
 [登录] admin(SUPER_ADMIN) / op_product(PRODUCT_ADMIN) / op_order(ORDER_ADMIN)
   admin:OK  op_product:OK  op_order:OK
@@ -18,7 +18,7 @@ A C 端 /api/brands（匿名，白名单精确路径）
   [PASS] A3 data 是【数组】（Result<List<BrandVO>>，不是分页对象）
   [PASS] A4 条数 == DB 中 status=1 的品牌数 (7)
   [PASS] A5 id 序列与 DB(status=1, order by id) 完全一致 [1, 2, 3, 4, 5, 6, 7]
-  [PASS] A6 ★ 停用品牌（id=11）不在 C 端结果里
+  [PASS] A6 ★ 停用品牌（id=19）不在 C 端结果里
   [PASS] A7 name/logo/description 逐条 == DB（BeanUtils 拷字段没漏）
 
 --------------------------------------------------------------------------
@@ -34,17 +34,17 @@ C 管理端权限矩阵（★ 区分度靠「谁没有」）
 --------------------------------------------------------------------------
   [PASS] C1 admin(SUPER_ADMIN) → HTTP 200 + code 200
   [PASS] C2 admin 条数 == DB 全部品牌数 (8)（含停用）
-  [PASS] C3 ★ admin 结果【包含】停用品牌 id=11（管理员要能看见它才能重新启用）
+  [PASS] C3 ★ admin 结果【包含】停用品牌 id=19（管理员要能看见它才能重新启用）
   [PASS] C4 op_product(PRODUCT_ADMIN，brand:list 已补发) → HTTP 200 + code 200
   [PASS] C5 ★ op_order(ORDER_ADMIN，无 brand:list) → 真 HTTP 403（不是 200+code）
   [PASS] C6 ★ admin 与 op_product 的响应体【逐字节相同】（结果与调用者无关）
-  [PASS] C7 /api/admin/brands/999 带 admin → 404（管理端目前只有 list 一个口子，没有漏出的端点）
+  [PASS] C7 /api/admin/brands/999 带 admin → 405（★ Day 24 订正：/{id} 路径模式已被 PUT/DELETE 占用，故不再是 404；405 表达的是「没有给 GET 开 /{id} 口子」）
 
 --------------------------------------------------------------------------
 D ★两端口径差异 —— 与 L2 拆 getDetail/getAdminDetail 同构的证据
 --------------------------------------------------------------------------
   [PASS] D1 管理端条数 - C 端条数 == 1（差值恰好是那一个停用品牌）
-  [PASS] D2 管理端 id 集合 - C 端 id 集合 == {11}
+  [PASS] D2 管理端 id 集合 - C 端 id 集合 == {19}
   [PASS] D3 C 端 id 集合 ⊂ 管理端 id 集合（C 端是管理端的子集，不是另一份数据）
 
 --------------------------------------------------------------------------

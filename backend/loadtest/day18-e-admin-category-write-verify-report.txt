@@ -7,16 +7,16 @@ target : http://127.0.0.1:8080/api/admin/categories
   counters: brands=7, categories=7, product_images=4, product_skus=7, products=5
   高水位：categories=31 products=5
   demo        code=200 token_len=191
-  op_order    code=200 token_len=311
-  op_product  code=200 token_len=515
-  admin       code=200 token_len=596
+  op_order    code=200 token_len=397
+  op_product  code=200 token_len=644
+  admin       code=200 token_len=1096
 
 [1] 权限矩阵（★ 合法载荷，否则测到的是 @Valid 不是 @PreAuthorize）
   demo     POST -> http=403 code=403
   op_order POST -> http=403 code=403
 
 [2] 新增：两级约束
-  op_product POST FX-CAT-TOP -> http=200 {"code":200,"message":"success","data":32}
+  op_product POST FX-CAT-TOP -> http=200 {"code":200,"message":"success","data":38}
   DB 新行 parent|name|sort = NULL|FX-CAT-TOP|9
   三级尝试 -> http=200 code=400 {"code":400,"message":"只支持两级分类","data":null}
   父不存在 -> http=200 code=404
@@ -24,7 +24,7 @@ target : http://127.0.0.1:8080/api/admin/categories
 [3] 改：局部更新语义
 
 [4] 删：三重校验
-  删有子分类 (32) -> http=200 code=400
+  删有子分类 (38) -> http=200 code=400
   删有商品 (11) -> http=200 code=400
 
 [5] ★★ 商品已软删，分类照样不能删（@TableLogic 漏算陷阱）
@@ -45,7 +45,7 @@ PASS #8 op_order 删分类 → 403（且分类 1 仍在，未真删）
 PASS #9 ★ op_product 新增顶级成功（有 category:create）→ code=200 且返回 id
 PASS #10 DB：顶级分类 parent_id IS NULL、name/sort_order 与提交一致
 PASS #11 新增二级成功 → code=200
-PASS #12 DB：二级分类 parent_id == 32
+PASS #12 DB：二级分类 parent_id == 38
 PASS #13 ★ 三级分类被拒：code=400（业务拒绝，不是 500 系统异常）
 PASS #14 DB：三级分类没有落库
 PASS #15 父分类不存在 → code=404
@@ -53,7 +53,7 @@ PASS #16 name 空串 → code=400（@NotBlank 在 @Valid 层拦住）
 PASS #17 造一个干净的二级叶子（后面 #29 用它测『删除成功』）
 PASS #18 改名成功 code=200
 PASS #19 DB：name 已改为 FX-CAT-LEAF-RENAMED
-PASS #20 ★ parentId 不传（null）= 不动：DB parent_id 仍是 32
+PASS #20 ★ parentId 不传（null）= 不动：DB parent_id 仍是 38
 PASS #21 传空串 name → code=400（Service 显式挡，@NotBlank 管不了这个）
 PASS #22 ★ 把自己设为父分类 → code=400
 PASS #23 ★ 有子分类的分类不能移动 → code=400

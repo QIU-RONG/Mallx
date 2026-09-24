@@ -5,7 +5,7 @@ Day 23 验收：RBAC 权限管理（A–G 七组）
 [0] 护栏与准备
   [OK] 13 处实现与 11 条 SQL 均已落地（无占位 / 无空语句体 / 语句数 11）
   [OK] 应用已就绪
-  基线: {'admins': 3, 'roles': 3, 'admin_roles': 3, 'role_permissions': 61, 'permissions': 38}
+  基线: {'admins': 3, 'roles': 3, 'admin_roles': 3, 'role_permissions': 67, 'permissions': 41}
     login demo(C端)       -> OK
     login admin(超管)      -> OK
     login op_order       -> OK
@@ -43,7 +43,7 @@ Day 23 验收：RBAC 权限管理（A–G 七组）
   [PASS] B5 GET 管理员详情 -> HTTP 200 + code 200
   [PASS] B6 ★★ 详情响应里【没有 password 键】（不是 "password": null）
   [PASS] B7 详情 roleIds / roleCodes 是空数组（新账号默认无角色）
-    夹具: d23tmpa1(启用, 昵称命中, id=9) / d23tmpb1(★禁用, 昵称命中, id=11) —— 后者是括号判据的靶子
+    夹具: d23tmpa1(启用, 昵称命中, id=14) / d23tmpb1(★禁用, 昵称命中, id=16) —— 后者是括号判据的靶子
   [PASS] B8 不传 status 的列表：keyword 命中【启用 + 禁用】两行（禁用不是删除）
   [PASS] B9 status=0 过滤 -> 只剩那行禁用的
   [PASS] B10 ★★ 括号正确性：keyword + status=1 时，「昵称命中但已禁用」的行【不许出现】
@@ -114,12 +114,12 @@ Day 23 验收：RBAC 权限管理（A–G 七组）
   [PASS] G admins 回到基线（3 -> 3）
   [PASS] G roles 回到基线（3 -> 3）
   [PASS] G admin_roles 回到基线（3 -> 3）
-  [PASS] G role_permissions 回到基线（61 -> 61）
-  [PASS] G permissions 回到基线（38 -> 38）
+  [PASS] G role_permissions 回到基线（67 -> 67）
+  [PASS] G permissions 回到基线（41 -> 41）
   [PASS] G6 ★ 清完后超管仍持有 13 条 RBAC 码（清理/护栏都没伤到超管）
 
 [清理] 高水位线删除（断言中途炸了也要清干净）
-  清理后: {'admins': 3, 'roles': 3, 'admin_roles': 3, 'role_permissions': 61, 'permissions': 38}
+  清理后: {'admins': 3, 'roles': 3, 'admin_roles': 3, 'role_permissions': 67, 'permissions': 41}
 
 ==============================================================================
 TOTAL: 91 / 91    PASS=91 FAIL=0

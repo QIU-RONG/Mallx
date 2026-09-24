@@ -303,8 +303,24 @@ check("C6 ★ admin 与 op_product 的响应体【逐字节相同】（结果与
       json.dumps(jp, sort_keys=True, ensure_ascii=False))
 
 st, _j, _r = api("GET", "/api/admin/brands/999", token=t_admin)
-check("C7 /api/admin/brands/999 带 admin → 404（管理端目前只有 list 一个口子，没有漏出的端点）",
-      st == 404, "实际 %s" % st)
+# ★★ 订正于 Day 24（L5② 交付同批）—— 原断言的【前提】被本日改动打破了：
+#
+#   写这条时的世界：管理端品牌只有 `GET /api/admin/brands` 一个口子，
+#     `/{id}` 这个路径模式【不存在】⇒ 打它必然 404（L6 的 NoResourceFoundException）。
+#     断言「404」想表达的是「没有漏出的 /{id} 端点」。
+#
+#   本日之后：新增了 `PUT /{id}` 与 `DELETE /{id}` ⇒ **路径模式存在了**，
+#     但对 GET 没有 handler ⇒ 现在得到 **405 Method Not Allowed**。
+#     ⇒ 405 才是「没有给 GET 开 /{id} 口子」的正确表达；404 已经不可能出现。
+#
+#   ★ 这与 Day 20 L3 打断「promotion = 纯全文召回」的证据链是**同一类事**：
+#     断言里藏着一个「世界还没变」的前提。改动前要先问——
+#     **这条断言是【靠什么】才成立的？**（本次是靠「/{id} 模式不存在」。）
+#   ★ 405 与 401/403 同类（协议层拒绝、给真 HTTP 码）——Day 18 已立此约定，
+#     所以这里断 405 而不是断「200 + code」。
+check("C7 /api/admin/brands/999 带 admin → 405（★ Day 24 订正：/{id} 路径模式已被 PUT/DELETE 占用，"
+      "故不再是 404；405 表达的是「没有给 GET 开 /{id} 口子」）",
+      st == 405, "实际 %s" % st)
 
 # ---------------------------------------------------------------- D 两端口径差异
 say()

@@ -17,7 +17,7 @@ sku under test: 4
 
 [1] logins (tokens stay in memory, never on disk)
   demo      http=200 code=200 userId=1 token_len=191
-  admin     http=200 code=200 adminId=1 token_len=675
+  admin     http=200 code=200 adminId=1 token_len=1096
   intruder  http=200 code=200 userId=2 token_len=196
 
 ------------------------------------------------------------------------------
@@ -25,7 +25,7 @@ ORDER A -- the full forward path: place -> pay -> SHIP -> CONFIRM
 ------------------------------------------------------------------------------
 
 [2] place order A (sku4 x1)
-  POST /api/orders -> order=9064 code=200 {"code":200,"message":"success","data":9064}
+  POST /api/orders -> order=9103 code=200 {"code":200,"message":"success","data":9103}
   after place A        sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
   delta vs start: available -1  locked +1  sold +0
 
@@ -35,22 +35,22 @@ ORDER A -- the full forward path: place -> pay -> SHIP -> CONFIRM
   delta vs after-place: available +0  locked -1  sold +1
 
 [4] ★ SHIP order A -- ADMIN token, needs order:ship
-  POST /api/orders/9064/ship (admin) -> http=200 code=200 {"code":200,"message":"success","data":null}
+  POST /api/orders/9103/ship (admin) -> http=200 code=200 {"code":200,"message":"success","data":null}
   after ship A         sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
   delta vs after-pay: available +0  locked +0  sold +0   ★ must be all zeros
 
 [5] ★ CONFIRM order A -- C-end token, the owner
-  POST /api/orders/9064/confirm (demo) -> http=200 code=200 {"code":200,"message":"success","data":null}
+  POST /api/orders/9103/confirm (demo) -> http=200 code=200 {"code":200,"message":"success","data":null}
   after confirm A      sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
   delta vs after-ship: available +0  locked +0  sold +0   ★ must be all zeros
-  A timestamps: paid=22:02:39 shipped=22:02:42 completed=22:02:45
+  A timestamps: paid=01:09:40 shipped=01:09:43 completed=01:09:46
 
 ------------------------------------------------------------------------------
 ORDER B -- the guard rails: wrong state, wrong actor, repeated calls
 ------------------------------------------------------------------------------
 
 [6] ★★ RBAC -- ship is the first business endpoint that really uses it
-  order B placed -> 9065
+  order B placed -> 9104
   demo (C-end) token  -> ship order B : http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
   anonymous           -> ship order B : http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
   intruder (C-end)    -> ship order B : http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
@@ -85,7 +85,7 @@ ORDER B -- the guard rails: wrong state, wrong actor, repeated calls
 ==============================================================================
 [11] CLEANUP -- remove this run's artifacts, restore the baseline
 ==============================================================================
-  orders to delete: [9064, 9065]
+  orders to delete: [9103, 9104]
   ledger rows to delete: id > 0
 
 [12] VERIFY -- the database is byte-for-byte back at baseline

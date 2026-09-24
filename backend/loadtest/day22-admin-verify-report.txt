@@ -11,8 +11,8 @@ Day 22 验收：用户管理 + 仪表盘 + 安全收口回归 + L7（A–E）
     login op_order       -> OK
     login op_product     -> OK
     demo.id=1  公开字段白名单=['createdAt', 'email', 'id', 'nickname', 'phone', 'status', 'username']
-    夹具用户 alpha=26(启用) beta=27(禁用) gamma=28(用户名命中)
-    夹具订单 id=9076（created_at = 4 天前）
+    夹具用户 alpha=44(启用) beta=45(禁用) gamma=46(用户名命中)
+    夹具订单 id=9107（created_at = 4 天前）
 
 [A] ★ 安全回归：漏洞入口必须【全部 404】，出口必须【不再有 password】
   [PASS] A1 匿名 GET /api/users -> HTTP 401（仍要登录，不是公开）
