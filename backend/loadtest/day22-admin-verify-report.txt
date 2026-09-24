@@ -1,0 +1,99 @@
+==============================================================================
+Day 22 验收：用户管理 + 仪表盘 + 安全收口回归 + L7（A–E）
+==============================================================================
+
+[0] 护栏与准备
+  [OK] 7 处实现与 5 条 SQL 均已落地（无 UnsupportedOperationException / 无空语句体）
+  [OK] 应用已就绪
+  基线: {'users': 2, 'products': 5, 'orders': 8, 'payments': 5, 'coupons': 0, 'user_coupons': 0}
+    login demo(C端)       -> OK
+    login admin(超管)      -> OK
+    login op_order       -> OK
+    login op_product     -> OK
+    demo.id=1  公开字段白名单=['createdAt', 'email', 'id', 'nickname', 'phone', 'status', 'username']
+    夹具用户 alpha=26(启用) beta=27(禁用) gamma=28(用户名命中)
+    夹具订单 id=9076（created_at = 4 天前）
+
+[A] ★ 安全回归：漏洞入口必须【全部 404】，出口必须【不再有 password】
+  [PASS] A1 匿名 GET /api/users -> HTTP 401（仍要登录，不是公开）
+  [PASS] A2 demo GET /api/users -> HTTP 404（★ 从前 200 + 全站口令哈希）
+  [PASS] A3 demo GET /api/users/{别人} -> HTTP 404（从前 200）
+  [PASS] A4 demo PUT /api/users/{别人}/nickname -> HTTP 404（从前 200，能改任何人）
+  [PASS] A5 demo GET /api/users/me -> HTTP 200 + code 200
+  [PASS] A6 ★ /me 返回的就是【自己】（data.id == demo 的 DB id）
+  [PASS] A7 ★★ /me 响应体【不含 password 键】（外泄根因已除）
+  [PASS] A8 ★ /me 响应键 ⊆ 公开字段白名单（多出任何一列都算泄露）
+  [PASS] A9 ★ 管理端用户列表每条的键 ⊆ 公开白名单（全站列表也不漏 password）
+  [PASS] A10 ★ DB：user:list 的 path 已从 /api/users 订正为 /api/admin/users
+
+[B] 用户管理：分页夹紧 / keyword 三列 / ★ 括号 / 状态条件更新
+  [PASS] B1 size=-1 夹到【下限 1】（size 字段=1 且只回 1 条）
+  [PASS] B2 size=0 夹到【下限 1】（不夹的话 MP 会 LIMIT 0 ⇒ 0 条）
+  [PASS] B3 size=1000 夹到【上限 100】（★ 用 size 字段判，不靠记录数——库里没 100 条）
+  [PASS] B4 keyword=D22CW 跨三列任一命中 -> 3 条（alpha/beta 走昵称，gamma 走用户名）
+  [PASS] B5 ★★ 括号正确性：keyword=D22CW + status=1 -> 恰好 2 条，【已禁用的 beta 不许漏进来】
+  [PASS] B6 keyword=D22CW + status=0 -> 恰好 beta 一条
+  [PASS] B7 keyword 命中【phone】列 -> 3 条（证明 phone 参与 OR）
+  [PASS] B8 keyword 命中【username】列 -> 恰好 gamma
+  [PASS] B9 ★ status 不传 = 两者都要（total 无过滤 == status=1 + status=0）
+  [PASS] B10 管理端详情 -> HTTP 200 + code 200 + 用户名对得上
+  [PASS] B11 ★ 详情响应也不含 password 键
+  [PASS] B12 详情 id 不存在 -> code 404（真 404 语义，不伪装）
+  [PASS] B13 改状态 1->0 -> 200 且 DB 落到 0
+  [PASS] B14 ★ 幂等：重复禁用 -> 200（不是 404/409），DB 仍是 0
+  [PASS] B15 改回启用 -> DB 落到 1（状态可双向改）
+  [PASS] B16 ★ 改不存在的 id -> code 404（影响行数 0 == 不存在，没有先查后改）
+  [PASS] B17 ★ updates 走了显式 updated_at（手写 UpdateWrapper 不走自动填充 ⇒ 我们显式补了）
+  [PASS] B18 越界 status=9 -> code 400（@Max 挡下，不是 200+500）
+  [PASS] B19 空载荷 {} -> code 400（@NotNull 挡下）
+
+[C] 权限矩阵：读给业务角色、写给超管（★ 每一条「给」都要配一条「不给」）
+  [PASS] C1 匿名 GET /api/admin/users -> HTTP 401
+  [PASS] C2 ★ C 端 token 打管理端 -> HTTP 403（C 端 token 无 perms）
+  [PASS] C3 ★ op_product（无 user:*）-> HTTP 403（反向对照）
+  [PASS] C4 ★ op_order（有 user:list）-> HTTP 200 + code 200（读是必要的）
+  [PASS] C5 ★ op_order（有 user:detail）-> HTTP 200 + code 200
+  [PASS] C6 ★★ op_order PUT /{id}/status -> HTTP 403（user:status 只给超管）
+  [PASS] C7 ★★ 被拒的写【一行都没落库】（403 不只是个状态码）
+  [PASS] C8 op_product PUT /{id}/status -> HTTP 403（连 user:list 都没有）
+
+[D] 仪表盘：4 标量对账 + ★ 销售额支付口径 + ★ 补 0
+  [PASS] D1 匿名 overview -> HTTP 401
+  [PASS] D2 ★ C 端 token 打仪表盘 -> HTTP 403
+  [PASS] D3-admin 三角色全给：admin overview -> HTTP 200 + code 200
+  [PASS] D3-op_order 三角色全给：op_order overview -> HTTP 200 + code 200
+  [PASS] D3-op_product 三角色全给：op_product overview -> HTTP 200 + code 200
+  [PASS] D4 userCount 与 DB 一致（全表，含已禁用）
+  [PASS] D5 productCount 与 DB 一致（★ 口径 is_deleted=0）
+  [PASS] D6 orderCount 与 DB 一致（全表，含已取消）
+  [PASS] D7 salesAmount 与 DB 支付口径一致（coalesce(sum) WHERE SUCCESS）
+  [PASS] D8 ★★ 失败支付【不计入】销售额（支付口径的证据，不是订单口径）
+  [PASS] D9 ★★ 成功支付【恰好加】123.45（销售额真的在算，不是恒 0）
+  [PASS] D10 trend days=7 -> 恰好 7 个点（★ 直觉写法只会有「有单的那几天」）
+  [PASS] D11 日期序列 = 连续 7 天、升序、最后一天=今天
+  [PASS] D12 趋势里的 orderCount 之和 == DB 窗口内订单数
+  [PASS] D13 ★★ 补 0 的证明：零点个数 == 天数 - DB 里有单的天数（7 - 2 = 5）
+  [PASS] D14 我造的「4 天前那一单」落在正确的点上（orderCount >= 1）
+  [PASS] D15 ★ 补 0 补的是 0 而不是 null（salesAmount 全非 null）
+  [PASS] D16 ★ days=-1 夹到【下限 1】-> 1 个点（不夹的话 generate_series 回空集，看着像「没生意」）
+  [PASS] D17 ★ days=100000 夹到【上限 90】-> 90 个点
+  [PASS] D18 days 不传 -> 默认 7（靠 @RequestParam 的 defaultValue）
+  [PASS] D19 匿名 trend -> HTTP 401
+
+[E] L7（订单 VO 带 discountAmount）+ 老链路存活
+  [PASS] E1 C 端订单详情含 discountAmount 键
+  [PASS] E2 ★ 恒等式 pay = total - discount（三个数一起断）
+  [PASS] E3 ★ 不用券时 discountAmount = 0 而不是 null
+  [PASS] E4 C 端订单列表 records[0] 也含 discountAmount（两个出口都要有）
+  [PASS] E5 GET /api/products（公开）-> HTTP 200 + code 200
+  [PASS] E6 demo GET /api/orders -> HTTP 200 + code 200
+  [PASS] E7 demo GET /api/cart -> HTTP 200 + code 200
+
+[F] 清理夹具 + 基线还原
+  [PASS] F1 ★ 基线还原：清理后六张表的计数与开工前【逐一相等】
+  [PASS] F2 夹具用户已清空（email LIKE 'd22cw%' 剩 0 行）
+
+------------------------------------------------------------------------------
+TOTAL: 67 / 67 通过，0 失败
+VERDICT: OK —— 安全收口 + 用户管理 + 仪表盘 + L7 全部成立
+------------------------------------------------------------------------------
