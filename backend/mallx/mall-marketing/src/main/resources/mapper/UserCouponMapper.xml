@@ -73,4 +73,82 @@
         order by uc.id desc
     </select>
 
+    <!--
+      =================================================================
+      ★★★ Day 21（阶段二）：算抵扣 / 核销 / 退券（3 条，骨架期【方法体留空】）
+
+      这三条与上面两条的性质不同：
+        ① selectForUse  —— 读，只取素材，不写库
+        ② markUsed      —— ★ 写，条件 UPDATE（CAS），是「同一张券被并发用掉」的唯一防线
+        ③ releaseByOrder—— ★ 写，② 的【逆向】操作：把上次写进去的三样东西全部还原
+
+      ★★ 三条都必须手写的原因（与 CouponMapper.java 顶部同一条理由）：
+         它们带「并发」或「多列同时改」的语义，MP 的 wrapper 表达不了。
+         MP 的 updateById 会把 null 字段跳过 → 想「把 order_id 清空」根本做不到，
+         那正是 releaseByOrder 必须手写的原因（清空 ≠ 不改）。
+      =================================================================
+    -->
+
+    <!--
+      ① 下单算抵扣前的「取素材」—— 要求见 UserCouponMapper.java#selectForUse
+
+      SELECT 要出的列（与 CouponUseSourceVO 一一对应，一条都不能少）：
+          uc.id             AS user_coupon_id
+          uc.coupon_id      AS coupon_id
+          c.name            AS coupon_name
+          c.type
+          c.discount_amount / c.discount_rate / c.min_amount
+          uc.status         AS status            ← user_coupons.status（我用了没）
+          c.status          AS coupon_status     ← coupons.status（这个券种下架没）
+          c.start_time / c.end_time
+          ______            AS expired           ← 现算：c.end_time 与 CURRENT_TIMESTAMP 比
+
+      ★★ 两个 status 必须【分别起别名】。写成两遍 AS status 的话，
+         PG 会让后一列盖掉前一列，而且【不报错】——
+         status 字段会悄悄变成「券种的上下架标记」，
+         于是「已核销的券」被判成可用，同一张券能被用两次。
+      ★ WHERE：uc.user_id = #{userId} AND uc.id = #{userCouponId}
+        （归属写死在 SQL 里 —— C 端口径，别搬到 Java）
+      ★ expired 的算法与上面 ② selectMyCoupons 保持一致，别另立一套。
+      ★ 别名一律下划线。⚠️ SQL 里的【小于号】写成 &lt;（裸写启动才炸）。
+    -->
+    <select id="selectForUse" resultType="com.mallx.marketing.vo.CouponUseSourceVO">
+    </select>
+
+    <!--
+      ② 核销：条件 UPDATE（CAS）—— 要求见 UserCouponMapper.java#markUsed
+
+      形状（结构给你，条件你自己列）：
+          UPDATE user_coupons
+             SET status   = 'USED'
+               , order_id = #{orderId}
+               , used_at  = ______        ← ★ 自定义 XML 不走填充器，时间戳手写
+           WHERE id = #{userCouponId}
+             AND ______                    ← 守卫一：归属（不能因为查过一次就省）
+             AND ______                    ← 守卫二：当前必须还是 UNUSED ★ 防重复核销的全部
+
+      ★ 用 <update> + int 返回值；不要包 RETURNING。
+      ★ 两条守卫缺一条都不报错：少了归属 → 能用别人的券；少了状态 → 能重复核销。
+    -->
+    <update id="markUsed">
+    </update>
+
+    <!--
+      ③ 退券：按订单把券退回 —— 要求见 UserCouponMapper.java#releaseByOrder
+      ★★ 这是 ② 的逆向操作，难点不在 SQL 长度，而在【三样都要还原】：
+
+          UPDATE user_coupons
+             SET status   = 'UNUSED'
+               , order_id = ______        ← ★ 必须清空（写 NULL，不是省略）
+               , used_at  = ______        ← ★ 必须清空（写 NULL，不是省略）
+           WHERE ______ = #{orderId}      ← 按订单定位
+             AND ______                    ← 守卫：只退「确实被这张单用掉」的那张
+
+      ★ 为什么不带 user_id 条件：取消有三条边（用户 / 超时任务 / 管理员），
+        后两条拿不到 userId。order_id 本身就是「谁的券」的充分条件。
+      ★ 影响行数为 0 是【正常】的（这单没用券）—— 调用方不许把 0 当失败。
+    -->
+    <update id="releaseByOrder">
+    </update>
+
 </mapper>

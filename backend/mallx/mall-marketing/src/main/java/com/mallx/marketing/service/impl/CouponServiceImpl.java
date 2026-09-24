@@ -8,18 +8,22 @@ import com.mallx.common.api.PageResult;
 import com.mallx.common.api.ResultCode;
 import com.mallx.common.exception.BusinessException;
 import com.mallx.marketing.common.CouponType;
+import com.mallx.marketing.common.UserCouponStatus;
 import com.mallx.marketing.dto.CouponCreateDTO;
 import com.mallx.marketing.entity.Coupon;
 import com.mallx.marketing.entity.UserCoupon;
 import com.mallx.marketing.mapper.CouponMapper;
 import com.mallx.marketing.mapper.UserCouponMapper;
 import com.mallx.marketing.service.CouponService;
+import com.mallx.marketing.vo.CouponUseSourceVO;
+import com.mallx.marketing.vo.CouponUseVO;
 import com.mallx.marketing.vo.CouponVO;
 import com.mallx.marketing.vo.UserCouponVO;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -346,6 +350,136 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
                 userCouponMapper.selectMyCoupons(new Page<>(safePage, safeSize), userId);
 
         return PageResult.of(result);
+    }
+
+    // ================================================================
+    // ★★★ Day 21（阶段二）：算抵扣 / 核销 / 退券
+    //
+    //   ★ 填实现时：整段替换那行 TODO 与紧跟的 throw，
+    //     【只删你正在填的那一个】—— 本类现在有 3 个长得一样的 throw，删错就编译不过。
+    //
+    //   ★ 这三处与上面五处的性质不同：上面是「配给 HTTP 的」，这三处是
+    //     「配给另一个模块（mall-order）的」—— 所以它们【不接 @RequestParam、
+    //     不返回 Result、也不抛给自己翻译过的文案】，
+    //     而是直接抛 BusinessException，由调用方所在的那条线程的全局处理器接住。
+    // ================================================================
+
+    /**
+     * ★★★ 算抵扣（只读，不写库）。
+     *
+     * <p>四步，<b>顺序不能换</b>（先判最根本的原因，消息才说得清）：
+     * <pre>
+     *   ① CouponUseSourceVO src = userCouponMapper.selectForUse(userId, userCouponId);
+     *        src == null  → 400「优惠券不存在」
+     *        ★ 「不存在」与「不是你的」必须并成一句 —— 分开写就等于
+     *          给攻击者一个探测别人券 id 是否有效的接口。
+     *
+     *   ② 逐条判据（消息要能直接当提示语用，最好带上券名 src.getCouponName()）：
+     *        !UserCouponStatus.isUsable(src.getStatus()) → 400「该优惠券已使用」
+     *        Boolean.TRUE.equals(src.getExpired())       → 400「该优惠券已过期」
+     *        src.getCouponStatus() == null || != 1       → 400「该优惠券已下架」
+     *          ★ 别漏这条：下架的券不该还能被消耗（与领券那边 status=1 的守卫对称）
+     *        src.getMinAmount() != null
+     *            && totalAmount.compareTo(src.getMinAmount()) &lt; 0
+     *                                                    → 400「订单金额未满 X 元，不能使用该优惠券」
+     *          ★ X 用 src.getMinAmount() 原样输出（别 toString 掉小数位）
+     *
+     *   ③ 按类型算钱 —— 两种券两条公式，出口是同一个 BigDecimal：
+     *        CouponType.FIXED    ：deduction = src.getDiscountAmount()
+     *        CouponType.DISCOUNT ：deduction = totalAmount × (1 - src.getDiscountRate())
+     *        ★★ rate 的取值约定见 CouponUseVO 的类注释：是【应付比例】，区间 (0,1]，
+     *           0.80 = 8 折。★ 必须先挡 rate 不在区间内的情况：
+     *             rate == null || rate.compareTo(BigDecimal.ZERO) &lt;= 0
+     *                          || rate.compareTo(BigDecimal.ONE)    >  0
+     *                 → 400「折扣率取值必须是 0 到 1 之间」
+     *           不挡的话，种子里一个 80（想表达 8 折）会算出【负的抵扣额】，
+     *           实付金额一路变负错到支付接口才炸，而且炸得莫名其妙。
+     *        ★ 券面字段为 null（比如 FIXED 却没有 amount）→ 400，
+     *           别让 NPE 变成 500：NPE 会让「券配错了」和「服务崩了」看起来一样。
+     *
+     *   ④ 收口（三条，缺一条验收就会抓到）：
+     *        · 抵扣额不能超过订单总额，否则实付为负：
+     *            if (deduction.compareTo(totalAmount) &gt; 0) deduction = totalAmount;
+     *          ★ 这里选【封顶】而不是报错，理由要写进注释：
+     *            「满 200 减 300」是运营配错了券，但让这一单少付到 0 元
+     *            比让用户下单失败更合理，而且封顶是幂等的、不会因为重试而变化。
+     *        · 小数位与舍入模式必须显式定：setScale(2, RoundingMode.HALF_UP)
+     *          ★ 不写的话 BigDecimal 的除法/乘法会抛 ArithmeticException 或保留
+     *            过多位数，而默认的舍入是 HALF_EVEN（银行家舍入）——
+     *            它在 x.xx5 上给出的结果与直觉不同，而验收脚本是按直觉写的。
+     *        · ★ 抵扣额为 0 也【照常返回】，不要抛异常：
+     *          「0 元券」是合法状态，而且 orders.discount_amount = 0
+     *          正是「用了 0 元券」与「没用券」在数据上的区别所在。
+     *
+     *   ⑤ 组装并返回 CouponUseVO（userCouponId / couponId / couponName / deductionAmount）
+     * </pre>
+     *
+     * <p>★ 本方法不加 {@code @Transactional} —— 它整个是只读的，
+     * 而唯一的写操作（核销）在 {@link #useCoupon} 里，由那边的 CAS 负责对错。
+     */
+    @Override
+    public CouponUseVO calcDiscount(Long userId, Long userCouponId, BigDecimal totalAmount) {
+        // TODO: 按上面 ①~⑤ 实现
+        throw new UnsupportedOperationException("TODO: CouponServiceImpl.calcDiscount");
+    }
+
+    /**
+     * ★★★ 核销（写库）。
+     *
+     * <p>三步：
+     * <pre>
+     *   ① int updated = userCouponMapper.markUsed(userId, userCouponId, orderId);
+     *
+     *   ② updated == 0 → 抛 400「优惠券不可用，请重新选择」
+     *        ★★ 抛异常是【必须】的，不是「最好抛」：
+     *           调用方 createFromCart 是 @Transactional，而事务只对
+     *           【抛出去的 RuntimeException】回滚。写成 return 或者自己 try-catch 吞掉，
+     *           结果就是「券没核销成功，但订单建了、库存扣了、金额减了」——
+     *           用户白拿一次优惠，而且数据库里没有任何痕迹说明发生过。
+     *
+     *   ③ 成功 → 返回 void
+     * </pre>
+     *
+     * <p>★★ <b>为什么不加 {@code @Transactional}</b>：按本类一贯的判据 ——
+     * 「看写点个数，不看方法重不重要」。这里只有<b>一条</b> UPDATE，
+     * 单条 UPDATE 自身即原子。
+     * ★ 而它真正的原子性来自<b>调用方的事务</b>：{@code createFromCart} 上的
+     * {@code @Transactional} 是 REQUIRED 传播，本方法作为普通 Spring Bean 调用
+     * 会自然加入同一个事务 —— 与 {@code inventoryService.deductForOrder} 完全同构。
+     * ★ 在这里再标一个 @Transactional 只能得到「同一个事务」（默认也是 REQUIRED），
+     * 不会变嵌套 —— 所以标了不会更安全，只会让人误以为它有独立的事务边界。
+     */
+    @Override
+    public void useCoupon(Long userId, Long userCouponId, Long orderId) {
+        // TODO: 按上面 ①~③ 实现
+        throw new UnsupportedOperationException("TODO: CouponServiceImpl.useCoupon");
+    }
+
+    /**
+     * ★★ 退券（写库）—— 取消订单时把券退回。
+     *
+     * <p>实现就一行：{@code return userCouponMapper.releaseByOrder(orderId);}
+     *
+     * <p>★★ 三个「不要」（每一条都有具体的翻车现场）：
+     * <ol>
+     *   <li><b>不要</b>加 {@code @Transactional} —— 一条 UPDATE 自身即原子；
+     *       调用方 {@code cancelOne} 自带事务，REQUIRED 会加入。</li>
+     *   <li><b>不要</b>把返回 0 当失败抛异常 —— 0 行 = 这一单没用券，是常态。
+     *       ★ M1 回归（day14/15/16 三个 E2E）里取消的订单<b>全都</b>没用券，
+     *       写成抛异常 = M1 当场红，而且症状是「取消订单莫名其妙 500」，
+     *       跟券八竿子打不着，很难查。</li>
+     *   <li><b>不要</b>在这里补写「清空 order_id」的逻辑 —— 那是 SQL 的活。
+     *       MP 的 {@code updateById} 会<b>跳过 null 字段</b>，
+     *       用它永远清不掉 order_id，这就是这条必须手写 XML 的原因。</li>
+     * </ol>
+     *
+     * <p>★ 返回值原样透出给调用方（V1.0 里 cancelOne 可以不看它，
+     * 但「0 行」在这里是有信息量的 —— 与 {@code releaseLocked} 的 0 行含义相反）。
+     */
+    @Override
+    public int releaseByOrder(Long orderId) {
+        // TODO: 一行，直接委托给 mapper（★ 别加事务、别把 0 行当失败）
+        throw new UnsupportedOperationException("TODO: CouponServiceImpl.releaseByOrder");
     }
 
     // ================================================================
