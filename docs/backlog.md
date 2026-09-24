@@ -16,6 +16,7 @@
 | L4 | 搜索的 `categoryId` 不展开子分类 | 两入口口径不一 | 改签名 + XML | 中 | ✅ 已修（day19 58/58） |
 | L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ✅ ① 已做（brand 24/24）；② CRUD 未做 |
 | L6 | 不存在的路径被兜底吞成 200+code=500 | 可观测性 | 1 个 handler | 低 | ✅ 已修（L5 验收顺带挖出） |
+| L7 | 订单详情/列表看不到优惠额 | 信息完整性 | VO 2 字段 + 装配 2 行 | 极低 | ⬜ 未开工 |
 | D21-A | `discount_rate` 三份口径对打（DTO `99.99` / 测试 `88.0` / 设计 `(0,1]`） | 金额正确性 | DTO 1 行 + 断言 +2 | 低 | ✅ 已修（决策 A；day20 **82/82**） |
 | T1 | `MAX_PAGE_SIZE` 已复制 5 份 | 可维护性 | 跨模块重构 | 中 | ⏸️ |
 
@@ -335,6 +336,42 @@ ILIKE 又不看 description ⇒ **永远搜不到**。
 `is_deleted = 0`，漏算已软删商品 ⇒ 以为空着 → 物理删 → 撞 `fk_product_brand` 现场 500。
 正确做法照 `ProductMapper.xml#countByCategoryId`：**手写 XML 绕开 `@TableLogic`**，
 让计数口径与外键口径一致（Day 18 最值钱的一条教训）。
+
+---
+
+## L7 · 订单详情/列表看不到优惠额（Day 21 收尾时登记）
+
+**现状（实证）**
+Day 21 给 `orders` 加了 `discount_amount` 并在下单链路写入（`pay = total − discount`），
+但两个出参 VO 都**没有这个字段**：
+
+| 位置 | 有 | 缺 |
+|---|---|---|
+| `OrderDetailVO`（`GET /api/orders/{id}`） | `totalAmount` / `payAmount` | **`discountAmount`** |
+| `OrderVO`（`GET /api/orders` 列表） | 同上 | **`discountAmount`** |
+
+**影响**
+用户看到「实付 80」，看不到「原价 100、省了 20」。券的**效果**在最该出现的界面上不可见 ——
+业务上不算错（金额是对的），但「用了券」这件事从详情接口完全读不出来，
+前端只能靠 `total − pay` 自己反推（Day 21 特意落库快照就是为了**不让下游反推**）。
+★ 严重度低于本清单其他条目：**不影响正确性，只影响可读性**。
+
+**修法（极低风险，但要重跑 M1）**
+1. `OrderDetailVO` / `OrderVO` 各加 `private BigDecimal discountAmount;`
+2. `OrderServiceImpl.buildDetail` / `toOrderVO` 各加一行 `vo.setDiscountAmount(order.getDiscountAmount());`
+   （`detail` 与 `detailByAdmin` 共用 `buildDetail` ⇒ 一处改两处受益）
+3. ⚠️ 这两个 VO 都在 **M1 覆盖的代码**上（Day 14/15/16 三条 E2E 都会读订单详情）
+   ⇒ 改完**必须重跑 `day17-m1-regression.py`**（198/198 + `BASELINE RESTORED: YES`）。
+
+**为什么 Day 21 没顺手做**：本日验收已经跑完（53/53 + 82/82 + 198/198），
+再加字段就要**重跑一整轮 M1**；而这条不在 Day 21 的设计范围里（§八 断言清单没有它）。
+⇒ 留给下一次改动它周边代码时捎带（**与改动同批 + 同一次回归**，别再单独起一轮应用）。
+
+**验收断言（建议 3 条）**
+1. 用券下单后 `GET /api/orders/{id}` → `discountAmount = 20.00`、`payAmount = 80.00`、
+   `totalAmount = 100.00`（**三值同时断，光断 discount 不排除 pay 算错**）；
+2. 不用券下单 → `discountAmount = 0.00`（不是 `null` —— 与 DB 的 `NOT NULL DEFAULT 0` 对齐）；
+3. 全表恒等式 `pay_amount = total_amount - discount_amount` 仍成立（Day 21 那一条照抄）。
 
 ---
 
