@@ -14,11 +14,12 @@
 | L2 | C 端商品详情不判上架（★ 有耦合） | 数据可见性 | 拆方法 | 低 | ✅ 已修（33/33） |
 | L3 | 搜索的中文兜底漏了 `description` | 召回完整性 | 1 行 SQL（★ 连带改断言） | 中 | ✅ 已修（day19 58/58） |
 | L4 | 搜索的 `categoryId` 不展开子分类 | 两入口口径不一 | 改签名 + XML | 中 | ✅ 已修（day19 58/58） |
-| L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ✅ ① 已做（brand 24/24）；② CRUD 未做 |
+| L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ✅ ① 已做（brand 24/24）；② CRUD 未做（★ 权限码改从 **39** 起，22–25/26–38 已被 Day 22/23 占掉） |
 | L6 | 不存在的路径被兜底吞成 200+code=500 | 可观测性 | 1 个 handler | 低 | ✅ 已修（L5 验收顺带挖出） |
-| L7 | 订单详情/列表看不到优惠额 | 信息完整性 | VO 2 字段 + 装配 2 行 | 极低 | ⬜ 未开工 |
+| L7 | 订单详情/列表看不到优惠额 | 信息完整性 | VO 2 字段 + 装配 2 行 | 极低 | ✅ 已修（**Day 22**，提交 `8248b59`；day17-b 的键集合回归盲区同批补上） |
 | D21-A | `discount_rate` 三份口径对打（DTO `99.99` / 测试 `88.0` / 设计 `(0,1]`） | 金额正确性 | DTO 1 行 + 断言 +2 | 低 | ✅ 已修（决策 A；day20 **82/82**） |
-| T1 | `MAX_PAGE_SIZE` 已复制 5 份 | 可维护性 | 跨模块重构 | 中 | ⏸️ |
+| T1 | `MAX_PAGE_SIZE` 已复制 **6** 份 | 可维护性 | 跨模块重构 | 中 | ⏸️ ★ **触发条件已达成**（第 6 份在 `AdminUserServiceImpl.pageUsers`），是否抽待拍板 |
+| T2 | `day17-a` / `day17-b` 不在 M1 名单里 | 回归盲区 | 改 M1 脚本名单 | 低 | ⬜ 未开工（Day 22 实证：L7 加字段后它的「键集合相等」断言会静默失败） |
 
 **关键前提（已核实）**：M1 回归三个脚本（`day14-e2e-walk.py` / `day15-ship-confirm.py` /
 `day16-review-e2e.py`）对 `/api/products` 的**全部访问只有 `/api/products/{id}/reviews`**
@@ -313,7 +314,7 @@ ILIKE 又不看 description ⇒ **永远搜不到**。
 | 存在 | 缺失 |
 |---|---|
 | `entity/Brand.java`、`mapper/BrandMapper.java` | `BrandController` / `BrandService` |
-| 6 条种子数据（`03-data.sql:33-44`：Apple / Huawei / Xiaomi / Samsung / Lenovo / DJI） | `brand:*` 权限码（`permissions` 目前 max id = 20） |
+| 6 条种子数据（`03-data.sql:33-44`：Apple / Huawei / Xiaomi / Samsung / Lenovo / DJI） | `brand:*` 权限码（★ 写这条时的 `permissions` max id = 20，**现为 38**） |
 | 被 `ProductServiceImpl.fillNames` 用于补 `brandName`（只读） | C 端「品牌清单」入口 |
 
 **影响**
@@ -325,7 +326,7 @@ ILIKE 又不看 description ⇒ **永远搜不到**。
 | 步骤 | 内容 | 权限 |
 |---|---|---|
 | ①（建议先做） | `GET /api/brands`（公开，返回字典列表）+ `GET /api/admin/brands`（`brand:list`） | 补 `brand:list` = id **21** |
-| ②（留给后续） | 管理端 CRUD：`create`(22) / `update`(23) / `delete`(24) | 按 Day 20 的 `08-marketing-permissions.sql` 那套幂等补发 |
+| ②（留给后续） | 管理端 CRUD：`create` / `update` / `delete` | ★ **id 改用 `39` / `40` / `41`** —— 本文档原文写的是 22/23/24，**已被占用**：Day 22 拿走 `user:detail(22)` / `user:status(23)` / `dashboard:overview(24)`，Day 23 的 RBAC 再拿走 26–38 ⇒ **现 max = 38**。按 Day 20 的 `08-marketing-permissions.sql` 那套幂等补发 |
 
 ★★ **白名单粒度照 Day 20 的教训办**：加 `GET /api/brands` 用**精确路径**，
 **绝不能**写 `/api/brands/**` —— 否则以后在这个前缀下加任何私有接口都会被**静默公开**
@@ -387,7 +388,7 @@ Day 21 给 `orders` 加了 `discount_amount` 并在下单链路写入（`pay = t
 
 ---
 
-## 附一、两条与清单相邻的提醒
+## 附一、三条与清单相邻的提醒
 
 **① 一份报告里的 `VERDICT: false`** —— ✅ **已定性：误读，不是问题**
 扫描 `backend/loadtest/*-report.txt` 时看到 `day14-reconcile-report.txt` 里写着 `VERDICT: false`。
@@ -413,6 +414,23 @@ Day 21 给 `orders` 加了 `discount_amount` 并在下单链路写入（`pay = t
 **② 工作区残留目录**
 仓库根有 `dsh-skin-v2/`、`dsh-themes/` 两个未跟踪目录，与本项目无关（未提交、未加 `.gitignore`）。
 不影响 `git reset` / 分批提交的操作，但会让 `git status` 常驻噪声。
+
+**③ ★★ `docs/api/users-api.md` 是【Day 06 的练手版】，等于给已修掉的漏洞留了份说明书**
+（Day 23 开工前盘点时挖出）它躺在 `docs/api/`（**活文档**目录，不是 `docs/daily/` 的历史存档），
+内容却停在 Day 06：
+
+| 它现在写的 | 现实（Day 22 之后） |
+|---|---|
+| `GET /api/users/{id}`（`:105`），出参里明写 `"password": "demo123"`、注「学习阶段暂时返回」（`:132`） | 端点**不存在**；C 端已收口成 `GET /api/users/me`，返回 `UserVO`（**根本不含 password 字段**） |
+| `PUT /api/users/{id}/nickname`（`:232`） | 端点**不存在**，改为 `PUT /api/users/me/nickname` |
+| `DELETE /api/users/{id}`（`:210`） | 端点**不存在** |
+| `GET /api/users` 分页（`:158`） | 端点**不存在**（管理端列表在 `/api/admin/users`） |
+
+★ 危害两层：① 照着它调接口，全部 404；② **更糟的是它把那个越权漏洞写成了「预期行为」**
+（`"password"`: 学习阶段暂时返回）—— 而 Day 22 已实证那是**全站口令哈希外泄**并修掉了。
+⇒ 处理二选一：**改成现状**（推荐）或**在文件头明确标注「Day 06 历史快照，已失效」**。
+⚠️ 这是 Day 22 收尾时**漏掉**的一步 —— 改了接口没同步 `docs/api/`，
+正是项目一直在防的「同一个业务概念两处不同源」（与 L3 / L4 / D21-A 是同一个动作）。
 
 ---
 
