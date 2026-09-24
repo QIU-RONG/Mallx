@@ -1,12 +1,21 @@
 package com.mallx.user.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
+import com.mallx.common.api.ResultCode;
+import com.mallx.common.exception.BusinessException;
 import com.mallx.user.entity.User;
 import com.mallx.user.mapper.UserMapper;
 import com.mallx.user.service.AdminUserService;
 import com.mallx.user.vo.UserVO;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 管理端用户管理实现（Day 22）。
@@ -56,7 +65,39 @@ public class AdminUserServiceImpl extends ServiceImpl<UserMapper, User> implemen
      */
     @Override
     public Page<UserVO> pageUsers(long current, long size, String keyword, Integer status) {
-        throw new UnsupportedOperationException("TODO: AdminUserServiceImpl.pageUsers");
+        // ★ 夹紧两行必须在 new Page<>(...) 之前 —— 写进构造参数里就晚了
+        //   （size=-1 会撞 MP 的「负数=不限量」语义，直接查全表）。
+        long safePage = Math.max(current, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
+                // 过滤口径与 C 端相反：不写死 status，不传就两者都要（含已禁用）
+                .eq(status != null, User::getStatus, status)
+                // ★★ keyword 必须用 .and(...) 包一层括号。
+                //   若直接写 .like(a).or().like(b)，拼出来是 status=? AND a OR b ——
+                //   SQL 里 AND 优先级高于 OR ⇒「已禁用但昵称命中」的行会漏进来。
+                //   包成 ... AND (a OR b OR c) 才是「跨三列任一命中」。
+                .and(keyword != null && !keyword.isBlank(),
+                        w -> w.like(User::getUsername, keyword)
+                                .or().like(User::getNickname, keyword)
+                                .or().like(User::getPhone, keyword))
+                .orderByDesc(User::getId);
+
+        Page<User> page = this.page(new Page<>(safePage, safeSize), wrapper);
+
+        // ★★ 出口换壳：User 实体带 password，绝不能原样返回 —— 那正是本日实测出的外泄。
+        List<User> records = page.getRecords();
+        List<UserVO> voList = new ArrayList<>();
+        for (User u : records) {
+            UserVO vo = new UserVO();
+            BeanUtils.copyProperties(u, vo);
+            voList.add(vo);
+        }
+
+        // 换壳：total/current/size 必须搬到新 Page 上，否则前端看到 total=0
+        Page<UserVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        voPage.setRecords(voList);
+        return voPage;
     }
 
     /**
@@ -73,7 +114,13 @@ public class AdminUserServiceImpl extends ServiceImpl<UserMapper, User> implemen
      */
     @Override
     public UserVO getDetail(Long id) {
-        throw new UnsupportedOperationException("TODO: AdminUserServiceImpl.getDetail");
+        User user = this.getById(id);
+        if (user == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "用户不存在");
+        }
+        UserVO vo = new UserVO();
+        BeanUtils.copyProperties(user, vo);
+        return vo;
     }
 
     /**
@@ -94,6 +141,17 @@ public class AdminUserServiceImpl extends ServiceImpl<UserMapper, User> implemen
      */
     @Override
     public void updateStatus(Long id, Integer status) {
-        throw new UnsupportedOperationException("TODO: AdminUserServiceImpl.updateStatus");
+        // ★ 条件更新一句到底。★ 影响行数即答案：0 行 = 该 id 不存在 ⇒ 404。
+        // ⚠️ 手写 UpdateWrapper 的 UPDATE 不走自动填充器 ⇒ 显式补 updated_at，
+        //    否则 users.updated_at 会静默停在旧值（实体声明的是 INSERT_UPDATE，本意要刷新）。
+        //    ★ 补它不影响幂等：PG 的 UPDATE 按 WHERE 命中计数（值没变也算 1 行）。
+        int rows = this.baseMapper.update(null, new LambdaUpdateWrapper<User>()
+                .eq(User::getId, id)
+                .set(User::getStatus, status)
+                .set(User::getUpdatedAt, LocalDateTime.now()));
+
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "用户不存在");
+        }
     }
 }

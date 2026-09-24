@@ -46,7 +46,18 @@ public class DashboardServiceImpl implements DashboardService {
      */
     @Override
     public DashboardOverviewVO getOverview() {
-        throw new UnsupportedOperationException("TODO: DashboardServiceImpl.getOverview");
+        // ★ 4 次独立读 + 组装，无业务逻辑 —— 薄 Service 的正确形态。
+        //   ⚠️ 该 VO 只有 @Data，没有全参构造 ⇒ 只能 new + 逐个 setter
+        //      （不能 new DashboardOverviewVO(a, b, c, d)）。
+        DashboardOverviewVO vo = new DashboardOverviewVO();
+        vo.setUserCount(dashboardMapper.countUsers());
+        vo.setProductCount(dashboardMapper.countProducts());
+        vo.setOrderCount(dashboardMapper.countOrders());
+        // ★ SQL 里已经 coalesce 过 ⇒ 这里不会再拿到 null。
+        //   刻意不补 == null ? ZERO : x —— 那会让 SQL 里的 coalesce 显得可有可无，
+        //   掩盖真正该修的地方（空表时前端显示 "null" 的根因在 SQL）。
+        vo.setSalesAmount(dashboardMapper.sumPaidAmount());
+        return vo;
     }
 
     /**
@@ -70,6 +81,14 @@ public class DashboardServiceImpl implements DashboardService {
      */
     @Override
     public List<TrendPointVO> getTrend(int days) {
-        throw new UnsupportedOperationException("TODO: DashboardServiceImpl.getTrend");
+        // ★ 夹紧必须在最前面、且必须在算日期之前 —— 顺序本身就是语义：
+        //   先夹紧，则 days=-1 得到 1 天、days=100000 得到 90 天；
+        //   先算日期再夹紧，就会用未夹紧的值算出 startDate，然后返回错的区间。
+        int safeDays = Math.min(Math.max(days, 1), MAX_TREND_DAYS);
+
+        // 含今天 ⇒ 往前推 safeDays - 1 天。safeDays=1 ⇒ startDate=今天 ⇒ 恰好一个点。
+        String startDate = LocalDate.now().minusDays(safeDays - 1L).toString();
+
+        return dashboardMapper.selectDailyTrend(startDate);
     }
 }

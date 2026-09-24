@@ -1,11 +1,17 @@
 package com.mallx.user.service.impl;
 
-import com.mallx.user.mapper.UserMapper;
-import com.mallx.user.entity.User;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
+import com.mallx.common.api.ResultCode;
+import com.mallx.common.exception.BusinessException;
+import com.mallx.user.entity.User;
+import com.mallx.user.mapper.UserMapper;
 import com.mallx.user.service.UserService;
 import com.mallx.user.vo.UserVO;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
 
 /**
  * C 端用户服务实现。
@@ -34,7 +40,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public UserVO getMyProfile(Long userId) {
-        throw new UnsupportedOperationException("TODO: UserServiceImpl.getMyProfile");
+        User user = this.getById(userId);
+        if (user == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "用户不存在");
+        }
+        // ★ 出口是 UserVO 而不是 User —— 这是本日那个漏洞的正解。
+        //   实体出门 = 带 password 出门；VO 里根本没有这个字段。
+        UserVO vo = new UserVO();
+        BeanUtils.copyProperties(user, vo);
+        return vo;
     }
 
     /**
@@ -58,6 +72,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     @Override
     public void updateMyNickname(Long userId, String nickname) {
-        throw new UnsupportedOperationException("TODO: UserServiceImpl.updateMyNickname");
+        // ★ 条件更新一句到底：WHERE id = <token 里的 userId>，不做「先查后改」。
+        // ★ 影响行数即答案：0 行 = 用户不存在 ⇒ 404。
+        // ⚠️ 手写 UpdateWrapper 不走自动填充器 ⇒ 显式补 updated_at（同 AdminUserServiceImpl）。
+        int rows = this.baseMapper.update(null, new LambdaUpdateWrapper<User>()
+                .eq(User::getId, userId)
+                .set(User::getNickname, nickname)
+                .set(User::getUpdatedAt, LocalDateTime.now()));
+
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "用户不存在");
+        }
     }
 }

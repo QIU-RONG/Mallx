@@ -4,7 +4,9 @@
 <mapper namespace="com.mallx.admin.mapper.DashboardMapper">
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         Day 22 骨架：4 条语句体【留空】，形状与坑写在下面。
+         Day 22 仪表盘取数：5 条只读聚合（Day 22 已实现）。
+         ★ 全部是 count/sum 只读聚合，没有任何写点 —— 这是「跨四表直查」被允许的前提，
+           判据见 DashboardMapper.java 的 javadoc（只读聚合不是业务写）。
          XML 五铁律（本项目反复踩过）：
            ① 放 resources/mapper/（已配 mapper-locations: classpath*:mapper/**/*.xml）
            ② 方法名与 id 必须逐字符一致，否则运行期 Invalid bound statement
@@ -14,20 +16,22 @@
          ══════════════════════════════════════════════════════════════════════ -->
 
     <!-- countUsers() -> long
-         直白一句：SELECT count(*) FROM users
          ★ 口径：全表，含 status=0（已禁用）。禁用不是删除。 -->
     <select id="countUsers" resultType="long">
+        SELECT count(*) FROM users
     </select>
 
     <!-- countProducts() -> long
          ★ 必须自己写 WHERE is_deleted = 0 —— 手写 SQL 不受 @TableLogic 管辖。
          漏了它不会报任何错，只是数字偏大（软删的商品也算进来）。 -->
     <select id="countProducts" resultType="long">
+        SELECT count(*) FROM products WHERE is_deleted = 0
     </select>
 
     <!-- countOrders() -> long
          全表 count，不分状态：已取消的订单也是一笔真实发生过的事。 -->
     <select id="countOrders" resultType="long">
+        SELECT count(*) FROM orders
     </select>
 
     <!-- sumPaidAmount() -> BigDecimal
@@ -35,30 +39,10 @@
          ★ 必须 coalesce(sum(amount), 0)：空表时 sum 返回 NULL ⇒ 前端显示 "null"。
          注意 amount 是 numeric，coalesce 的第二参写 0 即可（PG 会提升到 numeric）。 -->
     <select id="sumPaidAmount" resultType="java.math.BigDecimal">
+        SELECT coalesce(sum(amount), 0) FROM payments WHERE status = 'SUCCESS'
     </select>
 
     <!-- selectDailyTrend(@Param("startDate") String) -> List<TrendPointVO>
-         形状（三块 CTE + LEFT JOIN，缺的日子补 0）：
-           WITH days AS (
-               SELECT to_char(d, 'YYYY-MM-DD') AS date
-               FROM generate_series(CAST(#{startDate} AS date), CURRENT_DATE, INTERVAL '1 day') AS d
-           ),
-           o AS (
-               SELECT to_char(created_at, 'YYYY-MM-DD') AS date, count(*) AS cnt
-               FROM orders WHERE created_at >= CAST(#{startDate} AS date) GROUP BY 1
-           ),
-           p AS (
-               SELECT to_char(paid_at, 'YYYY-MM-DD') AS date, sum(amount) AS amt
-               FROM payments WHERE status = 'SUCCESS' AND paid_at >= CAST(#{startDate} AS date) GROUP BY 1
-           )
-           SELECT days.date,
-                  coalesce(o.cnt, 0) AS order_count,
-                  coalesce(p.amt, 0) AS sales_amount
-           FROM days
-           LEFT JOIN o ON o.date = days.date
-           LEFT JOIN p ON p.date = days.date
-           ORDER BY days.date
-
          ★★ 四个坑，逐条：
          ① 「日期骨架 LEFT JOIN 聚合」是补 0 的唯一正解。直觉写法 GROUP BY date(created_at)
             只返回有数据的天 —— 7 天里 2 天有单就只回 2 个点，前端折线照样平滑，看不出来。
@@ -69,9 +53,35 @@
             写成 "YYYY-MM-DD" PG 会当【列名】去找，报 column "YYYY-MM-DD" does not exist。
          ④ 两个 LEFT JOIN 各自独立（都是从 days 出发），不是链式 —— 链在一起会让
             没有订单的日子连销售额也被吃掉。
-         ★ resultType="com.mallx.admin.vo.TrendPointVO"；该 VO 必须有 @NoArgsConstructor
-           （否则运行期才炸：ReflectionException: Error instantiating class ...）。 -->
+         ★ 起始日由 Java 侧算好传入（DashboardServiceImpl 先夹紧 days 再减 1 天）——
+           不写成 SQL 的 CURRENT_DATE - (? - 1) * INTERVAL：PG 判不出 JDBC 占位符的类型。
+         ★ SQL 里用 #{} 而非 ${}（预编译，避免注入）；CAST(... AS date) 是显式定类型。
+         ⚠️ 该 VO 靠 @Data 提供的无参构造实例化 —— 一旦有人给 TrendPointVO 加 final 字段，
+            Lombok 就只生成全参构造 ⇒ 运行期 ReflectionException: Error instantiating class。 -->
     <select id="selectDailyTrend" resultType="com.mallx.admin.vo.TrendPointVO">
+        WITH days AS (
+            SELECT to_char(d, 'YYYY-MM-DD') AS date
+            FROM generate_series(CAST(#{startDate} AS date), CURRENT_DATE, INTERVAL '1 day') AS d
+        ),
+        o AS (
+            SELECT to_char(created_at, 'YYYY-MM-DD') AS date, count(*) AS cnt
+            FROM orders
+            WHERE created_at >= CAST(#{startDate} AS date)
+            GROUP BY 1
+        ),
+        p AS (
+            SELECT to_char(paid_at, 'YYYY-MM-DD') AS date, sum(amount) AS amt
+            FROM payments
+            WHERE status = 'SUCCESS' AND paid_at >= CAST(#{startDate} AS date)
+            GROUP BY 1
+        )
+        SELECT days.date,
+               coalesce(o.cnt, 0) AS order_count,
+               coalesce(p.amt, 0) AS sales_amount
+        FROM days
+        LEFT JOIN o ON o.date = days.date
+        LEFT JOIN p ON p.date = days.date
+        ORDER BY days.date
     </select>
 
 </mapper>
