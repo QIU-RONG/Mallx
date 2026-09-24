@@ -14,13 +14,13 @@ Day 21 优惠券（阶段二）验收：A 不用券原路 / B 满减核销 / C �
   [PASS] 0.1 临时用户 d21tmp1 登录成功（password 列写 {noop} 明文，不必算 BCrypt）
   [PASS] 0.2 夹具就位：4 个临时 SKU（100.00/200.00/99.99/33.45）+ 库存 1000 + 11 张券 + 1 个地址
 
-  临时数据：user=38  address=6  product=636  sku=[47, 48, 49, 50]  coupons=[957, 958, 959, 960, 961, 962, 963, 964, 965, 966, 967]
-  user_coupons：[('C1', 72), ('C10', 82), ('C11', 81), ('C2', 73), ('C3', 74), ('C4', 75), ('C5', 76), ('C6', 77), ('C7', 78), ('C8', 79), ('C9', 80)]
+  临时数据：user=43  address=7  product=787  sku=[51, 52, 53, 54]  coupons=[1085, 1086, 1087, 1088, 1089, 1090, 1091, 1092, 1093, 1094, 1095]
+  user_coupons：[('C1', 88), ('C10', 98), ('C11', 97), ('C2', 89), ('C3', 90), ('C4', 91), ('C5', 92), ('C6', 93), ('C7', 94), ('C8', 95), ('C9', 96)]
 
 ------------------------------------------------------------------------------
 A 组 · 不用券原路（★ 本日最高优先级：M1 跑的就是这条链路）
 ------------------------------------------------------------------------------
-    A1 不用券下单                     coupon=None   sku=47 -> http=200 code=200 order=9085
+    A1 不用券下单                     coupon=None   sku=51 -> http=200 code=200 order=9093
   [PASS] A1 不带 userCouponId 下单 → code=200（老链路一个字节都没变）
   [PASS] A2 DB：discount_amount = 0.00（不是 null）且 pay == total == 100.00
   [PASS] A3 DB：total_amount == Σ(price×quantity)（服务端算钱，不信接口自报）
@@ -30,13 +30,13 @@ A 组 · 不用券原路（★ 本日最高优先级：M1 跑的就是这条链�
 ------------------------------------------------------------------------------
 B 组 · 满减券（FIXED 20 / 门槛 100）核销
 ------------------------------------------------------------------------------
-    B1 用 C1 满减 20                coupon=72     sku=47 -> http=200 code=200 order=9086
+    B1 用 C1 满减 20                coupon=88     sku=51 -> http=200 code=200 order=9094
   [PASS] B1 用满减券下单 → code=200
   [PASS] B2 DB：discount_amount=20.00 且 pay_amount=80.00（total − 20）
   [PASS] B3 券行 status='USED'
-  [PASS] B4 券行 order_id = 新订单 id(9086)（不是留空、也不是别的单）
+  [PASS] B4 券行 order_id = 新订单 id(9094)（不是留空、也不是别的单）
   [PASS] B5 券行 used_at 非空（自定义 XML 的 UPDATE 不走填充器，漏写就是 null）
-    B6 同一张券再用                    coupon=72     sku=47 -> http=200 code=400 order=None
+    B6 同一张券再用                    coupon=88     sku=51 -> http=200 code=400 order=None
   [PASS] B6 同一张券再用 → code=400（被 markUsed 的 CAS 挡下）
   [PASS] B7 ★ 第 6 步失败 → 订单没建成（orders 数没涨）
   [PASS] B8 ★ 失败后被核销的那行没被改写：order_id 仍指向 B1 的订单
@@ -44,55 +44,55 @@ B 组 · 满减券（FIXED 20 / 门槛 100）核销
 ------------------------------------------------------------------------------
 C 组 · 折扣券（DISCOUNT）与四条边界
 ------------------------------------------------------------------------------
-    C1 rate=0.80                 coupon=75     sku=47 -> http=200 code=200 order=9087
+    C1 rate=0.80                 coupon=91     sku=51 -> http=200 code=200 order=9095
   [PASS] C1 rate=0.80 + 总额 100.00 → code=200
   [PASS] C2 rate=0.80 → 抵扣 20.00（= total×(1−0.80)；把 0.80 读成 80 会算出负数）
-    C3 封顶 300>200                coupon=73     sku=48 -> http=200 code=200 order=9088
+    C3 封顶 300>200                coupon=89     sku=52 -> http=200 code=200 order=9096
   [PASS] C3 面额 300 > 总额 200 → code=200（V1.0 选封顶，不让下单失败）
   [PASS] C4 ★ 抵扣封顶到 total：discount=200.00 且 pay_amount=0.00（绝不为负）
-    C5 舍入 33.45×0.10             coupon=76     sku=50 -> http=200 code=200 order=9089
+    C5 舍入 33.45×0.10             coupon=92     sku=54 -> http=200 code=200 order=9097
   [PASS] C5 总额 33.45 + rate=0.90 → code=200
   [PASS] C6 ★ 抵扣 = 3.345 → 3.35（HALF_UP）而不是 3.34（BigDecimal 默认 HALF_EVEN）
-    C7 脏券 rate=80                coupon=77     sku=47 -> http=200 code=400 order=None
+    C7 脏券 rate=80                coupon=93     sku=51 -> http=200 code=400 order=None
   [PASS] C7 ★ rate=80 的脏券 → code=400「折扣率取值必须是 0 到 1 之间」（不许算出负数）
-    C8 门槛差一分                     coupon=74     sku=49 -> http=200 code=400 order=None
+    C8 门槛差一分                     coupon=90     sku=53 -> http=200 code=400 order=None
   [PASS] C8 总额 99.99 < 门槛 100 → code=400（差一分也不能用）
-    C9 已过期                       coupon=78     sku=47 -> http=200 code=400 order=None
+    C9 已过期                       coupon=94     sku=51 -> http=200 code=400 order=None
   [PASS] C9 已过期的券 → code=400
-    C10 尚未开始                     coupon=79     sku=47 -> http=200 code=400 order=None
+    C10 尚未开始                     coupon=95     sku=51 -> http=200 code=400 order=None
   [PASS] C10 ★ 尚未开始的券 → code=400（★ 靶子是 start_time 在未来的券，库里现有券全在过去 ⇒ 不造数据这条恒真）
-    C11 已下架                      coupon=80     sku=47 -> http=200 code=400 order=None
+    C11 已下架                      coupon=96     sku=51 -> http=200 code=400 order=None
   [PASS] C11 券种已下架 → code=400
   [PASS] C12 ★ 上面 5 个失败用例【一个订单都没建成】（抛异常 ⇒ 事务整体回滚）
 
 ------------------------------------------------------------------------------
 D 组 · 归属（IDOR）—— ★ 光看状态码什么也证明不了，必须去 DB 核
 ------------------------------------------------------------------------------
-    D1 用别人的券                     coupon=82     sku=47 -> http=200 code=404 order=None
+    D1 用别人的券                     coupon=98     sku=51 -> http=200 code=404 order=None
   [PASS] D1 用【别人】的 userCouponId 下单 → code=404（伪装 404，与不存在同码同文案）
   [PASS] D2 ★ DB：那张券【原封不动】（status/order_id/used_at 三样都没变）
   [PASS] D3 ★ HTTP 层是 200 —— 404 是【业务码】而不是协议码（本项目状态码混合约定；光看 HTTP 码会以为「下单成功」）
-    D4 不存在的券                     coupon=99999999 sku=47 -> http=200 code=404 order=None
+    D4 不存在的券                     coupon=99999999 sku=51 -> http=200 code=404 order=None
   [PASS] D4 不存在的 userCouponId → code=404
   [PASS] D5 ★★ 与 D1 的响应【逐字节相同】—— 这是「伪装 404」的判据：两者可区分就说明 IDOR 防线有裂缝
-    D6 已核销的券（归属对、状态错）            coupon=72     sku=47 -> http=200 code=400 order=None
+    D6 已核销的券（归属对、状态错）            coupon=88     sku=51 -> http=200 code=400 order=None
   [PASS] D6 ★ 反向对照：自己的【已核销】券 → code=400 而不是 404（证明 404 不是「什么都报 404」）
 
 ------------------------------------------------------------------------------
 E 组 · 退券（逆向，本日含金量最高的一组）
 ------------------------------------------------------------------------------
-    E1 用 C11 下单                  coupon=81     sku=47 -> http=200 code=200 order=9090
+    E1 用 C11 下单                  coupon=97     sku=51 -> http=200 code=200 order=9098
   [PASS] E1 用券下单 → code=200
-  [PASS] E2 DB：下单即核销 —— status='USED' 且 order_id=9090
+  [PASS] E2 DB：下单即核销 —— status='USED' 且 order_id=9098
   [PASS] E3 取消该订单 → code=200
   [PASS] E4 ★ 退券后 status='UNUSED'
   [PASS] E5 ★ 且 order_id IS NULL（把旧订单号擦干净，不是只改状态）
   [PASS] E6 ★ 且 used_at IS NULL（三样缺一不算退干净）
-    E7 退回来的券再用一次                 coupon=81     sku=47 -> http=200 code=200 order=9091
+    E7 退回来的券再用一次                 coupon=97     sku=51 -> http=200 code=200 order=9099
   [PASS] E7 ★ 退回来的券能再次使用 → code=200
-  [PASS] E8 ★ 且 order_id 指向【新】订单 9091（不是旧订单 9090）
+  [PASS] E8 ★ 且 order_id 指向【新】订单 9099（不是旧订单 9098）
     （E7 前 USED 行数 = 4）
-    E9 不用券下单（为退款对照）              coupon=None   sku=47 -> http=200 code=200 order=9092
+    E9 不用券下单（为退款对照）              coupon=None   sku=51 -> http=200 code=200 order=9100
   [PASS] E9 ★ 反向对照：不用券的订单取消 → code=200（退券 0 行是常态，不许当失败 —— 当成失败 M1 当场红）
   [PASS] E10 ★ 取消【没用券】的订单不会误动别人的券：USED 行数不变（5）
   [PASS] E11 同一张订单重复取消 → code=400（CAS 抢不到，且不会再退一次券）

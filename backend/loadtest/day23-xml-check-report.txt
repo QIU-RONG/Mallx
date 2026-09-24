@@ -2,17 +2,17 @@
 模块 mall-admin / AdminRbacMapper（★ Day 23 主角）
 ==========================================================================
   ✅ WELL_FORMED   namespace=com.mallx.admin.mapper.AdminRbacMapper
-     ❌ 空实现 <select id=selectRoleIdsByAdminId>
-     ❌ 空实现 <select id=selectPermissionIdsByRoleId>
-     ❌ 空实现 <delete id=deleteAdminRolesByAdminId>
-     ❌ 空实现 <delete id=deleteAdminRolesByRoleId>
-     ❌ 空实现 <delete id=deleteRolePermissionsByRoleId>
-     ❌ 空实现 <insert id=insertAdminRoles>
-     ❌ 空实现 <insert id=insertRolePermissions>
-     ❌ 空实现 <select id=countRolesByIds>
-     ❌ 空实现 <select id=countPermissionsByIds>
-     ❌ 空实现 <select id=insertAdminIfAbsent>
-     ❌ 空实现 <select id=insertRoleIfAbsent>
+             <select id=selectRoleIdsByAdminId>
+             <select id=selectPermissionIdsByRoleId>
+             <delete id=deleteAdminRolesByAdminId>
+             <delete id=deleteAdminRolesByRoleId>
+             <delete id=deleteRolePermissionsByRoleId>
+             <insert id=insertAdminRoles>
+             <insert id=insertRolePermissions>
+             <select id=countRolesByIds>
+             <select id=countPermissionsByIds>
+             <select id=insertAdminIfAbsent>
+             <select id=insertRoleIfAbsent>
 
   本日新增 statement：
      ✅ selectRoleIdsByAdminId
@@ -136,36 +136,9 @@
   XML 良构              : 8 / 8
   本日新增 statement    : 11 个，缺失 0 个
   XML SQL 仍停在 TODO   : 0 条
-  XML SQL 空实现        : 11 条
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#selectRoleIdsByAdminId  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#selectPermissionIdsByRoleId  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#deleteAdminRolesByAdminId  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#deleteAdminRolesByRoleId  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#deleteRolePermissionsByRoleId  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#insertAdminRoles  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#insertRolePermissions  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#countRolesByIds  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#countPermissionsByIds  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#insertAdminIfAbsent  ← 语句体=空（只剩空白）
-      · mall-admin / AdminRbacMapper（★ Day 23 主角）#insertRoleIfAbsent  ← 语句体=空（只剩空白）
-  Java 骨架占位         : 13 处（骨架交付时 13 处 → 已填 0 处）
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\AdminAccountManageServiceImpl.java:83
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\AdminAccountManageServiceImpl.java:102
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\AdminAccountManageServiceImpl.java:124
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\AdminAccountManageServiceImpl.java:154
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\AdminAccountManageServiceImpl.java:177
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\AdminAccountManageServiceImpl.java:204
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\PermissionQueryServiceImpl.java:48
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\RoleManageServiceImpl.java:75
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\RoleManageServiceImpl.java:93
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\RoleManageServiceImpl.java:110
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\RoleManageServiceImpl.java:138
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\RoleManageServiceImpl.java:158
-      · mall-admin\src\main\java\com\mallx\admin\service\impl\RoleManageServiceImpl.java:196
+  XML SQL 空实现        : 0 条
+  Java 骨架占位         : 0 处（骨架交付时 13 处 → 已填 13 处）
 
-  → 骨架期正常。XML 0 条 TODO + 11 条空实现 + Java 13 处 都填完后，本栏合计应为 0，
-    那时才能进「起应用 + 跑 e2e」。只要非 0，被路由到的端点必然 500。
-    ⚠️ 「空实现」是比 TODO 更隐蔽的中间态：删了 TODO 文本、SQL 还没写。
-       编译过、启动过，被调用才炸 —— 靠人工看注释是发现不了的。
+  → ✅ XML 与 Java 两侧占位都已清零，可以进入「起应用 + 跑 e2e」阶段。
   Java 有 / XML 无      : 0 个 
   XML 有 / Java 无      : 0 个 

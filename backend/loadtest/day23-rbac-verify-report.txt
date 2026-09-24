@@ -1,0 +1,127 @@
+==============================================================================
+Day 23 验收：RBAC 权限管理（A–G 七组）
+==============================================================================
+
+[0] 护栏与准备
+  [OK] 13 处实现与 11 条 SQL 均已落地（无占位 / 无空语句体 / 语句数 11）
+  [OK] 应用已就绪
+  基线: {'admins': 3, 'roles': 3, 'admin_roles': 3, 'role_permissions': 61, 'permissions': 38}
+    login demo(C端)       -> OK
+    login admin(超管)      -> OK
+    login op_order       -> OK
+    login op_product     -> OK
+    admin.id=1
+
+[A] 权限落地（13 条 + 只发超管 + 反向对照）
+  [PASS] A1 13 条新权限码全部落库
+  [PASS] A2 admin:list -> GET /api/admin/admins
+  [PASS] A3 admin:detail -> GET /api/admin/admins/*
+  [PASS] A4 admin:create -> POST /api/admin/admins
+  [PASS] A5 admin:update -> PUT /api/admin/admins/*
+  [PASS] A6 admin:delete -> DELETE /api/admin/admins/*
+  [PASS] A7 admin:assign-role -> PUT /api/admin/admins/*/roles
+  [PASS] A8 role:list -> GET /api/admin/roles
+  [PASS] A9 role:detail -> GET /api/admin/roles/*
+  [PASS] A10 role:create -> POST /api/admin/roles
+  [PASS] A11 role:update -> PUT /api/admin/roles/*
+  [PASS] A12 role:delete -> DELETE /api/admin/roles/*
+  [PASS] A13 role:assign-permission -> PUT /api/admin/roles/*/permissions
+  [PASS] A14 permission:list -> GET /api/admin/permissions
+  [PASS] A15 SUPER_ADMIN(role 1) 拿到全部 13 条
+  [PASS] A16 ★ 反向对照 PRODUCT_ADMIN(role 2) 拿到 0 条
+  [PASS] A17 ★ 反向对照 ORDER_ADMIN(role 3) 拿到 0 条
+  [PASS] A18 op_product 打 /api/admin/roles -> HTTP 403
+  [PASS] A19 op_order 打 /api/admin/admins -> HTTP 403
+  [PASS] A20 超管打 /api/admin/roles -> HTTP 200 + code 200
+  [PASS] A21 匿名打 /api/admin/roles -> HTTP 401
+
+[B] 管理员 CRUD
+  [PASS] B1 POST 建管理员 -> HTTP 200 + code 200 + 返回 id
+  [PASS] B2 库里 password 是编码后的（{bcrypt}$2a$…）而不是 {noop} 明文
+  [PASS] B3 ★ create 后【新密码能登录】（encode/matches 同一套算法的真证明）
+  [PASS] B4 重复 username -> code 400（走 ON CONFLICT，不是 500）
+  [PASS] B5 GET 管理员详情 -> HTTP 200 + code 200
+  [PASS] B6 ★★ 详情响应里【没有 password 键】（不是 "password": null）
+  [PASS] B7 详情 roleIds / roleCodes 是空数组（新账号默认无角色）
+    夹具: d23tmpa1(启用, 昵称命中, id=9) / d23tmpb1(★禁用, 昵称命中, id=11) —— 后者是括号判据的靶子
+  [PASS] B8 不传 status 的列表：keyword 命中【启用 + 禁用】两行（禁用不是删除）
+  [PASS] B9 status=0 过滤 -> 只剩那行禁用的
+  [PASS] B10 ★★ 括号正确性：keyword + status=1 时，「昵称命中但已禁用」的行【不许出现】
+  [PASS] B11 keyword 命中 username 列（keyword=d23tmpb1 -> 1 行）
+  [PASS] B12 夹紧上限：size=1000 -> size 字段被夹到 100
+  [PASS] B13 夹紧下限：size=-1 -> size 字段被夹到 1（不是 100，更不是全表）
+  [PASS] B14 PUT 改昵称 -> HTTP 200 + 库里已变
+  [PASS] B15 PUT 没有任何字段 -> code 400（不发出空 UPDATE）
+  [PASS] B16 PUT 不存在的 id（合法载荷）-> code 404
+  [PASS] B17 ★ 护栏③ 停用【自己】-> code 400，且库里 status 未变
+  [PASS] B18 DELETE 不存在的 id -> code 404
+
+[C] 角色 CRUD + 护栏①
+  [PASS] C1 POST 建角色 -> HTTP 200 + 返回 id
+  [PASS] C2 重复 code -> code 400
+  [PASS] C3 列表 keyword 命中 name/code -> 至少 1 行
+  [PASS] C4 夹紧上限：size=1000 -> size 字段 100
+  [PASS] C5 角色详情含 permissionIds + permissionCodes（新角色为空数组）
+  [PASS] C6 PUT 改角色名 -> HTTP 200 + 库里已变
+  [PASS] C7 PUT 不存在的角色 id -> code 404
+  [PASS] C8 ★ 护栏① 停用 SUPER_ADMIN -> code 400，且库里 status 未变
+  [PASS] C9 ★ 护栏① 删除 SUPER_ADMIN -> code 400
+  [PASS] C10 POST 建第二个角色 -> HTTP 200 + 返回 id
+  [PASS] C11 DELETE 不存在的角色 id -> code 404
+  [PASS] C12 SUPER_ADMIN 仍在且 status=1（护栏① 两次拒绝都没写坏数据）
+  [PASS] C13 POST 建 E 组用的角色 -> HTTP 200 + 返回 id
+
+[D] 两个分配（全量替换）+ 护栏②③
+  [PASS] D1 PUT admins/{id}/roles [r1,r2] -> HTTP 200 + code 200
+  [PASS] D2 库里 admin_roles 该管理员有 2 行
+  [PASS] D3 详情 roleIds 回显 == [r1,r2]
+  [PASS] D4 ★ 幂等：重复提交同一份集合 -> 仍是 2 行（不是 4 行）
+  [PASS] D5 传重复 id [r1,r1] -> 去重后 1 行（否则撞复合主键变 500）
+  [PASS] D6 ★ 含不存在的角色 id -> code 400（不是 500 —— 不靠 FK 的 23503 做控制流）
+  [PASS] D7 空数组 [] = 清空 -> HTTP 200 且库里 0 行
+  [PASS] D8 roleIds 缺失（{}）-> code 400（@NotNull；否则会被当成 [] 静默清空角色）
+  [PASS] D9 PUT 不存在的管理员 id -> code 404
+  [PASS] D10 ★ 护栏③ 清空【自己】的角色 -> code 400
+  [PASS] D11 ★ 护栏③ 只拦「清空」：给自己换一份【非空】角色 -> 200，且超管身份没丢
+  [PASS] D12 PUT roles/{id}/permissions [26,27] -> HTTP 200 + code 200
+  [PASS] D13 库里 role_permissions 该角色 2 行
+  [PASS] D14 ★ 幂等：重复提交同一份权限集合 -> 仍是 2 行
+  [PASS] D15 ★ 含不存在的权限 id -> code 400（不是 500）
+  [PASS] D16 ★ 护栏② 把 SUPER_ADMIN 的权限改少 -> code 400
+  [PASS] D17 ★ 护栏② 的边界：把【现状原样】提交（不增不减）-> 200（拦的是「减」不是「改」）
+  [PASS] D18 物理删管理员 -> HTTP 200 + admins 该行没了（前置：确实有 1 行 + 1 条角色）
+  [PASS] D19 ★★ 物理删同时清掉 admin_roles（否则留孤儿行：将来同 id 会【凭空继承旧角色】）
+
+[E] ★★ roles.status 修复证明（Day 23 那条 SQL 修复的实证）
+  [PASS] E1 POST 建 E 组管理员 -> HTTP 200 + 返回 id
+  [PASS] E2 给临时角色 RE 只授 permission:list(38) -> 200
+  [PASS] E3 把 RE 分配给该管理员 -> 200
+  [PASS] E4 ★ 停用前：新登录的 token 打 /api/admin/permissions -> HTTP 200（有权限）
+  [PASS] E5 停用 RE（status=0）-> HTTP 200
+  [PASS] E6 ★★★ 停用后【重新登录】的 token 打同一端点 -> HTTP 403（权限码真的不再下发 = 修复生效）
+  [PASS] E7 ★★★ 而【停用前的旧 token】打同一端点 -> HTTP 200（快照不变 = 路线① 的正面证据）
+
+[F] 权限字典只读（不分页 + 无写方法）
+  [PASS] F1 GET /api/admin/permissions -> HTTP 200 + code 200
+  [PASS] F2 ★ 不分页：返回条数 == permissions 全表行数
+  [PASS] F3 type=API 过滤 -> 条数 == count(type='API')
+  [PASS] F4 keyword 过滤命中 code（含 assign 的两条）
+  [PASS] F5-POST POST /api/admin/permissions -> HTTP 405（路径在、方法不支持）
+  [PASS] F5-PUT PUT /api/admin/permissions -> HTTP 405（路径在、方法不支持）
+  [PASS] F5-DELETE DELETE /api/admin/permissions -> HTTP 405（路径在、方法不支持）
+
+[G] 基线还原（清理 + 断言没伤到自己）
+  [PASS] G admins 回到基线（3 -> 3）
+  [PASS] G roles 回到基线（3 -> 3）
+  [PASS] G admin_roles 回到基线（3 -> 3）
+  [PASS] G role_permissions 回到基线（61 -> 61）
+  [PASS] G permissions 回到基线（38 -> 38）
+  [PASS] G6 ★ 清完后超管仍持有 13 条 RBAC 码（清理/护栏都没伤到超管）
+
+[清理] 高水位线删除（断言中途炸了也要清干净）
+  清理后: {'admins': 3, 'roles': 3, 'admin_roles': 3, 'role_permissions': 61, 'permissions': 38}
+
+==============================================================================
+TOTAL: 91 / 91    PASS=91 FAIL=0
+VERDICT: ALL GREEN
+==============================================================================
