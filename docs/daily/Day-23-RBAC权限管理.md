@@ -2,29 +2,32 @@
 
 > 方向：**§5.6 权限管理**。Day 22 把 §5.1 Dashboard 与 §5.2 用户管理做完后，
 > **M2（Day 22 = 后端 API 完整含搜索/管理端数据）的最后一格就是本日**。
-> 陪练模式：本文档 + 结构改动 + 骨架由我出，**实现你亲手写**（说一句「直接写好」我也代写）。
+> 陪练模式：本文档 + 结构改动 + 骨架由我出。**骨架于 09-24 交付（13 处 TODO 留给你）；
+> 09-25 你授权「直接写好并检验」⇒ 实现由 AI 代写，你审结果。**
 
-> ✅ **状态：骨架已交付并全链路验收通过（2026-09-24）**
-> - 新建 **22 个文件** + 改 **1 个文件**（清单见 §六）；DDL **零改动**
->   （`admins` / `roles` / `permissions` / `admin_roles` / `role_permissions` 五张表
->   早已存在于 `01-schema.sql:316-375`）。
-> - `mvn -o install -DskipTests` → **12 / 12 BUILD SUCCESS**（23.4s）。
-> - `day23-xml-check.py`（新建）→ XML 良构 **8/8**、新增 statement **11/11**、
->   双向一致 **0 差异**、**空实现 11 条**（正是留空那 11 条 SQL）、
->   **Java 占位 13 处**（正是 13 个 TODO）。`rc=1` 是骨架期正确长相。
-> - `day23-perm-apply.py`（新建）→ **VERDICT: OK**（13 条已补发 + path 13/13 对齐 + 幂等）；
->   ★ 关键两格 `role2_rbac = 0` / `role3_rbac = 0`（反向对照）。
-> - `day23-skeleton-smoke.py`（新建，44 断言）→ **44 / 44**。
->   ★★ 其中最值钱的是 D 组：**`AdminMapper.xml` 那条缺陷修复的实证**
->   （停用 role 2 → 新 token 打 `dashboard/overview` 得 **403**；
->   旧 token 打同一端点仍 **200 + code 200** —— 修复与「路线①」的双重证据）。
+> ✅ **状态：已实现并全链路验收通过（2026-09-25）**
+> - 13 处 Java + 11 条 XML SQL **全部填完**（清单见 §六）；`mvn -o install -DskipTests`
+>   → **12 / 12 BUILD SUCCESS**（44.3s）。DDL **零改动**。
+> - **`day23-rbac-verify.py`（新建，A–G 七组）→ 91 / 91 ALL GREEN**，
+>   `EXPECTED = 91` 护栏核过（无断言被静默跳过），5 张表**基线完全还原**
+>   （`admins 3 / roles 3 / admin_roles 3 / role_permissions 61 / permissions 38`）。
+>   ★★ 最值钱的是 **E 组 —— 那条 SQL 缺陷修复的实证**：停用临时角色后，
+>   **重新登录的新 token** 打 `GET /api/admin/permissions` → **403**；
+>   而**停用前的旧 token** 打同一端点 → **200**。这一**对**并行断言同时证明了
+>   「修复真的生效」与「路线①（权限是签发时的快照）」。
+> - 骨架期验收 `day23-skeleton-smoke.py` **44 / 44**；`day23-perm-apply.py` **VERDICT: OK**
+>   （★ `role2_rbac = 0` / `role3_rbac = 0` 反向对照）。
+> - `day23-xml-check.py` → XML 良构 **8/8**、新增 statement **11/11**、
+>   **TODO 0 条 / 空语句体 0 条 / Java 占位 0 处（13 处 → 已填 13 处）**。
 > - 回归：`day17-m1-regression.py` **198/198** + `BASELINE RESTORED: YES` + `M1 REGRESSION: OK`；
->   `day17-a` **26/26**、`day17-b` **21/21**、`day20-l1l2` **33/33**、
->   `day20-coupon` **82/82**、`day21` **53/53**。
-> - ⚠️ **本日那条「必须一起修」的缺陷已修**：`AdminMapper.xml` 的
->   `selectPermissionCodesByAdminId` 补 `JOIN roles` + `AND r.status = 1`（§二①）。
->   它在**登录链路**上，所以 M1 是硬要求 —— 已重跑通过。
-> - 🔄 **等你填**：13 处 Java TODO + 11 条 XML SQL（§六 清单）。
+>   `day17-a` 26/26、`day17-b` 21/21、`day19` 58/58、`day20-l1l2` 33/33、
+>   `day20-l5-brand` 24/24、`day20-coupon` 82/82、`day21` 53/53。
+> - ⚠️ **那条「必须一起修」的缺陷已修**：`AdminMapper.xml#selectPermissionCodesByAdminId`
+>   补 `JOIN roles` + `AND r.status = 1`（§二①）。它在**登录链路**上 ⇒ M1 已重跑通过。
+> - ★ 实现期两处**超出骨架规格**的决定（都写进了代码注释，见 §八 坑 14）：
+>   ① 两个写点显式补 `updated_at`（手写 `UpdateWrapper` 不走自动填充器）；
+>   ② 两个分配方法对入参 **`distinct()` 去重** —— `count(*)` 对 `IN (1,1)` 只算 **1** 行，
+>   不去重会把「传了重复 id」误报成「含不存在的 id」（报错信息与事实不符）。
 
 ---
 
@@ -238,7 +241,7 @@
 ### 关联产出
 
 - `backend/sql/13-day23-permissions.sql`（13 条码 + 只发超管 + 序列校准 + 四段自检）
-- `backend/loadtest/day23-rbac-verify.py`（验收，A–G 组）
+- `backend/loadtest/day23-rbac-verify.py`（✅ 已交付：实现期验收，A–G 七组 **91/91**）
 - `backend/loadtest/day23-perm-apply.py`（权限落地 + 幂等）
 
 ### `AdminRbacMapper`：实际是 **11 条**语句（规划时写 6 条，交付时多了 5 条）
@@ -349,7 +352,7 @@ insertRoleIfAbsent(Role)                     Long     RETURNING id（UNIQUE 撞�
 | # | 坑 | 判据 / 做法 |
 |---|---|---|
 | 1 | ★★ `AdminMapper.xml` 那条修复在**登录链路**上 | 改完**必须**重跑 `day17-m1-regression.py`；M1 三条 E2E 都要 admin token |
-| 2 | ★ **新建管理员的密码必须 encode** | 照抄种子里的 `{noop}` = 明文入库。正确写法 `passwordEncoder.encode(raw)` ⇒ 库里是 `$2a$…`；断言「新密码能登录」才算真证明 |
+| 2 | ★ **新建管理员的密码必须 encode** | 照抄种子里的 `{noop}` = 明文入库。正确写法 `passwordEncoder.encode(raw)` ⇒ 库里是 **`{bcrypt}$2a$…`**（★ 本项目的 encoder 是 `PasswordEncoderFactories.createDelegatingPasswordEncoder()`，见 `SecurityConfig:76` —— **带 `{id}` 前缀**，不是裸 `$2a$`）；断言「新密码能登录」才算真证明（见坑 14） |
 | 3 | ★ `admins` 是**物理删**，FK 是 NO ACTION | 同事务先删 `admin_roles`，否则 `23503` 现场 500（同 L5 品牌那条教训：**谁引用我，决定我能否物理删**） |
 | 4 | ★ **全量替换必须在事务里** | `DELETE` + 批量 `INSERT` 之间有一个「权限瞬时为空」的窗口；**两条语句** ⇒ 按 `InventoryService:119` 的判据加 `@Transactional` |
 | 5 | ★ **空数组 ≠ null 的语义要写明** | `PUT .../roles` 传 `[]` = **清空**（显式意图）；不传该字段（`null`）→ **400**。不写清就等着前端传 null 把角色清空 |
@@ -361,6 +364,9 @@ insertRoleIfAbsent(Role)                     Long     RETURNING id（UNIQUE 撞�
 | 11 | ★ 用 `hasAuthority` 不用 `hasRole` | 项目安全配置统一 `hasAuthority`（Day 07 定型）；`hasRole` 会自作主张加 `ROLE_` 前缀，两套前缀混用会静默不匹配 |
 | 12 | ★ 不要动 `/api/admin/**` 的白名单 | 管理端**本来就不在白名单**里（白名单只有两个 login + `/error` + springdoc + C 端几个 GET）⇒ **什么都不用改**；★ 若为图省事加一条 `/api/admin/**`，等于把整个管理端**静默公开**（Day 20 的 `/api/coupons` 就是这个坑） |
 | 13 | ★★ **骨架期验收脚本必须区分「本日新建」与「既有已实现」两类端点**（本日首跑栽在这） | 两类端点的**正确长相不同**：本日新建 ⇒ `200 + code 500`；既有已实现 ⇒ `200 + code 200`。首跑 `day23-skeleton-smoke.py` 得 **39/44**，5 条 FAIL **全部**是拿「骨架占位」判 Day 22 已实现的端点（`dashboard/overview`、`/api/users/me`、`/api/admin/users`）—— 实测全 `200+200`，即**端点工作正常**。⇒ 修法是 `skeleton()` 与 `ok200()` 两个判据**并列**，按形态分类断言。★ 与 Day 22 那次「拿 `AdminOrderVO` 断言 `OrderVO`」**同族**：**断言前先确认这个端点/出口是哪个形态**，别按「同类」猜 —— 猜错产出的是一堆**假 FAIL**，比漏断言更费时间（要逐条排查真假）。 |
+| 14 | ★★ **断言密码哈希不能写「`$2` 开头」**（实现期验收首跑栽在这，本日第 1 条假 FAIL） | 本项目用的是**委托编码器**（`SecurityConfig:76` → `PasswordEncoderFactories.createDelegatingPasswordEncoder()`）⇒ `encode()` 产出 **`{bcrypt}$2a$10$…`**，**带 `{id}` 前缀**。判据写成 `startswith("$2")` ⇒ **假 FAIL**（实测前缀是 `{b`）。★ 正确判据：`startswith("{bcrypt}")` **且** `not startswith("{noop}")`。这也正是种子里那句 `{noop}admin123` 能被**同一套** `matches` 认出来的原因。★ 与坑 13 同族：**断言前先确认形态** —— 这次要确认的是「编码器的输出格式」。 |
+| 15 | ★ **分配类入参要先 `distinct()` 去重**（实现期的新决定） | `countRolesByIds` 是 `SELECT count(*) … WHERE id IN (…)`，对 `IN (1,1)` 只算 **1** ⇒ **不去重**时「传了重复 id」会被误报成「**含不存在的**角色 id」（报错信息与事实不符）。⇒ 两个分配方法都先 `roleIds.stream().distinct().toList()` 再校验。**收益**：报错信息与事实一致；重复 id 也不会撞复合主键变成 500。★ 这条是「**断言/报错要指向真实原因**」的一个正例。 |
+| 16 | ★ 「**用 id 当 keyword**」是验收脚本的陷阱（本日第 2 条假 FAIL） | `B11` 原写 `keyword=<夹具的 id>` ⇒ 数字在任何 `username`/`nickname` 里都不出现 ⇒ 必然 `total=0`。★ 想验「keyword 命中 **username** 列」，就得用 **username 字符串**当样本。★ 同族判据：**样本必须落在判据的取值域里**（同 §7.1 的样本量陷阱 —— 测的是同一侧的两个点）。 |
 
 ---
 
