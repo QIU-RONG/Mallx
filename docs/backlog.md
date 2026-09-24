@@ -14,12 +14,14 @@
 | L2 | C 端商品详情不判上架（★ 有耦合） | 数据可见性 | 拆方法 | 低 | ✅ 已修（33/33） |
 | L3 | 搜索的中文兜底漏了 `description` | 召回完整性 | 1 行 SQL（★ 连带改断言） | 中 | ✅ 已修（day19 58/58） |
 | L4 | 搜索的 `categoryId` 不展开子分类 | 两入口口径不一 | 改签名 + XML | 中 | ✅ 已修（day19 58/58） |
-| L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ✅ ① 已做（brand 24/24）；② CRUD 未做（★ 权限码改从 **39** 起，22–25/26–38 已被 Day 22/23 占掉） |
+| L5 | `brands` 零接口 | 缺字典查询入口 | 新模块级 | 低 | ✅ **①② 全部完成**（① Day 20，brand 24/24；② **Day 24**，权限码 **39/40/41**，写接口 3 个） |
 | L6 | 不存在的路径被兜底吞成 200+code=500 | 可观测性 | 1 个 handler | 低 | ✅ 已修（L5 验收顺带挖出） |
 | L7 | 订单详情/列表看不到优惠额 | 信息完整性 | VO 2 字段 + 装配 2 行 | 极低 | ✅ 已修（**Day 22**，提交 `8248b59`；day17-b 的键集合回归盲区同批补上） |
 | D21-A | `discount_rate` 三份口径对打（DTO `99.99` / 测试 `88.0` / 设计 `(0,1]`） | 金额正确性 | DTO 1 行 + 断言 +2 | 低 | ✅ 已修（决策 A；day20 **82/82**） |
-| T1 | `MAX_PAGE_SIZE` 已复制 **6** 份 | 可维护性 | 跨模块重构 | 中 | ⏸️ ★ **触发条件已达成**（第 6 份在 `AdminUserServiceImpl.pageUsers`），是否抽待拍板 |
-| T2 | `day17-a` / `day17-b` 不在 M1 名单里 | 回归盲区 | 改 M1 脚本名单 | 低 | ⬜ 未开工（Day 22 实证：L7 加字段后它的「键集合相等」断言会静默失败） |
+| T1 | `MAX_PAGE_SIZE` 已复制 **9** 份 | 可维护性 | 跨模块重构 | 中 | ⏸️ **维持不抽**（Day 24 复核：实为 **9 份**，比条目原文的 6 份又多 3 份，仍不改 —— 理由见下） |
+| T2 | `day17-a` / `day17-b` 不在 M1 名单里 | 回归盲区 | 改 M1 脚本名单 | 低 | ✅ **已修（Day 24）**：M1 名单 **3 → 5**，新增 `EXPECTED_RUNS` 护栏 + 读侧分段 |
+| T3 | `docs/api/users-api.md` 停在 Day 06，把已修的漏洞写成预期行为 | 文档误导 | 重写 1 个文件 | 低 | ✅ **已修（Day 24）**：按现状重写（`/api/users/me` + `UserVO`），旧端点转入「已下线」表 |
+| T4 | Swagger UI 没有 Authorize 按钮（V1.0 唯一界面调不通受保护接口） | 可用性 | 1 个 Bean + 1 行 | 低 | ✅ **已修（Day 24）**：`OpenApiConfig` 补 `SecurityScheme` + `addSecurityItem` |
 
 **关键前提（已核实）**：M1 回归三个脚本（`day14-e2e-walk.py` / `day15-ship-confirm.py` /
 `day16-review-e2e.py`）对 `/api/products` 的**全部访问只有 `/api/products/{id}/reviews`**
@@ -145,6 +147,42 @@
    **没有任何东西覆盖**，等于把同一个漂移换个方向再犯一次。
    ★ 顺带实证：`EXPECTED` 常量没同步时，脚本护栏**第一次跑就报出来**
    （「断言总数与 EXPECTED 不符」）—— 这道护栏值得一直留着。
+
+---
+
+### L5② + T1 / T2 / T3 / T4（Day 24 一轮清完，✅ 全绿）
+
+**本清单**自建立以来第一次**归零**（一览表无 ⬜ 条目）。五项一起做的原因：**它们之间零耦合**
+（1 个功能 + 1 个回归基础设施 + 3 个外部可见性/记录），不需要「设计期」，可以一项一项独立验收。
+
+| 项 | 交付 | 验收 |
+|---|---|---|
+| **L5②** | `POST/PUT/DELETE /api/admin/brands` + `BrandCreateDTO` / `BrandUpdateDTO` + Service 3 方法 + `ProductMapper#countByBrandId`（手写 XML，不带 `is_deleted`）+ `sql/14-brand-crud-permissions.sql`（39/40/41） | `day24-brand-crud-verify.py` **43 / 43**；`day24-perm-apply.py` **OK**（4/4/4/0、幂等、`max(id)=count(*)=41`） |
+| **T2** | M1 名单 3 → 5、`kind` 分段、`[1c] COVERAGE`、verdict 拆 5 问、`EXPECTED_RUNS` 护栏 | `day17-m1-regression.py` **245 / 245**（198 + 26 + 21）+ `BASELINE RESTORED: YES` |
+| **T4** | `OpenApiConfig` 补 `SecurityScheme` + `addSecurityItem` | `/v3/api-docs` 含 `securitySchemes` 与顶层 `security`；`/swagger-ui.html` 302→200 |
+| **T3** | `docs/api/users-api.md` 按现状重写 | 4 个已下线端点转入「已下线」表，`UserVO` 白名单与两套状态码写清 |
+| **T1** | 实测 **9 份**（原记 6 份），维持不抽 + 写明新理由 | 见 T1 章节 |
+
+**★ 本日挖出的三条判据**（都已写进 `Day-24-*.md` 与 REF）
+
+1. ★★ **「按前缀批量授权」只对「执行那一刻已存在的行」生效** —— 10 号文件里有
+   `WHERE p.code LIKE 'brand:%'`，但**不等于**以后新增的 brand 权限会自动跟上。
+   本项目已第 **8** 次补权限，失败模式每次都一样（权限行进了表、`role_permissions` 没有行指向它
+   ⇒ `@PreAuthorize` 永远 403，而现象长得像「权限码拼错了」）。
+2. ★★ **「样本必须落在判据的取值域里」**（第 **3** 次现形）——
+   要测「重名」，那个名字必须先真实存在（本次首跑就踩了：拿一个**没创建过**的名字当重名样本）。
+   前两次：Day 19 L1（样本量不足，验不出上限）、Day 23 B11（拿 id 当 keyword）。
+3. ★★ **断言里藏着「世界还没变」的前提**（第 **2** 次现形）——
+   `day20-l5-brand` 的 C7 断言「`/api/admin/brands/999` → 404」，前提是**该路径模式一个 handler 都没有**；
+   本日加了 `PUT/DELETE /{id}` ⇒ 变成 **405**（正确行为，404 已不可能出现）。
+   前一次：Day 20 L3（`promotion` 是「纯全文召回」的证据，前提是 description 不在 ILIKE 范围内）。
+   ⇒ **改动某处之前先问：哪些断言是靠「这里还没有 X」才成立的？**
+
+**★ 还有一条「工具 vs 对象」的辨析**：M1 是 collector，读各脚本自己的报告 ——
+`day17-a/b` 的结尾是 `VERDICT: OK —— 26 / 26 项全过`，与 `day14/15/16` 的
+`ASSERTIONS: n / m passed` **格式不同** ⇒ collector 首跑读不出它们（报成 `NO REPORT`）。
+**修的是 collector（加一条 fallback 正则），不是那两个脚本** ——
+它们已各自验收通过，改它们的输出等于「改已验证对象来迁就工具」。
 
 ---
 
@@ -325,8 +363,21 @@ ILIKE 又不看 description ⇒ **永远搜不到**。
 
 | 步骤 | 内容 | 权限 |
 |---|---|---|
-| ①（建议先做） | `GET /api/brands`（公开，返回字典列表）+ `GET /api/admin/brands`（`brand:list`） | 补 `brand:list` = id **21** |
-| ②（留给后续） | 管理端 CRUD：`create` / `update` / `delete` | ★ **id 改用 `39` / `40` / `41`** —— 本文档原文写的是 22/23/24，**已被占用**：Day 22 拿走 `user:detail(22)` / `user:status(23)` / `dashboard:overview(24)`，Day 23 的 RBAC 再拿走 26–38 ⇒ **现 max = 38**。按 Day 20 的 `08-marketing-permissions.sql` 那套幂等补发 |
+| ① | `GET /api/brands`（公开，返回字典列表）+ `GET /api/admin/brands`（`brand:list`） | 补 `brand:list` = id **21** |
+| ② | 管理端 CRUD：`create` / `update` / `delete` | ★ **id 改用 `39` / `40` / `41`** —— 本文档原文写的是 22/23/24，**已被占用**：Day 22 拿走 `user:detail(22)` / `user:status(23)` / `dashboard:overview(24)`，Day 23 的 RBAC 再拿走 26–38 ⇒ **现 max = 38**。按 Day 20 的 `08-marketing-permissions.sql` 那套幂等补发 |
+
+**★★ ② 已于 Day 24 完成（2026-09-25）** —— 本条目的三处预测全部兑现，另有一处是**新发现**：
+
+| 预测（本条目原文） | 实际 |
+|---|---|
+| 权限码从 39 起 | ✅ 兑现：`brand:create(39)` / `brand:update(40)` / `brand:delete(41)`，落 `sql/14-brand-crud-permissions.sql` |
+| 删除要判引用、不能用 `selectCount` | ✅ 兑现：新增 `ProductMapper#countByBrandId`（手写 XML，**不带** `is_deleted`），与 `countByCategoryId` 同一个缺陷的两个出口 |
+| 白名单用精确路径 | ✅ 兑现且**无需改动**：Day 20 就已写成 `GET /api/brands`（精确），Day 24 只是往 `/api/admin/**` 下加端点，不进白名单 |
+| — | ★ **新发现**：`brands.name` **有 UNIQUE 约束**（`01-schema.sql:70`），而 `categories.name` 没有 ⇒ 品牌必须做重名检查，且要把 `23505` 翻译成 **400 人话**，不能让 `DuplicateKeyException` 冒到兜底 handler 变成 500。这是 backlog 原文**没提到**的一条（写条目时的对照对象选错了）。 |
+
+★ 顺带修正一条**过时的判断方式**：`countByBrandId` 与 `countByCategoryId` 结构完全相同
+（只差一列），但**刻意没有合成**一条带 `<if>` 的 SQL —— 理由见 `ProductMapper.java` 的注释：
+「按哪个列数」由**业务语义**决定（删分类 vs 删品牌），合一条会让「传错列」既不报错也不可测。
 
 ★★ **白名单粒度照 Day 20 的教训办**：加 `GET /api/brands` 用**精确路径**，
 **绝不能**写 `/api/brands/**` —— 否则以后在这个前缀下加任何私有接口都会被**静默公开**
@@ -376,19 +427,87 @@ Day 21 给 `orders` 加了 `discount_amount` 并在下单链路写入（`pay = t
 
 ---
 
-## T1 · `MAX_PAGE_SIZE` 已复制 5 份 —— 明确不做
+## T1 · `MAX_PAGE_SIZE` 已复制 9 份 —— 维持不抽（Day 24 复核）
 
-`ProductServiceImpl.java:53` 的注释自己写着「与 `OrderServiceImpl` / `InventoryServiceImpl` /
-`ReviewServiceImpl` 同一个值、同一套夹紧规则（**本处是第 5 份拷贝**）」，
-并说明「仍不抽到 `mall-common`：那是一次跨模块重构，与本步无关」。
+**Day 24 实测复核**（`grep -n "private static final long MAX_PAGE_SIZE" backend/**/*.java`）：
+**9 份**，分布如下 —— 比条目原文的「6 份」又多 3 份（Day 21 的 `CouponServiceImpl`、
+Day 23 的 `AdminAccountManageServiceImpl` / `RoleManageServiceImpl`）：
 
-⏸️ **维持不抽**。理由：抽常量要动 5 个模块的 POM 可见性与编译边界，
-收益只是省 4 行，风险却是 5 条已验收链路同时受影响。
-**触发条件**：等出现第 6 份拷贝、或规则本身要变（比如上限从 100 调成别的）时再抽。
+| # | 文件 | 引入于 |
+|---|---|---|
+| 1 | `ProductServiceImpl` | Day 09/11 |
+| 2 | `OrderServiceImpl` | Day 13/14 |
+| 3 | `PaymentServiceImpl` | Day 13 |
+| 4 | `InventoryServiceImpl` | Day 17 |
+| 5 | `ReviewServiceImpl` | Day 16 |
+| 6 | `AdminUserServiceImpl` | Day 22 |
+| 7 | `CouponServiceImpl` | Day 21 |
+| 8 | `AdminAccountManageServiceImpl` | Day 23 |
+| 9 | `RoleManageServiceImpl` | Day 23 |
+
+⏸️ **仍维持不抽**（判据与 Day 20 时一致，未变）：
+
+1. **收益没变**：仍是「省几行」。9 份拷贝里真正需要同步的只有 `100` 这个数字与
+   那行夹紧公式，而公式已经三次在不同模块里独立写对（Day 17/18/19 各一次）。
+2. **风险随份数上升，不是下降**：抽常量要动 9 个模块的 POM 可见性与编译边界，
+   而其中 5 个（product / order / payment / inventory / review）在 **M1 覆盖链路上**
+   ⇒ 一次纯重构要重跑整条回归。**收益是静态的，代价是动态的。**
+3. ★ **Day 24 的新观察（这才是「不抽」真正的理由）**：这 9 处**并不是同一个东西** ——
+   `ReviewServiceImpl` / `PaymentServiceImpl` / `InventoryServiceImpl` 的类注释
+   还写着「与 `OrderServiceImpl.MAX_PAGE_SIZE` 同一个值」，
+   而 `CouponServiceImpl` / `AdminAccountManageServiceImpl` / `RoleManageServiceImpl`
+   的三份**根本没有任何交叉引用注释**（各写各的）。
+   ⇒ 也就是说「9 份拷贝」这个说法**本身已经失真**：其中 6 份是「有意识的同源拷贝」，
+   3 份只是「恰好写了 100」。**抽常量不会修好这个 —— 它会把「三份碰巧相同」
+   伪装成「一处定义、处处同源」，反而更难发现谁在偏离。**
+   ★ 真要动，正确的第一步是**先统一注释里的「同源声明」**（说清哪几份是同一套规则），
+   而不是先抽代码。**这一类「看起来是重复代码、其实是待澄清的口径」，
+   应当先定性再重构。**
+
+**触发条件（不变，但补一条）**：等**规则本身要变**（上限从 100 调成别的）时再抽
+—— 那时 9 处必须一起改，重复代码的代价才第一次变成真实成本。
+★ 新增触发条件：若某天要**给某几处单独设不同的上限**（比如日志类接口允许 500），
+那说明它们本来就不是同一个常量，**抽出来反而错**。
+
+---
+
+## T2 · `day17-a` / `day17-b` 不在 M1 名单里 —— ✅ 已修（Day 24）
+
+**原来的问题**：`day17-m1-regression.py` 的 `RUNS` 只有 `day14` / `day15` / `day16` 三个
+链路环节，而 `day17-a`（管理端订单列表）与 `day17-b`（订单详情）**不在其中**。
+两者都用「键集合**双向**相等」式断言（`set(keys()) == set(FIELDS)`）——
+**少一个字段 FAIL、多一个字段同样 FAIL**（它验的是白名单，不是「至少包含」）。
+
+⇒ Day 22 给 `OrderDetailVO` / `OrderVO` 加 `discountAmount` 时，
+这两个断言会失败，而**没有任何自动回归会报警**（M1 跑不到它们）。
+当时是手工发现并同步的 —— 这就是「盲区」的实证。
+
+**Day 24 的修法**（`day17-m1-regression.py`）：
+
+| 改动 | 内容 |
+|---|---|
+| 名单 3 → 5 | 新增 `day17-a` / `day17-b`，并在元组里加 `kind` 字段（`chain` / `read`） |
+| 分两段输出 | `[1] CHAIN`（生产数据的那条路）与 `[1b] READ-SIDE`（消费同一条数据），**避免「链路绿了」这句话变含糊** |
+| 新增 `[1c] COVERAGE` | 列出的条数 vs 实际收到的报告数，不一致时**先现形**（见下方护栏） |
+| verdict 拆成 5 问 | (a) 链路全绿 / (a2) 读侧全绿 / (b) 报告收齐 / (c) 库回到基线 / (d) 不变量全 0 |
+| ★ 新护栏 `EXPECTED_RUNS = 5` | 模块级 `assert`：「改名单却忘了同步报告段落」时**立刻炸**（同 `day20-coupon-verify.py` 的 `EXPECTED` 手法） |
+
+★ **为什么读侧必须排在链路段之后**：它们断言的是「链路跑完之后库里那些订单长什么样」，
+所以必须在链路**产生数据之后**再跑（`RUNS` 的顺序即执行顺序）。
+★ **为什么这两条可以是只读的**：M1 的 (c) 「库回到基线」要求整轮下来六张表的行数与
+库存明细逐字节还原 —— 读侧脚本一旦写库，这条断言必然为假。所以入选 M1 的读侧脚本
+**必须自清理或纯只读**（这两条是纯只读）。
+
+★★ **一般化（这才是本条目的价值）**：「每一部分在它自己那天通过了」与
+「今天整块面还在」**是两个命题**。里程碑名单若只覆盖主链路，
+它会**静默地**不再覆盖后来长在它旁边的任何东西。
+⇒ **给既有里程碑旁边加新端点/VO 时，要问的不是「它有没有脚本」，
+而是「它有没有进名单」。**
 
 ---
 
 ## 附一、三条与清单相邻的提醒
+
 
 **① 一份报告里的 `VERDICT: false`** —— ✅ **已定性：误读，不是问题**
 扫描 `backend/loadtest/*-report.txt` 时看到 `day14-reconcile-report.txt` 里写着 `VERDICT: false`。
@@ -415,7 +534,7 @@ Day 21 给 `orders` 加了 `discount_amount` 并在下单链路写入（`pay = t
 仓库根有 `dsh-skin-v2/`、`dsh-themes/` 两个未跟踪目录，与本项目无关（未提交、未加 `.gitignore`）。
 不影响 `git reset` / 分批提交的操作，但会让 `git status` 常驻噪声。
 
-**③ ★★ `docs/api/users-api.md` 是【Day 06 的练手版】，等于给已修掉的漏洞留了份说明书**
+**③ ★★ `docs/api/users-api.md` 是【Day 06 的练手版】，等于给已修掉的漏洞留了份说明书** —— ✅ **已修（Day 24，见下）**
 （Day 23 开工前盘点时挖出）它躺在 `docs/api/`（**活文档**目录，不是 `docs/daily/` 的历史存档），
 内容却停在 Day 06：
 
@@ -428,7 +547,22 @@ Day 21 给 `orders` 加了 `discount_amount` 并在下单链路写入（`pay = t
 
 ★ 危害两层：① 照着它调接口，全部 404；② **更糟的是它把那个越权漏洞写成了「预期行为」**
 （`"password"`: 学习阶段暂时返回）—— 而 Day 22 已实证那是**全站口令哈希外泄**并修掉了。
-⇒ 处理二选一：**改成现状**（推荐）或**在文件头明确标注「Day 06 历史快照，已失效」**。
+
+**✅ 已修（Day 24）—— 选了「改成现状」而不是「标注历史快照」**：
+
+| 改动 | 内容 |
+|---|---|
+| 重写 | `docs/api/users-api.md` 按现状重写：C 端 `GET /api/users/me` + `PUT /api/users/me/nickname`，管理端 3 个端点（`user:list` / `user:detail` / `user:status`） |
+| 出参 | 全篇改用 `UserVO`（7 字段），**旧版的 `"password": "demo123"` 示例整段删除、不保留** |
+| 旧端点 | 转入文末「已下线端点」表，**逐条写明它是哪个漏洞** —— 从「说明书」变成「警示牌」 |
+| 新增 | `UserVO` 白名单、两套状态码（协议层 401/403 vs 业务层 200+code）、`size` 夹紧口径 |
+
+★ **为什么选「改成现状」而不是「标注历史快照」**：`docs/api/` 是**活文档**目录，
+它唯一的价值是「照它调接口能调通」。一份标注了「已失效」的活文档，
+**下一个人仍然会先点开它**，只是多读一行免责声明 —— 而它里面那个
+「password 是预期行为」的错误示范依然在屏幕上。
+历史该留在 `docs/daily/`（那里已有 `Day-22-管理端补齐.md` 的完整记录），
+**活文档里不该有历史包袱**。
 ⚠️ 这是 Day 22 收尾时**漏掉**的一步 —— 改了接口没同步 `docs/api/`，
 正是项目一直在防的「同一个业务概念两处不同源」（与 L3 / L4 / D21-A 是同一个动作）。
 
