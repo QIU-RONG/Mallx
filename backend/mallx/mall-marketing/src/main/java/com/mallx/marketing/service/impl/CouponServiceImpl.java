@@ -24,26 +24,27 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * ★★★ 优惠券服务实现 —— <b>骨架</b>，5 处方法体由你写。
+ * ★★★ 优惠券服务实现 —— Day 20 的 5 处 + Day 21 的 3 处<b>均已实现</b>。
  *
- * <p>★ <b>填实现时：整段替换那行 TODO 与紧跟的 {@code throw}</b>，
- * <b>只删你正在填的那一个</b>（一个类里好几处 throw 长得一样，删错就编译不过）。
+ * <p>★ 骨架期那套「整段替换 TODO 与 throw」的说明已随实现落地删除（Day 21 收尾）。
+ * 留在下面的是当时的<b>分工理由</b> —— 它同时是「哪些方法值得自己敲」的记录：
  *
- * <p>★★ <b>哪 5 处留给你，哪 2 处已经给了，为什么这么分</b>：
+ * <p>★★ <b>当时哪 5 处留白、哪 2 处直接给，为什么这么分</b>：
  * <pre>
- *   留给你的（本日的新东西）：
+ *   当时留白的（本日的新东西）：
  *     ① pageCoupons   —— Page&lt;Coupon&gt; → Page&lt;CouponVO&gt; 换壳（Day 18 学过一遍）
  *     ② createCoupon  —— 「类型 ↔ 金额字段」的关系校验（DTO 层表达不了）
  *     ③ deleteCoupon  —— 被引用就不能删的守卫（FK NO ACTION）
  *     ④ receive       —— ★★ 本日核心：占名额 → 发到手（同一事务）
  *     ⑤ diagnoseReceiveFailure —— 慢路径诊断，只为把错误消息说清楚
  *
- *   已经给你的（与既有代码逐字同构，再敲一遍是浪费）：
+ *   当时直接给的（与既有代码逐字同构，再敲一遍是浪费）：
  *     · listAvailable / listMine —— 形状与 ReviewServiceImpl 的 pageByProduct / pageMine
  *       <b>完全一样</b>（夹紧 → 调用 → PageResult.of）。你真想自己写，删掉重写即可。
  * </pre>
@@ -355,9 +356,6 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
     // ================================================================
     // ★★★ Day 21（阶段二）：算抵扣 / 核销 / 退券
     //
-    //   ★ 填实现时：整段替换那行 TODO 与紧跟的 throw，
-    //     【只删你正在填的那一个】—— 本类现在有 3 个长得一样的 throw，删错就编译不过。
-    //
     //   ★ 这三处与上面五处的性质不同：上面是「配给 HTTP 的」，这三处是
     //     「配给另一个模块（mall-order）的」—— 所以它们【不接 @RequestParam、
     //     不返回 Result、也不抛给自己翻译过的文案】，
@@ -370,13 +368,46 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      * <p>四步，<b>顺序不能换</b>（先判最根本的原因，消息才说得清）：
      * <pre>
      *   ① CouponUseSourceVO src = userCouponMapper.selectForUse(userId, userCouponId);
-     *        src == null  → 400「优惠券不存在」
+     *        src == null  → <b>404</b>「优惠券不存在」
+     *        ★★ 2026-09-24 订正：原稿这里写的是 400，<b>是错的</b>。
+     *          私有资源 + 非本人一律【伪装 404】，与本项目一贯口径一致 ——
+     *          成文出处 {@code AddressServiceImpl#requireOwn:160-166}：
+     *          <pre>
+     *            if (addr == null || !addr.getUserId().equals(userId)) {
+     *                throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "地址不存在");
+     *            }
+     *          </pre>
+     *          —— null 与「不是你的」合并成<b>同一个码 + 同一句文案</b>，两者缺一不可。
+     *          ★ 用 400 的话，「这张券不属于你」会被读成「参数传错了」，
+     *            前端会引导用户去改参数，而不是告诉他「这张券无效」。
+     *          ★ 与 {@code CouponUseSourceVO} 的 javadoc 一致（那里写的就是「统一翻成 404」）。
      *        ★ 「不存在」与「不是你的」必须并成一句 —— 分开写就等于
      *          给攻击者一个探测别人券 id 是否有效的接口。
+     *          ★ 验收断言也必须按 404 写：与「不存在的 id」相比，
+     *            响应体要<b>逐字节相同</b>（Day 20 的 IDOR 判据）。
      *
      *   ② 逐条判据（消息要能直接当提示语用，最好带上券名 src.getCouponName()）：
      *        !UserCouponStatus.isUsable(src.getStatus()) → 400「该优惠券已使用」
      *        Boolean.TRUE.equals(src.getExpired())       → 400「该优惠券已过期」
+     *        src.getStartTime() != null
+     *            && LocalDateTime.now().isBefore(src.getStartTime())
+     *                                                    → 400「该优惠券尚未开始」
+     *          ★ 第 5 条判据（2026-09-24 补进设计）。
+     *          ★★ 定性：这不是「新加功能」，而是<b>补口径漂移</b> ——
+     *            领券侧的 CAS（{@code CouponMapper.xml#increaseReceivedCount}）
+     *            早就守了窗口的<b>两端</b>：
+     *            <pre>
+     *              AND start_time &lt;= CURRENT_TIMESTAMP
+     *              AND end_time   &gt;= CURRENT_TIMESTAMP
+     *            </pre>
+     *            而本方法原稿只判「已过期」、漏了「尚未开始」⇒ 同一个业务概念
+     *            （券在不在有效窗口内）两端判据不一致 —— 与 L4（{@code categoryId}
+     *            展开子分类）<b>同一族</b>：同一诉求两个入口给不同答案，
+     *            不报错、不 500，是最难发现的一类。
+     *          ★ 别用 expired 反推「已开始」：start_time / end_time 是两个独立条件
+     *            （「明天开始、下月结束」是完全合法的配置）。
+     *          ★★ 库里现有券的 start_time 全在过去 ⇒ 缺这条【永远不现形】
+     *            （样本量陷阱，同 L1 / L5①）。判据按【设计】写，不按现有数据写。
      *        src.getCouponStatus() == null || != 1       → 400「该优惠券已下架」
      *          ★ 别漏这条：下架的券不该还能被消耗（与领券那边 status=1 的守卫对称）
      *        src.getMinAmount() != null
@@ -414,13 +445,89 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      *   ⑤ 组装并返回 CouponUseVO（userCouponId / couponId / couponName / deductionAmount）
      * </pre>
      *
+     * <p>★★ <b>已知取舍：{@code markUsed} 的 CAS 不重判窗口</b>。
+     * 它的守卫只有 {@code id} / {@code user_id} / {@code status}（单表，与
+     * {@code increaseReceivedCount} 同构）。要把窗口也压进 CAS，就得 JOIN
+     * {@code coupons} 取 {@code end_time}，把单表 CAS 变成跨表 CAS。
+     * 代价账：窗口已由本方法（慢路径）挡下，而「本方法通过」到「{@code markUsed}
+     * 执行」之间是<b>同一个事务内的毫秒级缝隙</b> —— 只有券恰好在这几毫秒里过期
+     * 才会漏，且<b>不可构造、不可断言</b>。⇒ V1.0 认下这个缝。
+     * ★ 若哪天要收紧，这里是唯一入口（改 {@code markUsed} 的 WHERE，不要在这里加写库）。
+     *
      * <p>★ 本方法不加 {@code @Transactional} —— 它整个是只读的，
      * 而唯一的写操作（核销）在 {@link #useCoupon} 里，由那边的 CAS 负责对错。
      */
     @Override
     public CouponUseVO calcDiscount(Long userId, Long userCouponId, BigDecimal totalAmount) {
-        // TODO: 按上面 ①~⑤ 实现
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.calcDiscount");
+        // ① 取素材（归属过滤写在 SQL 里，userId 来自 token，不接受请求参数）
+        CouponUseSourceVO src = userCouponMapper.selectForUse(userId, userCouponId);
+        if (src == null) {
+            // ★ 「不存在」与「不是你的」合成同一句 —— IDOR 伪装 404
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "优惠券不存在");
+        }
+
+        // ② 五条判据（顺序不能换：先判最根本的原因，消息才说得清）
+        if (!UserCouponStatus.isUsable(src.getStatus())) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该优惠券已使用");
+        }
+        if (Boolean.TRUE.equals(src.getExpired())) {
+            // ★ 用 Boolean.TRUE.equals 而不是直接当条件：expired 是包装类型，直接判会自动拆箱
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该优惠券已过期");
+        }
+        if (src.getStartTime() != null && LocalDateTime.now().isBefore(src.getStartTime())) {
+            // ★ 第 5 条判据，与上一条构成【窗口判据】的两端（见方法 javadoc 的口径漂移说明）
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该优惠券尚未开始");
+        }
+        if (src.getCouponStatus() == null || src.getCouponStatus() != 1) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该优惠券已下架");
+        }
+        if (src.getMinAmount() != null && totalAmount.compareTo(src.getMinAmount()) < 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    "订单金额未满 " + src.getMinAmount() + " 元，不能使用该优惠券");
+        }
+
+        // ③ 按类型算钱 —— 两种券两条公式，出口是同一个 BigDecimal
+        BigDecimal deduction;
+        if (CouponType.FIXED.equals(src.getType())) {
+            // ★ 常量写在左边：getType() 是运行期从 DB 读出的 String，用 == 比引用恒为 false
+            if (src.getDiscountAmount() == null) {
+                // 券面字段缺失 → 400。别让 NPE 变成 500 —— 那会让「券配错了」和「服务崩了」长得一样
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该优惠券面额缺失");
+            }
+            deduction = src.getDiscountAmount();
+        } else if (CouponType.DISCOUNT.equals(src.getType())) {
+            BigDecimal rate = src.getDiscountRate();
+            // ★★ 区间必须挡在公式【之前】：rate 是【应付比例】(0,1]（约定见 CouponUseVO 类注释）。
+            //    不挡的话种子里一个 80 会算出【负抵扣额】，实付金额一路变负错到支付接口才炸。
+            if (rate == null
+                    || rate.compareTo(BigDecimal.ZERO) <= 0
+                    || rate.compareTo(BigDecimal.ONE) > 0) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "折扣率取值必须是 0 到 1 之间");
+            }
+            deduction = totalAmount.multiply(BigDecimal.ONE.subtract(rate));
+        } else {
+            // 合法取值只有 FIXED / DISCOUNT（CouponType）。落到这里 = 数据绕过了创建入口被写坏
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该优惠券类型非法");
+        }
+
+        // ④ 收口：封顶 → 定标
+        //    · 选【封顶】而不是报错：「满 200 减 300」是运营配错了券，但让这一单少付到 0 元
+        //      比让用户下单失败更合理，而且封顶是幂等的、不会因为重试而变化
+        if (deduction.compareTo(totalAmount) > 0) {
+            deduction = totalAmount;
+        }
+        //    · 舍入模式必须显式写 HALF_UP：默认是 HALF_EVEN（银行家舍入），在 x.xx5 上与直觉不一致
+        deduction = deduction.setScale(2, RoundingMode.HALF_UP);
+
+        // ⑤ 组装返回
+        //    ★ src 全程【只读】—— 绝不把算出来的抵扣额写回素材（那是券面原件，不是结论）
+        //    ★ 抵扣额为 0 也照常返回：orders.discount_amount = 0 正是「用了 0 元券」与「没用券」的区别
+        CouponUseVO vo = new CouponUseVO();
+        vo.setUserCouponId(src.getUserCouponId());
+        vo.setCouponId(src.getCouponId());
+        vo.setCouponName(src.getCouponName());
+        vo.setDeductionAmount(deduction);
+        return vo;
     }
 
     /**
@@ -451,8 +558,10 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      */
     @Override
     public void useCoupon(Long userId, Long userCouponId, Long orderId) {
-        // TODO: 按上面 ①~③ 实现
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.useCoupon");
+        int updated = userCouponMapper.markUsed(userId, userCouponId, orderId);
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "优惠券不可用，请重新选择");
+        }
     }
 
     /**
@@ -478,8 +587,7 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
      */
     @Override
     public int releaseByOrder(Long orderId) {
-        // TODO: 一行，直接委托给 mapper（★ 别加事务、别把 0 行当失败）
-        throw new UnsupportedOperationException("TODO: CouponServiceImpl.releaseByOrder");
+        return userCouponMapper.releaseByOrder(orderId);
     }
 
     // ================================================================

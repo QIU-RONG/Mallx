@@ -113,6 +113,14 @@
       ★ 别名一律下划线。⚠️ SQL 里的【小于号】写成 &lt;（裸写启动才炸）。
     -->
     <select id="selectForUse" resultType="com.mallx.marketing.vo.CouponUseSourceVO">
+        select uc.id as user_coupon_id, uc.coupon_id, c.name as coupon_name, c.type,
+               c.discount_amount, c.discount_rate, c.min_amount,
+               uc.status as status, c.status as coupon_status,
+               c.start_time, c.end_time, (c.end_time &lt; current_timestamp) as expired
+        from user_coupons uc
+        join coupons c on c.id = uc.coupon_id
+        where uc.user_id = #{userId}
+          and uc.id = #{userCouponId}
     </select>
 
     <!--
@@ -131,6 +139,11 @@
       ★ 两条守卫缺一条都不报错：少了归属 → 能用别人的券；少了状态 → 能重复核销。
     -->
     <update id="markUsed">
+        update user_coupons
+        set status = 'USED', order_id = #{orderId}, used_at = CURRENT_TIMESTAMP
+        where id = #{userCouponId}
+          and user_id = #{userId}
+          and status = 'UNUSED'
     </update>
 
     <!--
@@ -149,6 +162,10 @@
       ★ 影响行数为 0 是【正常】的（这单没用券）—— 调用方不许把 0 当失败。
     -->
     <update id="releaseByOrder">
+        update user_coupons
+        set status = 'UNUSED', order_id = null, used_at = null
+        where order_id = #{orderId}
+          and status = 'USED'
     </update>
 
 </mapper>

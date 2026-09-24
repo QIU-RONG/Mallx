@@ -19,9 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 管理端优惠券管理（Day 20）—— <b>骨架</b>，三个方法体由你写。
- *
- * <p>★ <b>填实现时：整段替换那行 TODO 与紧跟的 {@code throw}</b>，<b>只删你正在填的那一个</b>。
+ * 管理端优惠券管理（Day 20）—— 三个端点均已实现。
  *
  * <p>⚠️ 路径必须走 {@code /api/admin/coupons} —— 与 {@code AdminProductController} 同一条铁律：
  * 挂到 {@code /api/coupons/**} 会落进白名单里的 GET，<b>静默公开</b>。

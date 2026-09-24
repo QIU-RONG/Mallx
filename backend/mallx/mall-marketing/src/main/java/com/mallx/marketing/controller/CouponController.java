@@ -16,10 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * C 端优惠券接口（Day 20）—— <b>骨架</b>，三个方法体由你写。
- *
- * <p>★ <b>填实现时：整段替换下面那行 TODO 注释与紧跟的 {@code throw}</b>（含删掉 throw）。
- * 一个类里有好几处长得一样的 {@code throw}，<b>只删你正在填的那一个</b>。
+ * C 端优惠券接口（Day 20）—— 三个端点均已实现。
  *
  * <p>★★ <b>为什么类级只映射到 {@code /api}，而不是 {@code /api/coupons}：</b>
  * 与 {@code ReviewController} 同一个理由 —— 三个端点的<b>可见性不一样</b>：

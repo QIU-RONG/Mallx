@@ -69,7 +69,7 @@ public class CouponUseSourceVO {
     /** {@code coupons.status}：1 = 可领 / 0 = 下架 —— 下架的券不该再被消耗 */
     private Integer couponStatus;
 
-    /** 券的可领起始时间 —— 窗口没开就不该能核销 */
+    /** 券的生效起始时间 —— ★ 是 {@code calcDiscount} 的第 5 条判据（尚未开始 → 400），不是储备列 */
     private LocalDateTime startTime;
 
     /** 券的截止时间 */
