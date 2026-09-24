@@ -4,6 +4,28 @@
 > **M2（Day 22 = 后端 API 完整含搜索/管理端数据）的最后一格就是本日**。
 > 陪练模式：本文档 + 结构改动 + 骨架由我出，**实现你亲手写**（说一句「直接写好」我也代写）。
 
+> ✅ **状态：骨架已交付并全链路验收通过（2026-09-24）**
+> - 新建 **22 个文件** + 改 **1 个文件**（清单见 §六）；DDL **零改动**
+>   （`admins` / `roles` / `permissions` / `admin_roles` / `role_permissions` 五张表
+>   早已存在于 `01-schema.sql:316-375`）。
+> - `mvn -o install -DskipTests` → **12 / 12 BUILD SUCCESS**（23.4s）。
+> - `day23-xml-check.py`（新建）→ XML 良构 **8/8**、新增 statement **11/11**、
+>   双向一致 **0 差异**、**空实现 11 条**（正是留空那 11 条 SQL）、
+>   **Java 占位 13 处**（正是 13 个 TODO）。`rc=1` 是骨架期正确长相。
+> - `day23-perm-apply.py`（新建）→ **VERDICT: OK**（13 条已补发 + path 13/13 对齐 + 幂等）；
+>   ★ 关键两格 `role2_rbac = 0` / `role3_rbac = 0`（反向对照）。
+> - `day23-skeleton-smoke.py`（新建，44 断言）→ **44 / 44**。
+>   ★★ 其中最值钱的是 D 组：**`AdminMapper.xml` 那条缺陷修复的实证**
+>   （停用 role 2 → 新 token 打 `dashboard/overview` 得 **403**；
+>   旧 token 打同一端点仍 **200 + code 200** —— 修复与「路线①」的双重证据）。
+> - 回归：`day17-m1-regression.py` **198/198** + `BASELINE RESTORED: YES` + `M1 REGRESSION: OK`；
+>   `day17-a` **26/26**、`day17-b` **21/21**、`day20-l1l2` **33/33**、
+>   `day20-coupon` **82/82**、`day21` **53/53**。
+> - ⚠️ **本日那条「必须一起修」的缺陷已修**：`AdminMapper.xml` 的
+>   `selectPermissionCodesByAdminId` 补 `JOIN roles` + `AND r.status = 1`（§二①）。
+>   它在**登录链路**上，所以 M1 是硬要求 —— 已重跑通过。
+> - 🔄 **等你填**：13 处 Java TODO + 11 条 XML SQL（§六 清单）。
+
 ---
 
 ## 一、开工前拍定的四条决策
@@ -219,23 +241,46 @@
 - `backend/loadtest/day23-rbac-verify.py`（验收，A–G 组）
 - `backend/loadtest/day23-perm-apply.py`（权限落地 + 幂等）
 
-### `AdminRbacMapper` 需要的 6 条语句（两条关联表**不建实体**）
+### `AdminRbacMapper`：实际是 **11 条**语句（规划时写 6 条，交付时多了 5 条）
 
 `admin_roles` / `role_permissions` 是**复合主键**的纯关联表，MyBatis-Plus 对复合主键支持别扭
 （要硬指定一个 `@TableId`）。⇒ 照项目惯例**手写 XML**：
 
 ```text
-selectRoleIdsByAdminId(adminId)             List<Long>
-selectPermissionIdsByRoleId(roleId)         List<Long>
-deleteAdminRolesByAdminId(adminId)          int
-deleteRolePermissionsByRoleId(roleId)       int
-insertAdminRoles(adminId, roleIds)          int    ← <foreach> 批量
-insertRolePermissions(roleId, permissionIds) int   ← <foreach> 批量
+── 关联表读写（规划内的 6 条）─────────────────────────────
+selectRoleIdsByAdminId(adminId)              List<Long>
+selectPermissionIdsByRoleId(roleId)          List<Long>
+deleteAdminRolesByAdminId(adminId)           int
+deleteRolePermissionsByRoleId(roleId)        int
+insertAdminRoles(adminId, roleIds)           int    ← <foreach> 批量
+insertRolePermissions(roleId, permissionIds) int    ← <foreach> 批量
+
+── ★ 交付时补的 5 条（各自有硬理由，不是顺手加的）──────────
+deleteAdminRolesByRoleId(roleId)             int    ← 删角色时要清【两张】关联表，
+                                                      规划里只想到 role_permissions，
+                                                      漏了「谁在用这个角色」⇒ 会 23503
+countRolesByIds(roleIds)                     long   ← 「传了不存在的 id ⇒ 400」
+countPermissionsByIds(permissionIds)         long     的实现手段（不靠 FK 的 23503 兜底）
+insertAdminIfAbsent(Admin)                   Long   ← ★ ON CONFLICT (username) DO NOTHING
+insertRoleIfAbsent(Role)                     Long     RETURNING id（UNIQUE 撞车转 400 的正解）
 ```
+
+★ **为什么建档的 INSERT 也放在这个 Mapper 里**（它写的是 `admins` / `roles` 主表）：
+① 它们服务的是 RBAC 建档，与关联表替换同属一个事务边界；
+② 它们是「带 `ON CONFLICT` 的 INSERT」，`BaseMapper.insert` 给不了；
+③ 集中放这里，可以让 `AdminMapper.xml` 本日**只承担那一条缺陷修复**，改动面最小、最好审。
+
+★★ **「UNIQUE 撞车要转 400」的正确姿势**（本项目成文判据，见 `ReviewMapper.java:59-62`）：
+**不** catch `DuplicateKeyException` —— 它会让 `GlobalExceptionHandler` 兜成
+「200 + code=500 系统繁忙」；而走 `ON CONFLICT` 就**不用动公共层一个字节**。
+配合 `RETURNING id`：插进去 ⇒ 拿到新 id；撞车 ⇒ **NULL** ⇒ 实现侧抛 400。
+这是「**影响行数即答案**」在 INSERT 上的同构写法。
 
 ★ **「全量替换」的原子性**：`deleteXxxByYyyId` + `insertXxx` 必须在**同一个 `@Transactional` 里**。
 只在事务中间才会出现「权限瞬时为空」的短暂窗口 —— 事务把它吃掉。
 ⚠️ 这是本项目**少数几处「两条语句」必须加事务**的地方（判据同 `InventoryService:119`）。
+★ 删角色更狠：`deleteRolePermissionsByRoleId` + `deleteAdminRolesByRoleId` + `deleteById`
+= **三条语句**，同样必须 `@Transactional`。
 
 ---
 
@@ -276,6 +321,27 @@ insertRolePermissions(roleId, permissionIds) int   ← <foreach> 批量
 6. ★ **造数 + 高水位线清理**：本日造的管理员/角色用固定前缀（如 `D23-TEMP-` / `d23_tmp_`）隔离，
    跑完按高水位线删干净，最后**复查 `permissions` 之外的 5 张表都回到基线**。
 
+### 已交付：骨架期先出了 `day23-skeleton-smoke.py`（44 断言）
+
+`day23-rbac-verify.py` 测的是**实现后的行为**（A–G 组），骨架期跑必然大面积 FAIL
+⇒ 照 Day 22 的先例（`day22-skeleton-smoke.py`，32 断言），本日先交付一份**骨架期验收**：
+
+| 组 | 内容 | 条数 |
+|---|---|---|
+| A | 13 条权限落库 + path + **只发超管**（`op_product` / `op_order` 反向对照） | 13 |
+| B | **13 个端点是否被路由**（超管 + 合法载荷 ⇒ 骨架期 200+code 500） | 13 |
+| C | 参数层 `@Valid`：★ 尤其 **null 与 `[]` 的语义分离**（`AssignRolesDTO` 的 `@NotNull`） | 4 |
+| D | ★★ **那条修复的实证**（停用 role 2 → 新 token 403 / 旧 token 仍 200）+ 高水位线恢复 | 7 |
+| E | 老链路（Day 22 端点 + C 端基础接口） | 5 |
+| F | 协议层三态（404 / 405） | 2 |
+
+实测 **44 / 44**，`EXPECTED = 44` 护栏核过（无断言被静默跳过）。
+
+⚠️ 它**只在骨架期有效**（实现填完后 B/C 组的 500 会变 200），且带写操作的载荷会**真的写库**
+⇒ 实现完成后改跑 `day23-rbac-verify.py`。
+★ 它也**不覆盖** A–G 组里那些「真正验证实现正确性」的断言（幂等、护栏②③、密码 encoder 等）——
+那些必须等实现填完才有意义。
+
 ---
 
 ## 八、坑（照旧逐条写清判据）
@@ -294,6 +360,7 @@ insertRolePermissions(roleId, permissionIds) int   ← <foreach> 批量
 | 10 | ★ **零 POM 改动** | RBAC 全在 `mall-admin` 内，实体与 Mapper 早已存在（`Admin`/`Role`/`Permission` + 三个 Mapper）⇒ 本次**不该动任何 `pom.xml`**；若发现必须动，说明放错模块了 |
 | 11 | ★ 用 `hasAuthority` 不用 `hasRole` | 项目安全配置统一 `hasAuthority`（Day 07 定型）；`hasRole` 会自作主张加 `ROLE_` 前缀，两套前缀混用会静默不匹配 |
 | 12 | ★ 不要动 `/api/admin/**` 的白名单 | 管理端**本来就不在白名单**里（白名单只有两个 login + `/error` + springdoc + C 端几个 GET）⇒ **什么都不用改**；★ 若为图省事加一条 `/api/admin/**`，等于把整个管理端**静默公开**（Day 20 的 `/api/coupons` 就是这个坑） |
+| 13 | ★★ **骨架期验收脚本必须区分「本日新建」与「既有已实现」两类端点**（本日首跑栽在这） | 两类端点的**正确长相不同**：本日新建 ⇒ `200 + code 500`；既有已实现 ⇒ `200 + code 200`。首跑 `day23-skeleton-smoke.py` 得 **39/44**，5 条 FAIL **全部**是拿「骨架占位」判 Day 22 已实现的端点（`dashboard/overview`、`/api/users/me`、`/api/admin/users`）—— 实测全 `200+200`，即**端点工作正常**。⇒ 修法是 `skeleton()` 与 `ok200()` 两个判据**并列**，按形态分类断言。★ 与 Day 22 那次「拿 `AdminOrderVO` 断言 `OrderVO`」**同族**：**断言前先确认这个端点/出口是哪个形态**，别按「同类」猜 —— 猜错产出的是一堆**假 FAIL**，比漏断言更费时间（要逐条排查真假）。 |
 
 ---
 
