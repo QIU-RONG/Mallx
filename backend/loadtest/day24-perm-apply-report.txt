@@ -1,0 +1,81 @@
+==========================================================================
+L5② 品牌 CRUD 权限补发 —— D:\MallX\backend\sql\14-brand-crud-permissions.sql
+==========================================================================
+SQL 文件 6016 字符 / 136 行
+
+[1] 执行前快照
+      perm_total         = 38
+      perm_brand         = 1
+      rp_total           = 61
+      rp_brand_role1     = 1
+      rp_brand_role2     = 1
+      rp_brand_role3     = 0
+      brand_paths        = brand:list=/api/admin/brands
+      perm_max_id        = 38
+      roles_total        = 3
+
+[2] 第一次执行  rc=0
+      ✅ 执行成功（含文件末尾四段自检 SELECT，输出见下）
+
+      INSERT 0 3
+      INSERT 0 3
+      INSERT 0 3
+      41
+      21|brand:list|品牌列表|/api/admin/brands|GET
+      39|brand:create|新建品牌|/api/admin/brands|POST
+      40|brand:update|编辑品牌|/api/admin/brands/*|PUT
+      41|brand:delete|删除品牌|/api/admin/brands/*|DELETE
+      PRODUCT_ADMIN|4|brand:create, brand:delete, brand:list, brand:update
+      SUPER_ADMIN|4|brand:create, brand:delete, brand:list, brand:update
+      4|4|4|0
+      41|41
+
+[3] 第一次执行后的变化（before -> after1）
+      brand_paths        brand:list=/api/admin/brands -> brand:list=/api/admin/brands ; brand:create=/api/admin/brands ; brand:update=/api/admin/brands/* ; brand:delete=/api/admin/brands/*
+      perm_brand         1 -> 4
+      perm_max_id        38 -> 41
+      perm_total         38 -> 41
+      rp_brand_role1     1 -> 4
+      rp_brand_role2     1 -> 4
+      rp_total           61 -> 67
+
+[4] 第二次执行（幂等验证）  rc=0
+
+[5] 第二次执行后的变化（after1 -> after2）—— ★ 必须为空
+      ✅ 无任何变化 —— SQL 是幂等的
+
+[6] 权限清单（brand:*）—— ★ 期望 4 行：21 / 39 / 40 / 41
+      21 | brand:list | 品牌列表 | /api/admin/brands | GET
+      39 | brand:create | 新建品牌 | /api/admin/brands | POST
+      40 | brand:update | 编辑品牌 | /api/admin/brands/* | PUT
+      41 | brand:delete | 删除品牌 | /api/admin/brands/* | DELETE
+
+[7] 每个角色拿到了多少权限（整体）
+      ORDER_ADMIN | 8 | dashboard:overview, dashboard:trend, order:cancel, order:detail, order:list, order:ship, user:detail, user:list
+      PRODUCT_ADMIN | 18 | brand:create, brand:delete, brand:list, brand:update, category:create, category:delete, category:list, category:update, dashboard:overview, dashboard:trend, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN | 41 | admin:assign-role, admin:create, admin:delete, admin:detail, admin:list, admin:update, brand:create, brand:delete, brand:list, brand:update, category:create, category:delete, category:list, category:update, coupon:create, coupon:delete, coupon:list, dashboard:overview, dashboard:trend, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, permission:list, product:create, product:delete, product:detail, product:list, product:update, role:assign-permission, role:create, role:delete, role:detail, role:list, role:update, user:detail, user:list, user:status
+
+[8] ★ 交叉核对（对着 EXPECT_CROSS 断言；最后一列期望为 0）
+      [PASS] brand_perms_total          实际=4   期望=4
+      [PASS] granted_to_super_admin     实际=4   期望=4
+      [PASS] granted_to_product_admin   实际=4   期望=4
+      [PASS] granted_to_order_admin     实际=0   期望=0
+
+[9] ★ 元数据核对 —— 四条 brand:* 的 path 必须与端点逐字一致
+      [PASS] brand:create   path=/api/admin/brands
+      [PASS] brand:delete   path=/api/admin/brands/*
+      [PASS] brand:list     path=/api/admin/brands
+      [PASS] brand:update   path=/api/admin/brands/*
+
+[10] ★ 残留检查：brand 权限里 path 不指向 /api/admin/ 的条数（期望 0）
+      [PASS] 实际=0 期望=0
+
+[11] ★ 序列与总数校准（显式 id 种子的必备一步）
+      [PASS] max(id)=41  期望=41
+      [PASS] count(*) =41  期望=41
+      ⚠️ max(id) 与 count(*) 必须同值 —— 显式 id 插入后若忘了 setval 序列，
+         下一次业务 INSERT 会拿到 nextval=26 撞上已存在的行（23505）。
+
+==========================================================================
+VERDICT: OK —— 品牌 CRUD 权限已补发 + 幂等（4/4/4/0）
+==========================================================================

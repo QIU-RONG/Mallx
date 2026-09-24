@@ -1,0 +1,99 @@
+==============================================================================
+Day 24 验收 -- L5② 管理端品牌 CRUD（/api/admin/brands）
+target : http://127.0.0.1:8080/api/admin/brands
+==============================================================================
+
+[0] BASELINE (psql)
+  counters: brands=7, product_images=4, product_skus=7, products=5
+  高水位：brands=7 products=5
+  种子品牌快照：1:Apple:1 ; 2:Huawei:1 ; 3:Xiaomi:1 ; 4:Samsung:1 ; 5:Lenovo:1 ; 6:DJI:1 ; 7:无品牌:1
+  demo        code=200 token_len=191
+  op_order    code=200 token_len=397
+  op_product  code=200 token_len=644
+  admin       code=200 token_len=1096
+
+[1] 权限矩阵（★ 全部用【合法载荷】，否则测到的是 @Valid 不是 @PreAuthorize）
+  匿名          POST -> http=401
+  demo(C 端)    POST -> http=403 code=403
+  op_order      POST -> http=403 code=403
+  op_order      GET  -> http=403 code=403
+  op_product    POST -> http=200 code=200 data=15
+
+[2] 新增：字段落库 / 默认值 / trim / 唯一约束 / 校验
+  DB 主夹具行 name|logo|desc|status = FX-BRAND-MAIN|https://mallx.local/fx-main.png|day24 fixture|0
+  不传 status   POST -> code=200 data=16
+  name 带空格   POST -> code=200 入库 name='FX-BRAND-TRIMMED'
+  重名         POST -> code=400 {"code":400,"message":"品牌名称已存在：FX-BRAND-MAIN","data":null}
+  name 空串     POST -> code=400
+  status=2     POST -> code=400
+
+[3] 修改：局部更新 / 重名 / 状态两端口径
+  改名         PUT -> code=200
+  只传 logo    PUT -> code=200
+      before = FX-BRAND-RENAMED|0|https://mallx.local/fx-main.png
+      after  = FX-BRAND-RENAMED|0|https://mallx.local/fx-main-v2.png
+  改成自己同名 PUT -> code=200
+  改成别人的名字（Apple）PUT -> code=400 {"code":400,"message":"品牌名称已存在：Apple","data":null}
+  改不存在 id  PUT -> code=404
+  空串 name    PUT -> code=400
+
+[4] 删除：引用校验（★ 含已软删商品）
+  建夹具商品   POST -> code=200 data=789
+  删『有商品的品牌』-> code=400 {"code":400,"message":"该品牌下有商品，不能删除（可改为停用）","data":null}
+  软删该商品   DELETE -> code=200 is_deleted=True
+  删『只挂着已软删商品』的品牌 -> code=400 {"code":400,"message":"该品牌下有商品，不能删除（可改为停用）","data":null}
+  删『无引用』的品牌 -> code=200
+  删不存在 id  DELETE -> code=404
+
+[5] 清理夹具 + 回基线（先商品子表后主表）
+  高水位以上残留：brands=0 products=0
+  收尾计数 vs 基线：{}
+
+==============================================================================
+PASS #1 基线：brands == 7（03-data.sql 的 7 条种子）
+PASS #2 基线：products 活行 == 5
+PASS #3 基线：分类 11 存在（建夹具商品的前提）
+PASS #4 匿名新增 → 真 HTTP 401
+PASS #5 C 端 token（无 perms）→ 403
+PASS #6 ★ 反向对照：op_order（只有 order:*）POST → 403
+PASS #7 ★ 反向对照：op_order 连 GET（brand:list）都 → 403
+PASS #8 ★ op_product（PRODUCT_ADMIN，有 brand:create）→ 200 且返回 id
+PASS #9 ★ op_product GET /api/admin/brands → 200 且能看到含停用的它
+PASS #10 DB：四个字段与提交逐字一致
+PASS #11 ★ status=0 真的落库为 0（没被 DDL 默认值 1 覆盖）
+PASS #12 不传 status → 走 DDL 默认值：DB status == 1
+PASS #13 ★ name 前后空格被 trim 后入库（Service 显式 trim）
+PASS #14 ★ 重名 → code=400（人话，不是 23505 冒成 500）
+PASS #15 DB：重名的那次没有插进去
+PASS #16 name 空串 → code=400（@NotBlank 在 @Valid 层拦住）
+PASS #17 status=2 → code=400（@Max 拦住；不校验会写进库里当「第三个状态」）
+PASS #18 改名 → code=200
+PASS #19 DB：name 已改为 FX-BRAND-RENAMED
+PASS #20 ★ 局部更新：只传 logo 时 logo 变、name 与 status 一个字不动
+PASS #21 ★ 改成「自己现在的名字」→ 200（查重必须排除自己，否则一改其他字段就误报）
+PASS #22 ★ 改成别人的名字 → code=400（★ 样本必须是【真实存在】的名字，否则测到的是「改成一个没人用的新名字」= 200）
+PASS #23 ★★ 两端口径（前情）：status=0 时 C 端字典里【没有】它
+PASS #24 ★★ 同一时刻管理端字典里【有】它（含停用）—— 与 #23 成对才算证据
+PASS #25 重新启用 → code=200 且 DB status=1
+PASS #26 ★★ C 端字典里【又出现】它 —— 证明 #23 不是「接口坏了/永远看不见」
+PASS #27 改不存在的品牌 → code=404
+PASS #28 传空串 name → code=400（Service 显式挡：@Size 管不了空串）
+PASS #29 在品牌 15 下建一个商品（建立引用）
+PASS #30 DB：该商品的 brand_id 确实指向 15
+PASS #31 ★ 有商品引用 → code=400（不是 500/外键错误）
+PASS #32 DB：品牌仍在（拒绝不是假装的）
+PASS #33 软删商品成功（is_deleted=1，但 fk_product_brand 的引用仍在）
+PASS #34 ★★★ 商品已软删也拒绝删品牌 → code=400（若用 selectCount 会被 @TableLogic 补 is_deleted=0 而漏算 → 放行后撞外键 500）
+PASS #35 前提护栏：夹具商品已软删（否则下面 §收尾的物理删会绕过业务语义）
+PASS #36 夹具商品已物理清除（引用解除）
+PASS #37 无引用的品牌 → 删除成功 code=200
+PASS #38 DB：该品牌行数 == 0（物理删，brands 无 is_deleted 列）
+PASS #39 删不存在的品牌 → code=404
+PASS #40 高水位以上零残留（brands 与 products）
+PASS #41 全库无 FX- 前缀残留（跨表）
+PASS #42 ★ brands 回基线 7 且种子 7 条逐字节不变
+PASS #43 收尾四表计数与基线一致（products 活行也回 5）
+------------------------------------------------------------------------------
+43/43 passed
+★ 满额自校验：FULL_TOTAL = 43 ；实得 43 ；一致
+VERDICT: BRAND-CRUD OK -- 权限矩阵有反向对照、status 两端口径成对断言、局部更新成立、删除引用校验含『已软删商品』

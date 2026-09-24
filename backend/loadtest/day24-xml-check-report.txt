@@ -1,0 +1,135 @@
+==========================================================================
+模块 mall-product / ProductMapper（★ Day 24 主角）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.product.mapper.ProductMapper
+             <select id=countByCategoryId>
+             <select id=countByBrandId>
+             <select id=searchProducts>
+
+  本日新增 statement：
+     ✅ countByBrandId
+
+  Java 声明 3 个 / XML statement 3 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-admin / AdminRbacMapper（Day 23 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.admin.mapper.AdminRbacMapper
+             <select id=selectRoleIdsByAdminId>
+             <select id=selectPermissionIdsByRoleId>
+             <delete id=deleteAdminRolesByAdminId>
+             <delete id=deleteAdminRolesByRoleId>
+             <delete id=deleteRolePermissionsByRoleId>
+             <insert id=insertAdminRoles>
+             <insert id=insertRolePermissions>
+             <select id=countRolesByIds>
+             <select id=countPermissionsByIds>
+             <select id=insertAdminIfAbsent>
+             <select id=insertRoleIfAbsent>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 11 个 / XML statement 11 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-admin / AdminMapper（Day 07 起 + Day 23 那条修复）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.admin.mapper.AdminMapper
+             <select id=selectPermissionCodesByAdminId>
+             <select id=selectRoleCodesByAdminId>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 2 个 / XML statement 2 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-admin / DashboardMapper（Day 22 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.admin.mapper.DashboardMapper
+             <select id=countUsers>
+             <select id=countProducts>
+             <select id=countOrders>
+             <select id=sumPaidAmount>
+             <select id=selectDailyTrend>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 5 个 / XML statement 5 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-marketing / CouponMapper（Day 20 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.marketing.mapper.CouponMapper
+             <update id=increaseReceivedCount>
+             <select id=selectAvailableCoupons>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 2 个 / XML statement 2 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-marketing / UserCouponMapper（Day 21 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.marketing.mapper.UserCouponMapper
+             <insert id=insertIgnore>
+             <select id=selectMyCoupons>
+             <select id=selectForUse>
+             <update id=markUsed>
+             <update id=releaseByOrder>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 5 个 / XML statement 5 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-order（Day 17 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.order.mapper.OrderMapper
+             <select id=selectAddressForOrder>
+             <select id=selectSelectedCartItems>
+             <delete id=deleteSelectedCartItems>
+             <update id=markPaid>
+             <update id=cancelOrder>
+             <select id=selectTimeoutOrderIds>
+             <update id=shipOrder>
+             <update id=confirmReceipt>
+             <select id=selectAdminOrders>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 9 个 / XML statement 9 个
+     ✅ 双向一致
+
+==========================================================================
+模块 mall-inventory（Day 17 回归）
+==========================================================================
+  ✅ WELL_FORMED   namespace=com.mallx.inventory.mapper.InventoryMapper
+             <select id=deductStock>
+             <select id=moveLockedToSold>
+             <select id=releaseLocked>
+             <select id=adjustStock>
+             <select id=selectInventoryPage>
+
+  本日新增 statement：无（回归模块，只做良构与双向核对）
+
+  Java 声明 5 个 / XML statement 5 个
+     ✅ 双向一致
+
+==========================================================================
+小结
+==========================================================================
+  XML 良构              : 8 / 8
+  本日新增 statement    : 1 个，缺失 0 个
+  XML SQL 仍停在 TODO   : 0 条
+  XML SQL 空实现        : 0 条
+  Java 骨架占位         : 0 处（骨架交付时 0 处 → 已填 0 处）
+
+  → ✅ XML 与 Java 两侧占位都已清零，可以进入「起应用 + 跑 e2e」阶段。
+  Java 有 / XML 无      : 0 个 
+  XML 有 / Java 无      : 0 个 
