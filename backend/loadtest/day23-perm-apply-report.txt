@@ -1,0 +1,104 @@
+==========================================================================
+Day 23 权限补发（RBAC：管理员 / 角色 / 权限）—— D:\MallX\backend\sql\13-day23-permissions.sql
+==========================================================================
+SQL 文件 7721 字符 / 161 行
+
+[1] 执行前快照
+      perm_total         = 25
+      perm_admin         = 0
+      perm_role          = 0
+      perm_perm          = 0
+      rp_total           = 48
+      rp_rbac_role1      = 0
+      rp_rbac_role2      = 0
+      rp_rbac_role3      = 0
+      rbac_paths         = NULL
+      perm_max_id        = 25
+
+[2] 第一次执行  rc=0
+      ✅ 执行成功（含文件末尾四段自检 SELECT，输出见下）
+
+      INSERT 0 13
+      INSERT 0 13
+      38
+      26|admin:list|管理员列表|/api/admin/admins|GET
+      27|admin:detail|管理员详情|/api/admin/admins/*|GET
+      28|admin:create|新建管理员|/api/admin/admins|POST
+      29|admin:update|编辑管理员|/api/admin/admins/*|PUT
+      30|admin:delete|删除管理员|/api/admin/admins/*|DELETE
+      31|admin:assign-role|分配管理员角色|/api/admin/admins/*/roles|PUT
+      32|role:list|角色列表|/api/admin/roles|GET
+      33|role:detail|角色详情|/api/admin/roles/*|GET
+      34|role:create|新建角色|/api/admin/roles|POST
+      35|role:update|编辑角色|/api/admin/roles/*|PUT
+      36|role:delete|删除角色|/api/admin/roles/*|DELETE
+      37|role:assign-permission|分配角色权限|/api/admin/roles/*/permissions|PUT
+      38|permission:list|权限字典|/api/admin/permissions|GET
+      SUPER_ADMIN|13|admin:assign-role, admin:create, admin:delete, admin:detail, admin:list, admin:update, permission:list, role:assign-permission, role:create, role:delete, role:detail, role:list, role:update
+      6|6|1|13|0|0
+      38|38
+
+[3] 第一次执行后的变化（before -> after1）
+      perm_admin         0 -> 6
+      perm_max_id        25 -> 38
+      perm_perm          0 -> 1
+      perm_role          0 -> 6
+      perm_total         25 -> 38
+      rbac_paths         NULL -> admin:list=/api/admin/admins ; admin:detail=/api/admin/admins/* ; admin:create=/api/admin/admins ; admin:update=/api/admin/admins/* ; admin:delete=/api/admin/admins/* ; admin:assign-role=/api/admin/admins/*/roles ; role:list=/api/admin/roles ; role:detail=/api/admin/roles/* ; role:create=/api/admin/roles ; role:update=/api/admin/roles/* ; role:delete=/api/admin/roles/* ; role:assign-permission=/api/admin/roles/*/permissions ; permission:list=/api/admin/permissions
+      rp_rbac_role1      0 -> 13
+      rp_total           48 -> 61
+
+[4] 第二次执行（幂等验证）  rc=0
+
+[5] 第二次执行后的变化（after1 -> after2）—— ★ 必须为空
+      ✅ 无任何变化 —— SQL 是幂等的
+
+[6] 权限清单（admin:* / role:* / permission:*）
+      26 | admin:list | 管理员列表 | /api/admin/admins | GET
+      27 | admin:detail | 管理员详情 | /api/admin/admins/* | GET
+      28 | admin:create | 新建管理员 | /api/admin/admins | POST
+      29 | admin:update | 编辑管理员 | /api/admin/admins/* | PUT
+      30 | admin:delete | 删除管理员 | /api/admin/admins/* | DELETE
+      31 | admin:assign-role | 分配管理员角色 | /api/admin/admins/*/roles | PUT
+      32 | role:list | 角色列表 | /api/admin/roles | GET
+      33 | role:detail | 角色详情 | /api/admin/roles/* | GET
+      34 | role:create | 新建角色 | /api/admin/roles | POST
+      35 | role:update | 编辑角色 | /api/admin/roles/* | PUT
+      36 | role:delete | 删除角色 | /api/admin/roles/* | DELETE
+      37 | role:assign-permission | 分配角色权限 | /api/admin/roles/*/permissions | PUT
+      38 | permission:list | 权限字典 | /api/admin/permissions | GET
+      （共 13 行，期望 13）
+
+[7] 每个角色拿到了多少 RBAC 权限（★ 期望只有 SUPER_ADMIN 一行）
+      SUPER_ADMIN | 13 | admin:assign-role, admin:create, admin:delete, admin:detail, admin:list, admin:update, permission:list, role:assign-permission, role:create, role:delete, role:detail, role:list, role:update
+      （共 1 行，期望 1 —— 多出来的行 = 越权通道已开）
+
+[8] ★ 交叉核对（对着 EXPECT_CROSS 断言；role2/role3 期望为 0）
+      [PASS] admin_perms_total          实际=6   期望=6
+      [PASS] role_perms_total           实际=6   期望=6
+      [PASS] perm_perms_total           实际=1   期望=1
+      [PASS] role1_rbac                 实际=13  期望=13
+      [PASS] role2_rbac                 实际=0   期望=0
+      [PASS] role3_rbac                 实际=0   期望=0
+
+[9] ★ 元数据核对（13 条 path 必须逐字指向 /api/admin/**）
+      [PASS] admin:assign-role        path=/api/admin/admins/*/roles
+      [PASS] admin:create             path=/api/admin/admins
+      [PASS] admin:delete             path=/api/admin/admins/*
+      [PASS] admin:detail             path=/api/admin/admins/*
+      [PASS] admin:list               path=/api/admin/admins
+      [PASS] admin:update             path=/api/admin/admins/*
+      [PASS] permission:list          path=/api/admin/permissions
+      [PASS] role:assign-permission   path=/api/admin/roles/*/permissions
+      [PASS] role:create              path=/api/admin/roles
+      [PASS] role:delete              path=/api/admin/roles/*
+      [PASS] role:detail              path=/api/admin/roles/*
+      [PASS] role:list                path=/api/admin/roles
+      [PASS] role:update              path=/api/admin/roles/*
+
+[10] ★ 残留检查：RBAC 权限里 path 不指向 /api/admin/ 的条数（期望 0）
+      [PASS] 实际=0 期望=0
+
+==========================================================================
+VERDICT: OK —— 13 条 RBAC 权限已补发 + 只发超管 + path 对齐 + 幂等
+==========================================================================

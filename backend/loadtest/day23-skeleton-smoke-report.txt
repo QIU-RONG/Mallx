@@ -1,0 +1,73 @@
+==============================================================================
+Day 23 骨架 smoke：权限落地 + 13 端点三态 + roles.status 修复证明 + 参数层
+==============================================================================
+
+[0] 等待应用就绪
+  [OK] 应用已就绪
+    login demo(C端)       -> OK
+    login admin(超管)      -> OK
+    login op_order       -> OK
+    login op_product     -> OK
+
+[A] ★ 13 条 RBAC 权限：落库 + path + 只发超管（反向对照用 op_* 夹具）
+  [PASS] A1 DB: admin:* 权限条数 = 6
+  [PASS] A2 DB: role:* 权限条数 = 6
+  [PASS] A3 DB: permission:* 权限条数 = 1
+  [PASS] A4 DB: 超管(role1) 拿到 13 条（复算 6+6+1）
+  [PASS] A5 ★★ DB: 商品管理员(role2) 拿到 0 条（反向对照 —— 多一条就是越权通道）
+  [PASS] A6 ★★ DB: 订单管理员(role3) 拿到 0 条（反向对照）
+  [PASS] A7 DB: RBAC 权限里 path 未指向 /api/admin/ 的条数 = 0（权限表不说谎）
+  [PASS] A8 匿名 GET /api/admin/roles -> HTTP 401
+  [PASS] A9 ★★ op_product(PRODUCT_ADMIN) 打 /api/admin/roles -> HTTP 403（反向对照）
+  [PASS] A10 ★★ op_order(ORDER_ADMIN) 打 /api/admin/admins -> HTTP 403（反向对照）
+  [PASS] A11 op_product 打 /api/admin/permissions -> HTTP 403
+  [PASS] A12 ★ op_order 打 PUT /api/admin/roles/{id}/permissions -> HTTP 403（自我提权通道已关）
+  [PASS] A13 ★ C 端 token 打管理端 -> HTTP 403（C 端 token 无 perms，hasAuthority 必失败）
+
+[B] ★ 13 个端点是否被路由（超管 token + 合法载荷；骨架期正确长相 200+code=500）
+  [PASS] B1  GET    /api/admin/admins -> HTTP 200 + code 500（骨架占位）
+  [PASS] B2  GET    /api/admin/admins/1 -> HTTP 200 + code 500（骨架占位）
+  [PASS] B3  POST   /api/admin/admins -> HTTP 200 + code 500（骨架占位）
+  [PASS] B4  PUT    /api/admin/admins/1 -> HTTP 200 + code 500（骨架占位）
+  [PASS] B5  DELETE /api/admin/admins/1 -> HTTP 200 + code 500（骨架占位）
+  [PASS] B6  PUT    /api/admin/admins/1/roles -> HTTP 200 + code 500（骨架占位）
+  [PASS] B7  GET    /api/admin/roles -> HTTP 200 + code 500（骨架占位）
+  [PASS] B8  GET    /api/admin/roles/1 -> HTTP 200 + code 500（骨架占位）
+  [PASS] B9  POST   /api/admin/roles -> HTTP 200 + code 500（骨架占位）
+  [PASS] B10 PUT    /api/admin/roles/1 -> HTTP 200 + code 500（骨架占位）
+  [PASS] B11 DELETE /api/admin/roles/1 -> HTTP 200 + code 500（骨架占位）
+  [PASS] B12 PUT    /api/admin/roles/1/permissions -> HTTP 200 + code 500（骨架占位）
+  [PASS] B13 GET    /api/admin/permissions -> HTTP 200 + code 500（骨架占位）
+
+[C] 参数层：@Valid 在入口就把非法载荷挡成 400（★ 尤其是 null 与 [] 的语义分离）
+  [PASS] C1 POST /api/admin/admins 空载荷 {} -> 200 + code 400（@NotBlank）
+  [PASS] C2 POST /api/admin/roles 小写 code -> 200 + code 400（@Pattern，防拼出坏 ROLE_ 前缀）
+  [PASS] C3 ★★ PUT /{id}/roles 省略 roleIds（null）-> 200 + code 400 —— ★ 挡住「前端漏传 = 静默清空角色」
+  [PASS] C4 ★★ PUT /{id}/permissions 省略 permissionIds（null）-> 200 + code 400（同上）
+
+[D] ★★ roles.status 修复证明（停用 role 2 → 权限码应消失）+ 路线① 证据（旧 token 不变）
+    ★ 为什么这组能证明修复：修复前 selectPermissionCodesByAdminId 只判 p.status，
+      停用角色【不挡权限码】⇒ 新 token 也会有 dashboard:overview ⇒ 会是 200+500 而非 403。
+  [PASS] D1 DB: role 2(商品管理员) 初始 status = 1（停用前基线）
+  [PASS] D2 DB: 把 role 2 停用（status 0）执行成功
+  [PASS] D3 停用角色后，op_product 仍能登录（账号 status 未被改，只有角色被停用）
+  [PASS] D4 ★★ 【新 token】打 dashboard/overview -> HTTP 403 —— 停用角色的权限码真的不再下发（这就是那条修复生效的证据）
+  [PASS] D5 ★★ 【旧 token】打同一端点 -> HTTP 200 + code 200（已实现） —— 已签发的 token 里权限快照【不变】，且因该端点已实现，它还能真的跑完
+  [PASS] D6 DB: role 2 的 status 已被恢复成 1（高水位线清理）
+  [PASS] D7 恢复角色后再登录 -> HTTP 200 + code 200（已实现）（权限回来了）
+
+[E] 老链路没被带坏
+  [PASS] E1 Day 22 的 /api/admin/users -> HTTP 200 + code 200（已实现）
+  [PASS] E2 Day 22 的 /api/admin/dashboard/overview -> HTTP 200 + code 200（已实现）
+  [PASS] E3 GET /api/products（公开）-> HTTP 200 + code 200
+  [PASS] E4 demo GET /api/orders（我的订单）-> HTTP 200 + code 200
+  [PASS] E5 Day 22 收口后的 /api/users/me -> HTTP 200 + code 200（已实现）
+
+[F] 协议层三态（404 / 405）仍然正确
+  [PASS] F1 带 token 打不存在的路径 -> HTTP 404（不是 200+500）
+  [PASS] F2 ★ POST /api/admin/permissions（只读端点）-> HTTP 405 —— 「路径在、方法不支持」才是「只读」的准确表达
+
+------------------------------------------------------------------------------
+TOTAL: 44 / 44 通过，0 失败
+VERDICT: OK —— 13 条权限只发超管 + 13 端点已路由 + 参数层生效 + roles.status 修复生效
+------------------------------------------------------------------------------
