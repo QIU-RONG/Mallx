@@ -207,7 +207,11 @@ OrderServiceImpl.createFromCart(userId, dto)                    @Transactional
 9. `rate=0.80` + 总额 100 → 抵扣 **20.00**（不是 80）；
 10. 封顶：面额 300、总额 200 → 抵扣 **200.00**、`pay_amount = 0`（不为负）；
 11. 小数位：总额 33.33、`rate=0.90` → 抵扣 `3.333` → **3.33**（`HALF_UP`）；
-12. `rate=80`（种错的券）→ **400**「折扣率取值必须是 0 到 1 之间」（★ 不许算出负数）；
+12. ★ **`rate=80` 的脏券** → **400**「折扣率取值必须是 0 到 1 之间」（★ 不许算出负数）。
+    ⚠️ 2026-09-24 起（决策 A）**走接口已造不出这种券** —— `CouponCreateDTO` 的
+    `@DecimalMax` 收到 `1.00`，day20 的 I3b 断的就是这个 400。所以本条的靶子
+    **必须用 SQL 直接写库造**（`INSERT INTO coupons …`），这正是两道防线的分工实证：
+    **DTO 挡「配置期的输入错误」，`calcDiscount` 挡「绕过接口写进来的历史/脏数据」**；
 13. 门槛：总额 99.99、`min_amount=100` → **400**（差一分也不能用）。
 
 **D 组 · 归属与状态（IDOR + 反向对照）**
@@ -242,8 +246,27 @@ OrderServiceImpl.createFromCart(userId, dto)                    @Transactional
 23. `day20-coupon-verify.py` → **80 / 80**（阶段一的 6 个端点一个都没被带坏）；
 24. `day19-search-verify.py` → **58 / 58**；`day20-l5-brand-verify.py` → **24 / 24**。
 
-★ 满额断言一律**写死常量**（如 `EXPECTED = 60`），并核对 `PASS + FAIL == EXPECTED`，
+★ 满额断言一律**写死常量**（如 `EXPECTED = 82`），并核对 `PASS + FAIL == EXPECTED`，
 **不许有断言被静默跳过**（Day 20 的规矩）。
+
+---
+
+**★ 已完成的连带回归（2026-09-24，决策 A 落地时实测 —— 不是计划，是结果）**
+
+| 项 | 结果 |
+|---|---|
+| `mvn -o install -DskipTests` | **12 / 12 BUILD SUCCESS** |
+| `day20-coupon-verify.py` | **82 / 82** `VERDICT: OK 全绿`（80 → 82：新增 I3b / I3c） |
+| `day17-m1-regression.py` | **198 / 198** + `BASELINE RESTORED: YES` + `M1 REGRESSION: OK` |
+
+★ 两条新断言实测都 PASS：**I3b**（`rate=1.01` → 400，证明上限**真的**收到了 1.00，
+旧值 `99.99` 会放它过去）与 **I3c**（`rate=1.00` → 200，证明上界是**闭区间**
+—— 写成开区间会把「一分不减」的合法券误判成参数错）。
+
+★ 校准 `EXPECTED` 常量时，脚本自带的护栏**当场报了**
+「断言总数与 EXPECTED 不符 —— 有断言被静默跳过，或 EXPECTED 需要校准！」——
+这正是它该有的表现：**改了断言却不同步常量，第一次跑就被抓住**，
+而不是安静地少验两条。这条护栏（Day 20 立的规矩）本次第一次真正派上用场。
 
 ---
 
