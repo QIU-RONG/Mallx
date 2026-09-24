@@ -1,0 +1,58 @@
+==============================================================================
+Day 22 骨架 smoke：安全收口 + 权限矩阵 + 骨架三态 + L7
+==============================================================================
+
+[0] 等待应用就绪
+  [OK] 应用已就绪
+    login demo(C端)       -> OK
+    login admin(超管)      -> OK
+    login op_order       -> OK
+    login op_product     -> OK
+    DB: min(orders.id)=1  discount_amount=0.00
+
+[A] ★ 安全收口：旧端点必须【从 200 变成 404】（漏洞入口被拆掉）
+  [PASS] A1 匿名 GET /api/users -> HTTP 401（仍然要登录，不是公开）
+  [PASS] A2 demo token GET /api/users -> HTTP 404（★ 从前是 200 + 全站口令哈希）
+  [PASS] A3 demo token GET /api/users/{别人} -> HTTP 404（从前 200）
+  [PASS] A4 demo token PUT /api/users/{别人}/nickname -> HTTP 404（从前 200，能改任何人）
+  [PASS] A5 demo token GET /api/users/me -> HTTP 200 + code 500（骨架占位）
+  [PASS] A6 匿名 GET /api/users/me -> HTTP 401
+  [PASS] A7 demo token PUT /api/users/me/nickname（合法载荷）-> HTTP 200 + code 500（骨架占位）
+
+[B] 管理端用户接口：权限矩阵（非对称形状）+ 骨架三态
+  [PASS] B1 匿名 GET /api/admin/users -> HTTP 401
+  [PASS] B2 ★ C 端 token 打管理端 -> HTTP 403（C 端 token 无 perms，hasAuthority 必失败）
+  [PASS] B3 ★ op_product（无 user:*）-> HTTP 403（★ 反向对照）
+  [PASS] B4 ★ op_order（有 user:list）-> HTTP 200 + code 500（骨架占位）
+  [PASS] B5 admin（超管）-> HTTP 200 + code 500（骨架占位）
+  [PASS] B6 ★ op_order（有 user:detail）-> HTTP 200 + code 500（骨架占位）
+  [PASS] B7 op_product GET /api/admin/users/{id} -> HTTP 403（反向对照）
+  [PASS] B8 ★★ op_order PUT /{id}/status -> HTTP 403（user:status 只给超管，反向对照）
+  [PASS] B9 admin PUT /api/admin/users/{id}/status（合法载荷）-> HTTP 200 + code 500（骨架占位）
+  [PASS] B10 ★ 越界状态值 {status:9} -> HTTP 200 + code 400（@Valid 的 @Max 挡下，不是 200+500）
+  [PASS] B11 空载荷 {} -> HTTP 200 + code 400（@NotNull 挡下）
+
+[C] 仪表盘：权限（三角色全给）+ 骨架三态
+  [PASS] C1 匿名 GET /api/admin/dashboard/overview -> HTTP 401
+  [PASS] C2 admin GET /api/admin/dashboard/overview -> HTTP 200 + code 500（骨架占位）
+  [PASS] C3 op_order GET /api/admin/dashboard/overview -> HTTP 200 + code 500（骨架占位）
+  [PASS] C4 op_product GET /api/admin/dashboard/overview -> HTTP 200 + code 500（骨架占位）
+  [PASS] C5 ★ C 端 token 打仪表盘 -> HTTP 403
+  [PASS] C6 admin GET /api/admin/dashboard/trend?days=7 -> HTTP 200 + code 500（骨架占位）
+
+[D] ★ L7：订单详情/列表必须带出 discountAmount（本日已实现，两个出口都要验）
+  [PASS] D1 C 端订单详情含 discountAmount 键
+  [PASS] D2 详情里的 discountAmount 与 DB 逐字节一致（id=1）
+  [PASS] D3 ★ 恒等式 payAmount = totalAmount - discountAmount（三个数一起断）
+  [PASS] D4 C 端订单列表 records[0] 含 discountAmount 键
+  [PASS] D5 管理端订单详情（走同一个 buildDetail）也含 discountAmount 键
+
+[E] 老链路没被带坏（C 端基础接口仍活着）
+  [PASS] E1 GET /api/products（公开）-> HTTP 200 + code 200
+  [PASS] E2 demo GET /api/orders（我的订单）-> HTTP 200 + code 200
+  [PASS] E3 demo GET /api/cart -> HTTP 200 + code 200
+
+------------------------------------------------------------------------------
+TOTAL: 32 / 32 通过，0 失败
+VERDICT: OK —— 安全收口生效 + 权限矩阵正确 + 骨架三态正常 + L7 落地
+------------------------------------------------------------------------------

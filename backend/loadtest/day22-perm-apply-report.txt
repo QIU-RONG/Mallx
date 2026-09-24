@@ -1,0 +1,78 @@
+==========================================================================
+Day 22 权限补发（用户管理 + 仪表盘）—— D:\MallX\backend\sql\12-day22-permissions.sql
+==========================================================================
+SQL 文件 7787 字符 / 170 行
+
+[1] 执行前快照
+      perm_total         = 25
+      perm_user          = 3
+      perm_dash          = 2
+      rp_total           = 48
+      rp_ud_role1        = 5
+      rp_ud_role2        = 2
+      rp_ud_role3        = 4
+      ud_paths           = user:list=/api/admin/users ; user:detail=/api/admin/users/* ; user:status=/api/admin/users/*/status ; dashboard:overview=/api/admin/dashboard/overview ; dashboard:trend=/api/admin/dashboard/trend
+      perm_max_id        = 25
+
+[2] 第一次执行  rc=0
+      ✅ 执行成功（含文件末尾四段自检 SELECT，输出见下）
+
+      INSERT 0 0
+      UPDATE 0
+      INSERT 0 0
+      INSERT 0 0
+      INSERT 0 0
+      25
+      8|user:list|用户列表|/api/admin/users|GET
+      22|user:detail|用户详情|/api/admin/users/*|GET
+      23|user:status|禁用/启用用户|/api/admin/users/*/status|PUT
+      24|dashboard:overview|仪表盘概览|/api/admin/dashboard/overview|GET
+      25|dashboard:trend|仪表盘趋势|/api/admin/dashboard/trend|GET
+      ORDER_ADMIN|8|dashboard:overview, dashboard:trend, order:cancel, order:detail, order:list, order:ship, user:detail, user:list
+      PRODUCT_ADMIN|15|brand:list, category:create, category:delete, category:list, category:update, dashboard:overview, dashboard:trend, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN|25|brand:list, category:create, category:delete, category:list, category:update, coupon:create, coupon:delete, coupon:list, dashboard:overview, dashboard:trend, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:detail, user:list, user:status
+      3|2|5|2|4|1|0
+      25|25
+
+[3] 第一次执行后的变化（before -> after1）
+      ⚠️ 没有任何变化 —— 可能权限早就补过了，或 SQL 里的 WHERE NOT EXISTS 判错了
+
+[4] 第二次执行（幂等验证）  rc=0
+
+[5] 第二次执行后的变化（after1 -> after2）—— ★ 必须为空
+      ✅ 无任何变化 —— SQL 是幂等的
+
+[6] 权限清单（user:* / dashboard:*）
+      8 | user:list | 用户列表 | /api/admin/users | GET
+      22 | user:detail | 用户详情 | /api/admin/users/* | GET
+      23 | user:status | 禁用/启用用户 | /api/admin/users/*/status | PUT
+      24 | dashboard:overview | 仪表盘概览 | /api/admin/dashboard/overview | GET
+      25 | dashboard:trend | 仪表盘趋势 | /api/admin/dashboard/trend | GET
+
+[7] 每个角色拿到了多少权限（整体）
+      ORDER_ADMIN | 8 | dashboard:overview, dashboard:trend, order:cancel, order:detail, order:list, order:ship, user:detail, user:list
+      PRODUCT_ADMIN | 15 | brand:list, category:create, category:delete, category:list, category:update, dashboard:overview, dashboard:trend, inventory:adjust, inventory:list, inventory:log, product:create, product:delete, product:detail, product:list, product:update
+      SUPER_ADMIN | 25 | brand:list, category:create, category:delete, category:list, category:update, coupon:create, coupon:delete, coupon:list, dashboard:overview, dashboard:trend, inventory:adjust, inventory:list, inventory:log, order:cancel, order:detail, order:list, order:ship, product:create, product:delete, product:detail, product:list, product:update, user:detail, user:list, user:status
+
+[8] ★ 交叉核对（对着 EXPECT_CROSS 断言；role3_user_status 期望为 0）
+      [PASS] user_perms_total           实际=3   期望=3
+      [PASS] dashboard_perms_total      实际=2   期望=2
+      [PASS] role1_user_and_dash        实际=5   期望=5
+      [PASS] role2_user_and_dash        实际=2   期望=2
+      [PASS] role3_user_and_dash        实际=4   期望=4
+      [PASS] role3_user_detail          实际=1   期望=1
+      [PASS] role3_user_status          实际=0   期望=0
+
+[9] ★ 元数据核对（含 user:list 的 path 订正）
+      [PASS] dashboard:overview   path=/api/admin/dashboard/overview
+      [PASS] dashboard:trend      path=/api/admin/dashboard/trend
+      [PASS] user:detail          path=/api/admin/users/*
+      [PASS] user:list            path=/api/admin/users
+      [PASS] user:status          path=/api/admin/users/*/status
+
+[10] ★ 残留检查：user/dashboard 权限里 path 不指向 /api/admin/ 的条数（期望 0）
+      [PASS] 实际=0 期望=0
+
+==========================================================================
+VERDICT: OK —— 用户/仪表盘权限已补发 + user:list path 已订正 + 幂等
+==========================================================================

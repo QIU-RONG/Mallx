@@ -1,0 +1,55 @@
+==============================================================================
+Day 22 安全探针：C 端 /api/users 家族越权 + 口令哈希外泄
+==============================================================================
+
+[0] 等待应用就绪
+  [OK] 应用已就绪
+    login demo(C端)             -> OK
+    login admin(超管)            -> OK
+    login op_order(订单管理员)      -> OK
+    DB: users=2 条；intruder.id=2 nickname=intruder
+
+[A] 匿名访问 —— 期望【真 HTTP 401】（过滤器层拦下，不是 200+code）
+  [PASS] A1 匿名 GET /api/users -> HTTP 401（Security 层真实状态码）
+  [PASS] A2 匿名 GET /api/users/{id} -> HTTP 401
+
+[B] C 端 token 拉全站用户列表 —— 期望【只能看到自己】
+  [FAIL] B1 demo token GET /api/users -> HTTP 200 + code 200（能进）   实测 HTTP 404 code 404
+  [FAIL] B2 ★ 返回【全站 2 个用户】而非只有自己（越权·水平）   实测 0 条；total=None
+  [FAIL] B3 ★ 列表里出现别人的账号 intruder（不是只有 demo）   实际 usernames=[]
+  [FAIL] B4 ★★ 列表每条都带 password 字段（敏感列外泄）   第一条的键=N/A
+  [FAIL] B5 ★★ 泄露的 password 值与 DB 哈希【逐字节相同】   接口=[]  DB='{noop}intruder'
+
+[C] C 端 token 看【别人】的详情 —— 项目设计：非本人应伪装 404
+  [FAIL] C1 demo token GET /api/users/{intruder} -> 拿到 200（设计应为 404）   实测 HTTP 404 code 404
+  [FAIL] C2 ★★ 该响应体含 password 且等于 DB 里 intruder 的哈希   接口=None  DB='{noop}intruder'
+  [FAIL] C3 ★ 「看自己」与「看别人」响应【结构同构】（都含 password，无任何区分）   自己键=[] / 别人键=[]
+
+[D] C 端 token 改【别人】的昵称 —— 写回原值，DB 无痕
+  [FAIL] D1 demo token PUT /api/users/{intruder}/nickname -> 200（能写别人的行）   实测 HTTP 404 code 404 / {"code":404,"message":"接口不存在","data":null}
+  [PASS] D2 DB 值未被改坏（写入的是原值，已还原校验）
+
+[E] 口径对照 —— 这个接口【不是】管理端专属，也没被权限把住
+  [FAIL] E1 ★ op_order（只有 order:list/detail/cancel/ship 四个权限）也能拉全站用户   实测 HTTP 404 code 404 条数=0
+  [FAIL] E2 超管 token 同样 200（说明与权限无关，只与「有没有登录」有关）   实测 HTTP 404 code 404
+  [FAIL] E3 GET /api/admin/users 目前 -> 真 HTTP 404（Day 22 要建的正是它）   实测 HTTP 200 / {"code":500,"message":"fail","data":null}
+  [FAIL] E4 ★ 权限种子里 user:list 的 path = '/api/users'（C 端路径，需与新建的 /api/admin/users 对齐）   实测 path='/api/admin/users' 发给了 role=1,3
+
+------------------------------------------------------------------------------
+TOTAL: 3 / 16 通过，13 失败
+FAILED:
+  - B1 demo token GET /api/users -> HTTP 200 + code 200（能进）
+  - B2 ★ 返回【全站 2 个用户】而非只有自己（越权·水平）
+  - B3 ★ 列表里出现别人的账号 intruder（不是只有 demo）
+  - B4 ★★ 列表每条都带 password 字段（敏感列外泄）
+  - B5 ★★ 泄露的 password 值与 DB 哈希【逐字节相同】
+  - C1 demo token GET /api/users/{intruder} -> 拿到 200（设计应为 404）
+  - C2 ★★ 该响应体含 password 且等于 DB 里 intruder 的哈希
+  - C3 ★ 「看自己」与「看别人」响应【结构同构】（都含 password，无任何区分）
+  - D1 demo token PUT /api/users/{intruder}/nickname -> 200（能写别人的行）
+  - E1 ★ op_order（只有 order:list/detail/cancel/ship 四个权限）也能拉全站用户
+  - E2 超管 token 同样 200（说明与权限无关，只与「有没有登录」有关）
+  - E3 GET /api/admin/users 目前 -> 真 HTTP 404（Day 22 要建的正是它）
+  - E4 ★ 权限种子里 user:list 的 path = '/api/users'（C 端路径，需与新建的 /api/admin/users 对齐）
+VERDICT: MISMATCH —— 与代码级推论不符，需重新定性
+------------------------------------------------------------------------------
