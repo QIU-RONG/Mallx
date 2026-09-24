@@ -4,7 +4,7 @@
 <mapper namespace="com.mallx.admin.mapper.AdminRbacMapper">
 
     <!-- ══════════════════════════════════════════════════════════════════════
-         Day 23 骨架：11 条语句体【留空】，形状与坑写在下面。
+         Day 23：11 条语句（骨架期留空，现已填入）。
 
          XML 五铁律（本项目反复踩过）：
            ① 放 resources/mapper/（已配 mapper-locations: classpath*:mapper/**/*.xml）
@@ -17,97 +17,105 @@
            ⑥ 用 <select> 包 INSERT ... RETURNING 时【必须】写 flushCache="true"，
               否则一级缓存会让同事务内第二次调用根本不发 SQL（本项目已踩过）。
            ⑦ 所有 <foreach> 在空集合下会拼出 IN () / 空 VALUES ⇒ 语法错误。
-              实现侧对空集合必须先判、直接跳过该语句。
+              实现侧对空集合必须先判、直接跳过该语句（已按此实现）。
          ══════════════════════════════════════════════════════════════════════ -->
 
     <!-- selectRoleIdsByAdminId(adminId) -> List<Long>
-         直白一句：SELECT role_id FROM admin_roles WHERE admin_id = #{adminId}
-
-         ★ 用途有两处，别只想到第一处：
-           ① 详情页回显（AdminDetailVO.roleIds）
-           ② 护栏③ 的判据 —— 「清空自己的角色」要能算出来
-              （当前集合 - 目标集合 ... 具体判法见 Service 的 TODO 说明） -->
+         ★ 用途两处：① 详情页回显（AdminDetailVO.roleIds）
+                     ② 护栏③ 的判据（「清空自己的角色」要能算出来）
+         ★ ORDER BY role_id：让「同一份数据」的两次查询顺序一致 ——
+           验收里有「响应逐字节相同」类断言，顺序不定会让它假失败。 -->
     <select id="selectRoleIdsByAdminId" resultType="java.lang.Long">
+        SELECT role_id
+        FROM admin_roles
+        WHERE admin_id = #{adminId}
+        ORDER BY role_id
     </select>
 
     <!-- selectPermissionIdsByRoleId(roleId) -> List<Long>
-         直白一句：SELECT permission_id FROM role_permissions WHERE role_id = #{roleId}
-
          ⚠️ 这是「角色【定义】了哪些权限」，不要与 AdminMapper 那条
             selectPermissionCodesByAdminId（按管理员查、穿两层、按 status 过滤的
-            【生效】集合）混用 —— 判据不同就是两个方法（L2 的教训）。 -->
+            【生效】集合）混用 —— 判据不同就是两个方法（L2 的教训）。
+         ★ 护栏②（超管权限只许增）就靠这条读「现有集合」，必须在 DELETE 之前调用。 -->
     <select id="selectPermissionIdsByRoleId" resultType="java.lang.Long">
+        SELECT permission_id
+        FROM role_permissions
+        WHERE role_id = #{roleId}
+        ORDER BY permission_id
     </select>
 
     <!-- deleteAdminRolesByAdminId(adminId) -> int
-         DELETE FROM admin_roles WHERE admin_id = #{adminId}
-
          ★ 两个调用点：① 分配角色时的「替换前半步」；② 物理删管理员时先清引用
            （admins 无软删列，FK 是 NO ACTION，不清就抛 23503）。 -->
     <delete id="deleteAdminRolesByAdminId">
+        DELETE FROM admin_roles
+        WHERE admin_id = #{adminId}
     </delete>
 
     <!-- deleteAdminRolesByRoleId(roleId) -> int
-         DELETE FROM admin_roles WHERE role_id = #{roleId}
-
-         ★ 只在「删角色」时用：先清掉谁在用这个角色，才能物理删 roles 行。 -->
+         ★ 只在「删角色」时用：先清掉谁在用这个角色，才能物理删 roles 行。
+           与 deleteRolePermissionsByRoleId 是【两张不同的表】，删角色时两条都要发。 -->
     <delete id="deleteAdminRolesByRoleId">
+        DELETE FROM admin_roles
+        WHERE role_id = #{roleId}
     </delete>
 
     <!-- deleteRolePermissionsByRoleId(roleId) -> int
-         DELETE FROM role_permissions WHERE role_id = #{roleId}
-
          ★ 两个调用点：① 分配权限时的「替换前半步」；② 删角色时先清引用。 -->
     <delete id="deleteRolePermissionsByRoleId">
+        DELETE FROM role_permissions
+        WHERE role_id = #{roleId}
     </delete>
 
     <!-- insertAdminRoles(adminId, roleIds) -> int      批量插入，<foreach>
-         INSERT INTO admin_roles (admin_id, role_id) VALUES
-         <foreach collection="roleIds" item="rid" separator=",">
-             (#{adminId}, #{rid})
-         </foreach>
-
          ⚠️ⓐ 空 roleIds ⇒ 拼出「VALUES」后面什么都没有 ⇒ 语法错误。
               实现侧判空：空集合直接【不调用】本方法（空数组的语义是清空，
               此时 DELETE 已经是全部动作）。
-         ⚠️ⓑ 含不存在的 role_id ⇒ FK 抛 23503（现场 500）。调用前必须
+         ⚠️ⓑ 含不存在的 role_id ⇒ FK 抛 23503（现场 500）。调用前已由
               countRolesByIds 预校验并抛 400。
          ★ 不写 ON CONFLICT DO NOTHING：这里是「先 DELETE 再 INSERT」的全量替换，
-           重复 id 属于调用方的错，让它撞复合主键反倒是好事（早暴露）。 -->
+           重复 id 属于调用方的错，让它撞复合主键反倒是好事（早暴露）——
+           实现侧已用 distinct() 去重，重复入参不会走到这里。 -->
     <insert id="insertAdminRoles">
+        INSERT INTO admin_roles (admin_id, role_id) VALUES
+        <foreach collection="roleIds" item="rid" separator=",">
+            (#{adminId}, #{rid})
+        </foreach>
     </insert>
 
     <!-- insertRolePermissions(roleId, permissionIds) -> int    批量插入，<foreach>
          形状与注意事项与 insertAdminRoles 完全同构（换张表而已）。 -->
     <insert id="insertRolePermissions">
+        INSERT INTO role_permissions (role_id, permission_id) VALUES
+        <foreach collection="permissionIds" item="pid" separator=",">
+            (#{roleId}, #{pid})
+        </foreach>
     </insert>
 
     <!-- countRolesByIds(roleIds) -> long
-         SELECT count(*) FROM roles WHERE id IN
-         <foreach collection="roleIds" item="rid" open="(" separator="," close=")">
-             #{rid}
-         </foreach>
-
          ★★ 这是「不靠异常做控制流」的落地：把「传了不存在的 id」在插入【之前】
             查出来 ⇒ 实现侧比较 count 与 size，不等就抛 400，
             而不是让 FK 的 23503 兜底（那会变成 500）。
-         ⚠️ 空集合 ⇒ 拼出 IN () ⇒ 语法错误。实现侧判空跳过。
+         ⚠️ 空集合 ⇒ 拼出 IN () ⇒ 语法错误。实现侧已判空跳过。
          ⚠️ 刻意【不】过滤 status：允许把角色分配给已停用的角色
             （它只是暂时不生效，负责人有权先配好再启用）。 -->
     <select id="countRolesByIds" resultType="long">
+        SELECT count(*) FROM roles WHERE id IN
+        <foreach collection="roleIds" item="rid" open="(" separator="," close=")">
+            #{rid}
+        </foreach>
     </select>
 
     <!-- countPermissionsByIds(permissionIds) -> long
          形状与注意事项与 countRolesByIds 完全同构。 -->
     <select id="countPermissionsByIds" resultType="long">
+        SELECT count(*) FROM permissions WHERE id IN
+        <foreach collection="permissionIds" item="pid" open="(" separator="," close=")">
+            #{pid}
+        </foreach>
     </select>
 
     <!-- insertAdminIfAbsent(Admin) -> Long    ★ <select> 包 INSERT ... RETURNING
-         INSERT INTO admins (username, password, nickname, status, created_at, updated_at)
-         VALUES (#{username}, #{password}, #{nickname}, 1, now(), now())
-         ON CONFLICT (username) DO NOTHING
-         RETURNING id
-
          ★★ 为什么不用 BaseMapper.insert + catch DuplicateKeyException：
             GlobalExceptionHandler 里【没有】DuplicateKeyException 的专用出口 ⇒
             会被兜成「200 + code=500 系统繁忙」。走 ON CONFLICT 就不用动公共层一个字节
@@ -116,20 +124,23 @@
             MyBatis 一级缓存会让同事务内第二次调用【不发 SQL】。
          ★ 返回值语义：拿到 id = 插入成功；NULL = username 撞了 UNIQUE ⇒ 实现侧抛 400。
          ⚠️ password 必须是 PasswordEncoder.encode() 的结果再传进来 ——
-            照抄种子里的 {noop}admin123 等于明文入库。
+            照抄种子里的 {noop}admin123 等于明文入库（实现侧已 encode）。
          ⚠️ status 固定写 1（新账号默认启用）：DTO 里刻意没有 status 字段，
             不让「新建一个已禁用的账号」成为可能。 -->
     <select id="insertAdminIfAbsent" resultType="java.lang.Long" flushCache="true">
+        INSERT INTO admins (username, password, nickname, status, created_at, updated_at)
+        VALUES (#{username}, #{password}, #{nickname}, 1, now(), now())
+        ON CONFLICT (username) DO NOTHING
+        RETURNING id
     </select>
 
     <!-- insertRoleIfAbsent(Role) -> Long      形状与 insertAdminIfAbsent 同构
-         INSERT INTO roles (name, code, description, status, created_at, updated_at)
-         VALUES (#{name}, #{code}, #{description}, 1, now(), now())
-         ON CONFLICT (code) DO NOTHING
-         RETURNING id
-
          ★ NULL = code 撞了 UNIQUE ⇒ 400。status 同样固定 1。 -->
     <select id="insertRoleIfAbsent" resultType="java.lang.Long" flushCache="true">
+        INSERT INTO roles (name, code, description, status, created_at, updated_at)
+        VALUES (#{name}, #{code}, #{description}, 1, now(), now())
+        ON CONFLICT (code) DO NOTHING
+        RETURNING id
     </select>
 
 </mapper>

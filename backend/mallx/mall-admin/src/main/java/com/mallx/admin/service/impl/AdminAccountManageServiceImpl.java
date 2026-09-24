@@ -1,5 +1,7 @@
 package com.mallx.admin.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.mallx.admin.dto.AdminCreateDTO;
@@ -10,9 +12,15 @@ import com.mallx.admin.mapper.AdminRbacMapper;
 import com.mallx.admin.service.AdminAccountManageService;
 import com.mallx.admin.vo.AdminDetailVO;
 import com.mallx.admin.vo.AdminVO;
+import com.mallx.common.api.ResultCode;
+import com.mallx.common.exception.BusinessException;
+import org.springframework.beans.BeanUtils;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -80,7 +88,35 @@ public class AdminAccountManageServiceImpl extends ServiceImpl<AdminMapper, Admi
      */
     @Override
     public Page<AdminVO> pageAdmins(long current, long size, String keyword, Integer status) {
-        throw new UnsupportedOperationException("TODO: AdminAccountManageServiceImpl.pageAdmins");
+        // ★ 夹紧两行必须在 new Page<>(...) 之前 —— size=-1 会撞 MP 的「负数=不限量」。
+        long safePage = Math.max(current, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        LambdaQueryWrapper<Admin> wrapper = new LambdaQueryWrapper<Admin>()
+                // 管理端口径：不写死 status，不传就「启用 + 禁用」都要（同 Day 22 pageUsers）
+                .eq(status != null, Admin::getStatus, status)
+                // ★★ keyword 必须用 .and(...) 包一层括号：直写会拼成
+                //    status=? AND username LIKE ? OR nickname LIKE ? —— AND 优先级高于 OR，
+                //    「已禁用但命中关键字」的行会漏进来（Day 22 pageUsers 同一个坑）。
+                .and(keyword != null && !keyword.isBlank(),
+                        w -> w.like(Admin::getUsername, keyword)
+                                .or().like(Admin::getNickname, keyword))
+                .orderByDesc(Admin::getId);
+
+        Page<Admin> page = this.page(new Page<>(safePage, safeSize), wrapper);
+
+        // ★★ 出口换壳：Admin 实体带 password，绝不能原样返回（Day 22 那个外泄的同款形状）。
+        List<AdminVO> voList = new ArrayList<>();
+        for (Admin a : page.getRecords()) {
+            AdminVO vo = new AdminVO();
+            BeanUtils.copyProperties(a, vo);
+            voList.add(vo);
+        }
+
+        // 换壳：total/current/size 必须搬到新 Page 上，否则前端看到 total=0
+        Page<AdminVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
+        voPage.setRecords(voList);
+        return voPage;
     }
 
     /**
@@ -99,7 +135,16 @@ public class AdminAccountManageServiceImpl extends ServiceImpl<AdminMapper, Admi
      */
     @Override
     public AdminDetailVO getDetail(Long id) {
-        throw new UnsupportedOperationException("TODO: AdminAccountManageServiceImpl.getDetail");
+        Admin admin = this.getById(id);
+        if (admin == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "管理员不存在");
+        }
+        AdminDetailVO vo = new AdminDetailVO();
+        BeanUtils.copyProperties(admin, vo);
+        // 角色 id：关联表直查；角色码：复用既有 SQL（AdminMapper，不新写 —— 少一处漂移面）
+        vo.setRoleIds(adminRbacMapper.selectRoleIdsByAdminId(id));
+        vo.setRoleCodes(this.baseMapper.selectRoleCodesByAdminId(id));
+        return vo;
     }
 
     /**
@@ -121,7 +166,22 @@ public class AdminAccountManageServiceImpl extends ServiceImpl<AdminMapper, Admi
      */
     @Override
     public Long create(AdminCreateDTO dto) {
-        throw new UnsupportedOperationException("TODO: AdminAccountManageServiceImpl.create");
+        Admin admin = new Admin();
+        admin.setUsername(dto.getUsername());
+        // ★ 必须 encode：照抄种子里的 {noop}admin123 等于明文入库。
+        //   同一个 Bean 与 AdminAuthController 登录时的 matches 配成一套算法。
+        admin.setPassword(passwordEncoder.encode(dto.getPassword()));
+        admin.setNickname(dto.getNickname());
+        // ⚠️ status 不设：XML 里固定写 1 —— 不让「新建一个已禁用的账号」存在。
+
+        // ★ ON CONFLICT (username) DO NOTHING RETURNING id ⇒ 返回 null = 用户名已被占用。
+        //   不 catch DuplicateKeyException：GlobalExceptionHandler 没有它的出口，会被兜成 500。
+        Long newId = adminRbacMapper.insertAdminIfAbsent(admin);
+        if (newId == null) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "用户名已存在");
+        }
+        // 不加 @Transactional：单条 INSERT 自身即原子，且不写关联表（新管理员默认无角色）。
+        return newId;
     }
 
     /**
@@ -151,7 +211,29 @@ public class AdminAccountManageServiceImpl extends ServiceImpl<AdminMapper, Admi
      */
     @Override
     public void update(Long id, AdminUpdateDTO dto, Long currentAdminId) {
-        throw new UnsupportedOperationException("TODO: AdminAccountManageServiceImpl.update");
+        // ① 一次没有任何意图的请求 ⇒ 400（宁可显式拒绝，也不发一条空 UPDATE）
+        if (dto.getNickname() == null && dto.getStatus() == null) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "没有需要修改的字段");
+        }
+        // ② ★ 护栏③：不许停用自己。
+        //    ⚠️ 判 id.equals(currentAdminId) 而不是 ==：Long 是包装类型，
+        //    在缓存区间 [-128,127] 之外 == 比较的是引用 ⇒ 会「错得安静」。
+        if (dto.getStatus() != null && dto.getStatus() == 0 && id.equals(currentAdminId)) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "不能停用当前登录账号");
+        }
+        // ③ 条件更新一句到底：.set(条件, ...) 把「字段可选地更新」表达在同一句 SQL 里，
+        //    比「先读出来改字段再整体 update」少一次往返，也不会覆盖并发写。
+        //    ⚠️ 手写 UpdateWrapper 不走自动填充器 ⇒ 显式补 updated_at。
+        int rows = this.baseMapper.update(null, new LambdaUpdateWrapper<Admin>()
+                .eq(Admin::getId, id)
+                .set(dto.getNickname() != null, Admin::getNickname, dto.getNickname())
+                .set(dto.getStatus() != null, Admin::getStatus, dto.getStatus())
+                .set(Admin::getUpdatedAt, LocalDateTime.now()));
+
+        // ④ ★ 影响行数即答案：0 行 = 该 id 不存在 ⇒ 404
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "管理员不存在");
+        }
     }
 
     /**
@@ -173,8 +255,21 @@ public class AdminAccountManageServiceImpl extends ServiceImpl<AdminMapper, Admi
      * 但那就多一次往返；沿用「影响行数即答案」即可。
      */
     @Override
+    @Transactional
     public void delete(Long id, Long currentAdminId) {
-        throw new UnsupportedOperationException("TODO: AdminAccountManageServiceImpl.delete");
+        // ★ 护栏③：不许删自己 —— 必须在任何 delete 之前（否则先清完关联行才报错）
+        if (id.equals(currentAdminId)) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "不能删除当前登录账号");
+        }
+        // 先清引用：FK 是 NO ACTION，不清就是 23503（现场 500）
+        adminRbacMapper.deleteAdminRolesByAdminId(id);
+
+        int rows = this.baseMapper.deleteById(id);
+        // ★ 影响行数即答案：0 行 = 该 id 不存在 ⇒ 404。
+        //    ⚠️ 此时上一步的 deleteAdminRoles 已经白删了 0 行 —— 同事务一起回滚，无残留。
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "管理员不存在");
+        }
     }
 
     /**
@@ -200,7 +295,31 @@ public class AdminAccountManageServiceImpl extends ServiceImpl<AdminMapper, Admi
      * </ol>
      */
     @Override
+    @Transactional
     public void assignRoles(Long id, List<Long> roleIds, Long currentAdminId) {
-        throw new UnsupportedOperationException("TODO: AdminAccountManageServiceImpl.assignRoles");
+        // 去重：count(*) 对 IN (1,1) 只算 1 行，不去重会把「传了重复 id」误报成
+        // 「含不存在的角色 id」（报错信息与事实不符）。顺序无关，故 distinct 即可。
+        List<Long> target = (roleIds == null) ? new ArrayList<>() : roleIds.stream().distinct().toList();
+
+        // ★ 护栏③：不许清空自己的角色。只拦「清空」—— 给自己换成另一个角色是合法操作。
+        if (id.equals(currentAdminId) && target.isEmpty()) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "不能清空当前登录账号的角色");
+        }
+        // 判管理员存在（这一步是「读」，不构成 TOCTOU：后面写的是关联表，
+        // 而 admins 行的存在性由 FK 保证 —— 真被并发删了，INSERT 会撞 23503，不会静默写坏）。
+        if (this.getById(id) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "管理员不存在");
+        }
+        // 预校验角色 id：空集合必须跳过（<foreach> 会拼出 IN () ⇒ 语法错）。
+        // ★ 这是「不靠异常做控制流」——不让 FK 的 23503 兜底变成 500。
+        if (!target.isEmpty() && adminRbacMapper.countRolesByIds(target) != target.size()) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "含不存在的角色 id");
+        }
+
+        // 全量替换：先清后插，两条语句必须同事务（中间有一瞬「无角色」的窗口）
+        adminRbacMapper.deleteAdminRolesByAdminId(id);
+        if (!target.isEmpty()) {
+            adminRbacMapper.insertAdminRoles(id, target);
+        }
     }
 }

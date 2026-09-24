@@ -1,12 +1,15 @@
 package com.mallx.admin.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.spring.service.impl.ServiceImpl;
 import com.mallx.admin.entity.Permission;
 import com.mallx.admin.mapper.PermissionMapper;
 import com.mallx.admin.service.PermissionQueryService;
 import com.mallx.admin.vo.PermissionVO;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -45,6 +48,25 @@ public class PermissionQueryServiceImpl extends ServiceImpl<PermissionMapper, Pe
      */
     @Override
     public List<PermissionVO> list(String type, String keyword) {
-        throw new UnsupportedOperationException("TODO: PermissionQueryServiceImpl.list");
+        LambdaQueryWrapper<Permission> wrapper = new LambdaQueryWrapper<Permission>()
+                .eq(type != null && !type.isBlank(), Permission::getType, type)
+                // ★ 包括号：现在只有 type 一个兄弟条件、括不括号结果一样，但一旦加第二个
+                //   过滤条件，漏括号就是 status=? AND name LIKE ? OR code LIKE ? 那个老坑。
+                .and(keyword != null && !keyword.isBlank(),
+                        w -> w.like(Permission::getName, keyword)
+                                .or().like(Permission::getCode, keyword))
+                .orderByAsc(Permission::getId);
+
+        // ★ 刻意不分页：字典式接口（同 GET /api/admin/brands 的形状）。
+        //   代价是「全量返回」，对应验收 F 组「列表长度 == 全表行数」那条断言；
+        //   若将来权限过千要改回分页，同步改断言。
+        List<PermissionVO> voList = new ArrayList<>();
+        for (Permission p : this.list(wrapper)) {
+            PermissionVO vo = new PermissionVO();
+            BeanUtils.copyProperties(p, vo);
+            voList.add(vo);
+        }
+        // ★ 不过滤 status：停用的权限也要返回（管理端要能看见它，同 RoleVO 的理由）
+        return voList;
     }
 }
