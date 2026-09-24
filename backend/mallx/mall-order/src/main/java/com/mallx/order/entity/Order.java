@@ -44,8 +44,25 @@ public class Order {
     /** 商品总额 */
     private BigDecimal totalAmount;
 
-    /** 实付金额（V1.0 无优惠，= totalAmount） */
+    /**
+     * 实付金额。★ 恒等式：{@code payAmount = totalAmount - discountAmount}。
+     * Day 12 建这列时注释写的是「V1.0 无优惠，= totalAmount」；
+     * Day 21（优惠券阶段二）之后它才可能小于 {@code totalAmount}。
+     */
     private BigDecimal payAmount;
+
+    /**
+     * 优惠额快照（列 {@code NUMERIC(12,2) NOT NULL DEFAULT 0}）—— Day 21 新增。
+     *
+     * <p>★ 不用券时是 <b>0，不是 null</b>：要区分「没用券」与「用了 0 元券」，
+     * 这一列就必须在场。三列一起满足 {@code pay = total - discount}。
+     *
+     * <p>⚠️ 本列由 {@code backend/sql/11-order-discount.sql} 补上。
+     * 漏跑补丁而实体已经有这个字段时，MP 生成的显式列清单会带上
+     * {@code discount_amount} → 直接报「列不存在」（不是静默忽略）。
+     * ★ 也就是说：<b>必须先落 DDL，再起应用</b>。
+     */
+    private BigDecimal discountAmount;
 
     /** 订单状态，取值见 {@link com.mallx.order.common.OrderStatus}（列无 CHECK 约束，全靠代码自觉） */
     private String status;

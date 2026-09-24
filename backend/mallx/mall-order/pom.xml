@@ -26,5 +26,20 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-inventory</artifactId>
         </dependency>
+
+        <!-- Day 21（优惠券阶段二）：下单要算抵扣 + 核销券 → 跨模块调用
+             mall-marketing 的 CouponService。
+             ★ 这是本工程【第 3 条】跨模块边，方向仍是从「业务模块」指向「被业务模块」：
+                 order → inventory   （Day 12：扣库存）
+                 order → marketing   （Day 21：算抵扣 + 核销 / 退券）
+             ★★ 好消息：父 POM 的两处（<modules> 与 <dependencyManagement>）
+                在 Day 20 建 mall-marketing 模块时就已经配好，
+                所以【只改这一处】即可 —— 不适用「新建模块要改 3 处 POM」那条。
+             ★ 反向无环：mall-marketing 只依赖 mall-common，不依赖 mall-order，
+                所以不会出现「订单依赖营销、营销又依赖订单」的循环。 -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-marketing</artifactId>
+        </dependency>
     </dependencies>
 </project>
