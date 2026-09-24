@@ -42,8 +42,15 @@ CONTAINER = "mallx-postgres"
 
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
-# OrderDetailVO 的 14 个字段（= 出参白名单，★ 刻意不含 userId）
-DETAIL_FIELDS = ["id", "orderNo", "totalAmount", "payAmount", "status",
+# OrderDetailVO 的 15 个字段（= 出参白名单，★ 刻意不含 userId）
+# ★ 2026-09-24（Day 22 · L7）：14 → 15，新增 discountAmount。
+#   这里修掉的是一处【回归盲区】：本脚本不在 day17-m1-regression.py 的名单里
+#   （M1 只跑 day14/15/16 三个 E2E），所以给 OrderDetailVO 加字段时，
+#   **没有任何自动回归会因为我漏改这个常量而报警**。
+#   ⇒ 通用教训：改动出参 VO 的字段集后，必须 grep 全项目找「键集合相等」式断言
+#     （`set(...keys()) ==`）并逐个同步。这类断言是【双向】的 ——
+#     少一个字段 FAIL，多一个字段同样 FAIL（它验的是「白名单」而不是「至少包含」）。
+DETAIL_FIELDS = ["id", "orderNo", "totalAmount", "payAmount", "discountAmount", "status",
                  "receiverName", "receiverPhone", "receiverAddress",
                  "createdAt", "paidAt", "shippedAt", "completedAt", "cancelledAt", "items"]
 # 订单头里【允许为 null】的字段（未流转的节点；不做假默认值）
@@ -142,12 +149,14 @@ say("")
 
 # ============ 1. DB 基线 ============
 head = {}
-for r in psql("SELECT id, order_no, user_id, total_amount, pay_amount, status, receiver_name, "
+for r in psql("SELECT id, order_no, user_id, total_amount, pay_amount, discount_amount, status, "
+              "receiver_name, "
               "receiver_phone, receiver_address, created_at, paid_at, shipped_at, completed_at, "
               "cancelled_at FROM orders ORDER BY id;"):
     f = r.split("|")
     head[int(f[0])] = dict(zip(
-        ["id", "orderNo", "userId", "totalAmount", "payAmount", "status", "receiverName",
+        ["id", "orderNo", "userId", "totalAmount", "payAmount", "discountAmount", "status",
+         "receiverName",
          "receiverPhone", "receiverAddress", "createdAt", "paidAt", "shippedAt",
          "completedAt", "cancelledAt"], f))
 
@@ -263,7 +272,12 @@ for oid in sample_ids:
             continue
         if ts(d.get(api_k)) != ts(db[db_k]):
             val_bad.append("id=%s %s %r != %r" % (oid, api_k, d.get(api_k), db[db_k]))
-    for k in ("totalAmount", "payAmount"):
+    # ★ Day 22 · L7：discountAmount 也纳入逐字段对账 —— 给 VO 加了字段就【必须】加对账，
+    #   否则「字段存在但值恒为 null/0」这类错没有任何断言看得见。
+    #   本日实测踩过：VO 有字段、setter 漏写（并发 Edit 丢写）⇒ 接口返回
+    #   discountAmount=null，而上面那条「键集合相等」断言照样 PASS。
+    #   ⇒ 键集合断言证明的是「字段在不在」，数值对账证明的才是「值对不对」。
+    for k in ("totalAmount", "payAmount", "discountAmount"):
         try:
             if abs(float(d.get(k)) - float(db[k])) > 0.001:
                 val_bad.append("id=%s %s %s != %s" % (oid, k, d.get(k), db[k]))

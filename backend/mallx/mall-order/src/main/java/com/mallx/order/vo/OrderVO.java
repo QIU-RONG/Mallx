@@ -22,6 +22,12 @@ public class OrderVO {
 
     private BigDecimal payAmount;
 
+    /**
+     * 优惠额快照（L7，Day 22 补）。理由与恒等式见 {@code OrderDetailVO#discountAmount}。
+     * <p>★ 列表页也需要它：用户看到「实付 80」时最常问的就是「我那张券用在哪了」。
+     */
+    private BigDecimal discountAmount;
+
     private String status;
 
     private String receiverName;

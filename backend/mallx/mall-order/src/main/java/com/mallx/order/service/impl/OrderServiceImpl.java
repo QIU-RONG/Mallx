@@ -641,6 +641,9 @@ public class OrderServiceImpl implements OrderService {
         vo.setOrderNo(order.getOrderNo());
         vo.setTotalAmount(order.getTotalAmount());
         vo.setPayAmount(order.getPayAmount());
+        // L7（Day 22 补）：详情页要能看到「省了多少」。
+        // ★ detail 与 detailByAdmin 共用本方法 ⇒ 一处改，C 端与管理端两个入口同时受益。
+        vo.setDiscountAmount(order.getDiscountAmount());
         vo.setStatus(order.getStatus());
         vo.setReceiverName(order.getReceiverName());
         vo.setReceiverPhone(order.getReceiverPhone());
@@ -686,6 +689,8 @@ public class OrderServiceImpl implements OrderService {
         vo.setOrderNo(o.getOrderNo());
         vo.setTotalAmount(o.getTotalAmount());
         vo.setPayAmount(o.getPayAmount());
+        // L7（Day 22 补）：列表页同样要看得见优惠额。
+        vo.setDiscountAmount(o.getDiscountAmount());
         vo.setStatus(o.getStatus());
         vo.setReceiverName(o.getReceiverName());
         vo.setReceiverPhone(o.getReceiverPhone());
