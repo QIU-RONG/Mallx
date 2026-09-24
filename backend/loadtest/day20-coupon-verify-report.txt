@@ -48,7 +48,7 @@ D ★★ 领券核心：占名额 → 发到手（同一事务）+ 重复领回�
   [PASS] D1 demo 领取 → HTTP 200 + code=200
   [PASS] D2 ★ DB 核对：received_count 恰好 +1（0 → 1）
   [PASS] D3 ★ DB 核对：user_coupons 恰好 +1 行（0 → 1）
-  [PASS] D4 ★ DB 核对：新行 user_id=1 / coupon_id=108 / status='UNUSED'
+  [PASS] D4 ★ DB 核对：新行 user_id=1 / coupon_id=341 / status='UNUSED'
   [PASS] D5 ★ DB 核对：received_at 已写入（XML 的 INSERT 不走填充器，必须在 SQL 里手写 CURRENT_TIMESTAMP）
   [PASS] D6 ★ 同一人再领一次 → code=400（一人一券，靠 ON CONFLICT 影响行数判定）
   [PASS] D7 ★★ DB 核对：重复领【没能】再加名额（received_count 仍 1）—— 这是『INSERT 撞唯一约束→抛异常→整个事务回滚』的直接证据
@@ -85,7 +85,7 @@ G ★ 我的券：归属隔离（IDOR）+ 惰性过期（expired 是算出来的
   [PASS] G0 intruder 登录成功（★★ IDOR 对照的前提 —— 若它拿不到 token，请求会退化成匿名、G4 的『无交集』会因为两边都空而【假绿】）
   [PASS] G1 demo GET /api/coupons/my → code=200
   [PASS] G2 ★ DB 对账：条数 == DB 里 demo 的领取记录数（1）
-  [PASS] G3 ★ demo 的券里含刚领的那张（couponId=108）
+  [PASS] G3 ★ demo 的券里含刚领的那张（couponId=341）
   [PASS] G4 ★★ IDOR：intruder 的『我的券』里不含 demo 的任何领取记录（id 集合无交集）
   [PASS] G5 ★ IDOR 对账：intruder 的条数 == DB 里 intruder 的记录数（0）
   [PASS] G6 ★ 过期券在『我的券』里 expired == true（由 SQL 现算 c.end_time < CURRENT_TIMESTAMP）
@@ -105,7 +105,7 @@ H ★ 权限矩阵：coupon:* 只发给超管 ⇒ C 端与两个业务管理员�
   [PASS] H POST [coupon:create] demo(C端) → HTTP 403
   [PASS] H POST [coupon:create] op_order → HTTP 403
   [PASS] H POST [coupon:create] op_product → HTTP 403
-    DELETE /api/admin/coupons/114       [coupon:delete]
+    DELETE /api/admin/coupons/347       [coupon:delete]
   [PASS] H DELETE [coupon:delete] 匿名 → HTTP 401
   [PASS] H DELETE [coupon:delete] demo(C端) → HTTP 403
   [PASS] H DELETE [coupon:delete] op_order → HTTP 403
@@ -113,20 +113,22 @@ H ★ 权限矩阵：coupon:* 只发给超管 ⇒ C 端与两个业务管理员�
   [PASS] H13 超管删『无人领取』的券 → code=200（守卫不该拦它）
   [PASS] H14 DB 核对：该券已从 coupons 物理删除
   [PASS] H15 ★★ 删【已被领取过】的券 → code=400（守卫把外键异常翻译成人话，而不是 500）
-  [PASS] H16 DB 核对：被拒删的券仍在（id=108 还在）
+  [PASS] H16 DB 核对：被拒删的券仍在（id=341 还在）
 
 --------------------------------------------------------------------------
 I 健壮性：类型关系校验 / total_count=0 / 分页夹紧
 --------------------------------------------------------------------------
   [PASS] I1 ★ FIXED 券缺 discount_amount → code=400（参数层 @Valid 表达不了的关系校验）
   [PASS] I2 ★ DISCOUNT 券缺 discount_rate → code=400
-  [PASS] I3 DISCOUNT 券带 discount_rate → code=200（上一条不是『一律拒绝』）
+  [PASS] I3 DISCOUNT 券带 discount_rate=0.88（应付比例系数，= 8.8 折）→ code=200（上一条不是『一律拒绝』）
+  [PASS] I3b ★ rate=1.01 → code=400（@DecimalMax 收到 1.00；旧上限 99.99 会放它过去，然后这张券『建得出来、永远用不了』）
+  [PASS] I3c ★ rate=1.00 → code=200（上边界是闭区间；(0,1] 里的 1.00 是「一分不减」的合法券，不是参数错 —— 别把上界写成开区间）
   [PASS] I4 total_count=0 的券建得出来 → code=200（先占位后放量是合法业务）
   [PASS] I5 但谁都领不到 → code=400（守卫 received_count < total_count 即 0 < 0 为假）
   [PASS] I6 券名为空 → code=400（@NotBlank 在参数层挡住）
   [PASS] I7 券类型 CASH（不在 FIXED|DISCOUNT 内）→ code=400（@Pattern；列没有 CHECK 约束，取值只能靠应用层守）
-  [PASS] I8 造数生效：coupons 从 10 增到 115（样本量 > 上限 100，夹紧才验得出来）
-  [PASS] I9 ★ size=999 → records 恰好 100 条（夹紧公式 min(max(size,1),100) 生效；未夹紧会返回全部 115 条，一次拖走整张表）
+  [PASS] I8 造数生效：coupons 从 11 增到 116（样本量 > 上限 100，夹紧才验得出来）
+  [PASS] I9 ★ size=999 → records 恰好 100 条（夹紧公式 min(max(size,1),100) 生效；未夹紧会返回全部 116 条，一次拖走整张表）
   [PASS] I10 size=1000 时 total == DB 里可领券的真实张数（夹紧不改过滤口径）
   [PASS] I11 size=0 → records 恰好 1 条（负数/零被夹到【下限 1】，未夹紧时 MP 会返回空列表 —— 不报错但分页器坏了）
 
@@ -139,7 +141,7 @@ J 高水位线清理（★ 按 FK 引用顺序：先 user_coupons，再 coupons 
   [PASS] J4 无残留临时标识（券 0 张 / 用户 0 个）
 
 ==========================================================================
-TOTAL: PASS=80  FAIL=0   （期望断言数 80）
+TOTAL: PASS=82  FAIL=0   （期望断言数 82）
 VERDICT: OK 全绿
 ==========================================================================
 下一步（K 链路）：python day17-m1-regression.py  —— 期望 198/198 + BASELINE RESTORED

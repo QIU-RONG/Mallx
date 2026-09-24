@@ -58,7 +58,10 @@ BULK_N = 105                       # 夹紧断言的样本量（必须 > 100 才
 GRANT_LIMIT = 2                    # E 段：限量 2 张，4 个人抢 —— 写死常量
 GRANT_USERS = 4
 
-EXPECTED = 80                      # 满额断言条数（★ 首次跑后按报告 TOTAL 行校准）
+# 满额断言条数（★ 首次跑后按报告 TOTAL 行校准）
+# 2026-09-24：80 → 82 —— 决策 A 把 discount_rate 口径统一为「应付比例系数 (0,1]」，
+#   新增 I3b（rate=1.01 → 400）/ I3c（rate=1.00 → 200）两条边界断言。
+EXPECTED = 82
 
 _opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 LINES = []
@@ -702,9 +705,25 @@ check("I2 ★ DISCOUNT 券缺 discount_rate → code=400", code_of(j) == 400,
       "HTTP %s code %s / %s" % (st, code_of(j), raw[:160]))
 
 i_ok, _r, c = create_coupon(name=CP_PREFIX + "RATEOK", type_="DISCOUNT", amount=None,
-                            rate=88.0, total=10)
-check("I3 DISCOUNT 券带 discount_rate → code=200（上一条不是『一律拒绝』）", c == 200,
-      "实际 code=%s" % c)
+                            rate=0.88, total=10)
+check("I3 DISCOUNT 券带 discount_rate=0.88（应付比例系数，= 8.8 折）→ code=200"
+      "（上一条不是『一律拒绝』）", c == 200, "实际 code=%s" % c)
+
+# ★★ 2026-09-24 口径统一（决策 A）：discount_rate = 应付比例系数，取值 (0,1]。
+#    下面两条是「改了校验上限就必须留证据」的断言 —— 否则 99.99 → 1.00 这个改动
+#    没有任何东西覆盖，等于把同一个漂移换个方向再犯一次（旧的口径漂移见
+#    CouponCreateDTO 类注释）。
+st, j, raw = api("POST", "/api/admin/coupons", token=ADMIN_TOKEN,
+                 body=coupon_body(CP_PREFIX + "RATEHI", type_="DISCOUNT",
+                                  amount=None, rate=1.01, total=10))
+check("I3b ★ rate=1.01 → code=400（@DecimalMax 收到 1.00；旧上限 99.99 会放它过去，"
+      "然后这张券『建得出来、永远用不了』）", code_of(j) == 400,
+      "HTTP %s code %s / %s" % (st, code_of(j), raw[:160]))
+
+i_r1, _r, c = create_coupon(name=CP_PREFIX + "RATE1", type_="DISCOUNT",
+                            amount=None, rate=1.00, total=10)
+check("I3c ★ rate=1.00 → code=200（上边界是闭区间；(0,1] 里的 1.00 是「一分不减」的"
+      "合法券，不是参数错 —— 别把上界写成开区间）", c == 200, "实际 code=%s" % c)
 
 i_zero, _r, c = create_coupon(name=CP_PREFIX + "ZERO", total=0)
 check("I4 total_count=0 的券建得出来 → code=200（先占位后放量是合法业务）", c == 200,
