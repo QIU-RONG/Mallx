@@ -18,9 +18,9 @@
   ✅ WELL_FORMED   namespace=com.mallx.marketing.mapper.UserCouponMapper
              <insert id=insertIgnore>
              <select id=selectMyCoupons>
-     ❌ 空实现 <select id=selectForUse>
-     ❌ 空实现 <update id=markUsed>
-     ❌ 空实现 <update id=releaseByOrder>
+             <select id=selectForUse>
+             <update id=markUsed>
+             <update id=releaseByOrder>
 
   本日新增 statement：
      ✅ insertIgnore
@@ -81,18 +81,9 @@
   XML 良构              : 5 / 5
   本日新增 statement    : 4 个，缺失 0 个
   XML SQL 仍停在 TODO   : 0 条
-  XML SQL 空实现        : 3 条
-      · mall-marketing / UserCouponMapper（★ Day 20 主角）#selectForUse  ← 语句体=空（只剩空白）
-      · mall-marketing / UserCouponMapper（★ Day 20 主角）#markUsed  ← 语句体=空（只剩空白）
-      · mall-marketing / UserCouponMapper（★ Day 20 主角）#releaseByOrder  ← 语句体=空（只剩空白）
-  Java 骨架占位         : 3 处（骨架交付时 11 处 → 已填 8 处）
-      · CouponServiceImpl.java:423
-      · CouponServiceImpl.java:455
-      · CouponServiceImpl.java:482
+  XML SQL 空实现        : 0 条
+  Java 骨架占位         : 0 处（骨架交付时 11 处 → 已填 11 处）
 
-  → 骨架期正常。XML 0 条 TODO + 3 条空实现 + Java 3 处 都填完后，本栏合计应为 0，
-    那时才能进「起应用 + 跑 e2e」。只要非 0，被路由到的端点必然 500。
-    ⚠️ 「空实现」是比 TODO 更隐蔽的中间态：删了 TODO 文本、SQL 还没写。
-       编译过、启动过，被调用才炸 —— 靠人工看注释是发现不了的。
+  → ✅ XML 与 Java 两侧占位都已清零，可以进入「起应用 + 跑 e2e」阶段。
   Java 有 / XML 无      : 0 个 
   XML 有 / Java 无      : 0 个 
