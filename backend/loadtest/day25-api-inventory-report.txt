@@ -1,0 +1,53 @@
+==============================================================================
+MallX API 总览生成 —— 源码解析 + 运行时 OpenAPI 交叉核对
+==============================================================================
+
+[1] SecurityConfig 白名单（解析出 11 条 requestMatchers 规则）
+      ANY  /api/auth/login
+      ANY  /api/auth/admin/login
+      ANY  /api/hello
+      ANY  /error
+      ANY  /v3/api-docs/**
+      ANY  /swagger-ui/**
+      ANY  /swagger-ui.html
+      GET  /api/products/**
+      GET  /api/categories/**
+      GET  /api/coupons
+      GET  /api/brands
+
+[2] 源码解析：77 个端点
+[3] 运行时 openapi.json：77 个 operation（57 条 path）
+
+[4] 一致性核对（集合相等是硬要求）
+      只在源码里 : 0 
+      只在 OpenAPI: 0 
+      => MATCH（两来源集合完全相等）
+
+[5] 鉴权档位统计
+      公开 10 / 仅登录 26 / 权限码 41   合计 77
+      用到的权限码 41 个：admin:assign-role admin:create admin:delete admin:detail admin:list admin:update brand:create brand:delete brand:list brand:update category:create category:delete category:list category:update coupon:create coupon:delete coupon:list dashboard:overview dashboard:trend inventory:adjust inventory:list inventory:log order:cancel order:detail order:list order:ship permission:list product:create product:delete product:detail product:list product:update role:assign-permission role:create role:delete role:detail role:list role:update user:detail user:list user:status
+
+[5b] 权限码 ↔ 数据库 交叉核对（源码 @PreAuthorize vs permissions / role_permissions）
+      permissions 表内权限码总数 : 41
+      源码用到但库里【没有】的码 : 0 []
+      库里有但【没有角色持有】的码: 0 []
+      => OK
+
+[5c] 口径偏离清单（不是错误，是待统一的写法）
+      带权限码但不在 /api/admin/ 下：POST /api/orders/{id}/ship  code=order:ship
+
+[6] 交付文档 -> D:\MallX\docs\api\API-总览.md（185 行 / 17214 字符）
+
+==============================================================================
+  [OK] 两来源端点集合完全相等（源码 vs 运行时 OpenAPI）
+  [OK] 端点总数 > 0
+  [OK] 管理端端点全部带权限码（无「裸奔」的管理端接口）
+  [OK] 白名单命中的公开端点【没有】带 @PreAuthorize（否则权限检查被静默跳过）
+  [OK] 白名单里每条 /api/** 规则都命中了真实端点（防白名单路径写错）
+  [OK] 权限码命名都是「域:动作」小写形式
+  [OK] PG 可达（docker exec psql 成功）
+  [OK] 源码用到的权限码【全部】存在于 permissions 表
+  [OK] 每个权限码都【至少被一个角色持有】（否则 @PreAuthorize 永远 403）
+==============================================================================
+VERDICT: OK
+ASSERTIONS: 9 / 9 passed
