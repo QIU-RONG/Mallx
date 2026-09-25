@@ -196,7 +196,7 @@ python day17-m1-regression.py
 > | 口径 | 条数 |
 > |---|---|
 > | **应用级验收**（打真实 HTTP + 直查库，本表所列） | **1224** |
-> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条 + `day31-index-drop-probe.py` 18 条） | **1340** |
+> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条 + `day31-index-drop-probe.py` 18 条 + `day32-pagination-index-probe.py` 19 条） | **1359** |
 >
 > （实测：全仓 55 份 `*-report.txt` 中，当前仅 **9** 份以 `ASSERTIONS: n / m passed` 结尾、
 > **6** 份用 `TOTAL:` / `FIXTURE:`，其余是逐次运行留下的一次性产物
@@ -331,6 +331,8 @@ python backend/loadtest/day27-explain-audit.py    # 索引是否真被用上
 | 小表执行计划 | 规划器选 `Seq Scan` | ★ Day 27 已用**临时库 + 3 万行**实测：`idx_products_search` 在真实 SQL 下**仍然用不上**（被 `OR` 挡住），不是「数据量上来就自然切到 GIN」，见 §五 |
 | **全表 `count(*)`** | **O(n)，加索引消不掉** | 3 万行约 6–9 ms（`users` / `products` / `orders`）。按线性外推 **300 万行约 0.6–0.9 s**，届时需计数表 / 物化视图（V1.2 议题）。★ Day 29 **故意不对它做断言** —— 断言它只会得到假结论 |
 | **`payments` 索引** | **不建议加** | Day 29 A/B 对照：`payments(status)` 单列**完全不被用上**（`SUCCESS` 命中 95%，低选择性）；复合 `(status, paid_at)` 被用上但只快 **1.3x**（32.5 → 24.9 ms）⇒ 不值一份写入成本。见 Day 29 |
+| **深分页** | `OFFSET n` 的成本是 **O(n)** | ★ Day 32 实测：`OFFSET 5000` = **2.41 ms**，同一位置改用**游标式（keyset）分页** = **0.27 ms**（**9 倍**）。**加索引只改常数因子，改不了量级** ⇒ 真要治得换分页方式（**产品决策**：不能跳页，只能「下一页」）。当前业务页深未出现，**暂不处理** |
+| **分页复合索引** | **不建议加** | Day 32：`(user_id, created_at DESC, id DESC)` / `(status, created_at DESC, id DESC)` 都**被用上**，但绝对值只省 **≤1.4 ms** ⇒ 不值一份写入成本。（阶段 A 里计划器会自动选「时间索引逆序扫 + 过滤 + 提前停」，第 1 页本来就快） |
 | 订单侧幂等 | **缺** | 「一车多单」实测 1 件商品开出 7 张单；需 `requestId` 唯一索引或 Redis 去重（V1.1） |
 | 缓存 / 异步 | **无** | V1.0 刻意不引 Redis / MQ，「用关系库把该做的事做完」是第一约束 |
 | 连接池 / 限流 | 未做 | V1.2 性能优化 |
@@ -357,3 +359,20 @@ python day17-m1-regression.py                            # → 245/245 + BASELIN
 ```
 
 所有脚本都会把自己的结论写成同名 `*-report.txt`，便于与上面的数字逐项对照。
+
+### ★★ 用 `EXPLAIN` 做计划对照时，参数必须写【字面量】
+
+Day 32 实测踩过这个坑：把参数写成子查询
+
+```sql
+WHERE user_id = (SELECT id FROM users ORDER BY id LIMIT 1)   -- ❌ 估算会失真
+```
+
+计划器对这个 `InitPlan` 的值**在计划期未知**，只能按默认选择率估成 **6 行**（真实 **20002** 行）
+⇒ 它以为「读 6 行再排序」很便宜，**新建的复合索引根本没进入比较**
+⇒ 对照实验给出一个**完全相反**的结论（「索引没被用上」而且「更慢」）。
+
+改成字面量 `WHERE user_id = 1` 之后，结论**完全反转**（复合索引全部被用上）。
+
+⇒ **估算失真会让计划比较彻底失效，而且它不会报错 —— 只会安静地给你一个相反的结论。**
+  凡是依赖「行数估算」才能得出结论的对照，参数一律用字面量。

@@ -1,0 +1,88 @@
+==============================================================================
+Day 32 -- 「分页 + 排序」的索引：单列索引组合不起来（临时库 mallx_page_probe）
+==============================================================================
+
+[0] 建临时库（★ 只动这一个名字，开发库不碰）
+  [OK]   CREATE DATABASE mallx_page_probe   rc=0 err=NOTICE:  database "mallx_page_probe" does not exist, skipping
+
+[1] 按序灌 01→14
+  [OK]   14 份补丁全部 rc == 0   bad=[]
+
+[2] 造数（★ 故意偏斜：一个人 2 万单）
+  [OK]   造数 维表 5000 用户   rc=0 err=
+  [OK]   造数 订单 30000（★ 前 20000 单归 1 个 power user）   rc=0 err=
+
+[3] VACUUM (ANALYZE)（★ Day 27 教训：只 ANALYZE 会得到会翻转的结论）
+  [OK]   基线 VACUUM (ANALYZE)   err=
+
+[4] ★★ 偏斜核对 —— 断言「样本落在判据的取值域里」
+     （均摊时每人 6 单，任何索引都够快，复合索引收益为 0 ⇒ 测了等于没测）
+  [OK]   订单总数 >= 30000   actual=30000
+  [OK]   power user 的订单数 >= 20000（★ 分布是偏斜的）   power=20002（占全库 67%）
+  [OK]   power user 占比 > 50%%（否则偏斜不成立）   67%
+
+[4b] ★ 参数改用【字面量】—— 这是本脚本第一版失败的地方
+     power user id = 1，写进 SQL 字面量。
+     第一版用子查询当参数 ⇒ 计划器拿不到统计信息，把 20002 行估成 6 行
+     ⇒ 计划比较完全失真（新建的复合索引根本没进入比较）。
+     ★ 这是【我的实验装置的错】，不是索引的错 —— 见 build_queries 的注释。
+
+[5] 阶段 A —— 只有单列索引（idx_orders_user_id / idx_orders_created_at）
+      Q1  0.42ms    idx=idx_orders_created_at          seq=-          我的订单 第 1 页（power user 2 万单里取 1
+      Q2  3.78ms    idx=idx_orders_created_at          seq=-          我的订单 深分页（OFFSET 5000）
+      Q3  0.31ms    idx=idx_orders_created_at          seq=-          管理端列表：只按 status（PAID 占 80%）
+      Q4  0.33ms    idx=idx_orders_created_at          seq=-          管理端列表：status + user_id（两个过滤叠排序
+
+[6] 阶段 B —— 加两个候选复合索引 + VACUUM (ANALYZE)
+     候选：probe_orders_user_created(user_id, created_at DESC, id DESC)
+           probe_orders_status_created(status, created_at DESC, id DESC)
+  [OK]   建候选复合索引   rc=0 err=
+  [OK]   加索引后 VACUUM (ANALYZE)   err=
+
+[7] 阶段 B —— 重测
+      Q1  0.31ms    idx=probe_orders_user_created      seq=-          我的订单 第 1 页（power user 2 万单里取 1
+      Q2  2.41ms    idx=probe_orders_user_created      seq=-          我的订单 深分页（OFFSET 5000）
+      Q3  0.14ms    idx=probe_orders_status_created    seq=-          管理端列表：只按 status（PAID 占 80%）
+      Q4  0.17ms    idx=probe_orders_user_created      seq=-          管理端列表：status + user_id（两个过滤叠排序
+
+[8] ★ 加索引不能改数：4 条查询的返回值必须逐值相等
+  [OK]   Q1 返回值不变   A=b3d0147b5d50 B=b3d0147b5d50
+  [OK]   Q2 返回值不变   A=aa00c9a71269 B=aa00c9a71269
+  [OK]   Q3 返回值不变   A=aff34aae19dd B=aff34aae19dd
+  [OK]   Q4 返回值不变   A=b96f015f1dcc B=b96f015f1dcc
+
+[9] ★ 候选复合索引是否真被用上
+  [OK]   Q1 用上 probe_orders_user_created   idx=['probe_orders_user_created']
+  [OK]   Q2 用上 probe_orders_user_created   idx=['probe_orders_user_created']
+  [OK]   Q3 用上 probe_orders_status_created   idx=['probe_orders_status_created']
+  [OK]   Q4 用上 probe_orders_user_created   idx=['probe_orders_user_created']
+
+[10] ★ 单列索引的局限：阶段 A 里这几条查询有没有免掉排序
+      Q1  A: idx=idx_orders_created_at          seq=-        0.42ms
+      Q2  A: idx=idx_orders_created_at          seq=-        3.78ms
+      Q3  A: idx=idx_orders_created_at          seq=-        0.31ms
+      Q4  A: idx=idx_orders_created_at          seq=-        0.33ms
+
+[10b] ★★ 探针：深分页的真解不是「加索引」，是【换分页方式】
+      OFFSET 的成本是 O(offset) —— 加索引只能改常数因子，改不了量级。
+      游标式（keyset）分页把 OFFSET 换成「从上次的位置往后取」，成本与深度无关。
+      ⚠️ 游标值同样必须用【字面量】喂进去（同一个教训）。
+      keyset（从第 5000 行之后取 10 条）：0.27ms  idx=probe_orders_user_created
+      对比 OFFSET 5000（阶段 B）：2.41ms  ⇒ 相差 9 倍
+
+[11] 删临时库
+  [OK]   DROP DATABASE mallx_page_probe   rc=0 err=
+
+==============================================================================
+对照表（A = 只有单列索引 / B = 加了复合索引）
+==============================================================================
+      ID   A 耗时       B 耗时       提升      B 用上的索引
+      Q1   0.42ms     0.31ms     1.4x    probe_orders_user_created
+      Q2   3.78ms     2.41ms     1.6x    probe_orders_user_created
+      Q3   0.31ms     0.14ms     2.3x    probe_orders_status_created
+      Q4   0.33ms     0.17ms     1.9x    probe_orders_user_created
+
+==============================================================================
+ASSERTIONS: 19 / 19 passed   (EXPECTED=19)
+VERDICT: OK -- 复合索引的收益与「不改数」都已取证
+==============================================================================
