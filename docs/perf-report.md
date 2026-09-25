@@ -196,7 +196,7 @@ python day17-m1-regression.py
 > | 口径 | 条数 |
 > |---|---|
 > | **应用级验收**（打真实 HTTP + 直查库，本表所列） | **1224** |
-> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条） | **1322** |
+> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条 + `day31-index-drop-probe.py` 18 条） | **1340** |
 >
 > （实测：全仓 55 份 `*-report.txt` 中，当前仅 **9** 份以 `ASSERTIONS: n / m passed` 结尾、
 > **6** 份用 `TOTAL:` / `FIXTURE:`，其余是逐次运行留下的一次性产物
@@ -299,6 +299,10 @@ V3 对中文归零，**不是可选项**。三个变体的结果集都与 V0 **�
 ★ 全库 **30 个索引**的逐个交代（含 **4 个无调用方** + **1 个冗余**，以及
 「**该不该删看写入成本，不看有没有被用上**」这条判据）见
 `docs/daily/Day-30-索引体检总表.md`。
+
+★ **删除安全性已实测**（Day 31 的 **DROP 实验**）：把候选索引**真的删掉**再跑，
+查询计划**逐字节不变**；同时把两个**确实在用**的索引也删掉做**对照组**，计划**立刻退化成全表扫**
+⇒ 证明装置有区分度，「没变」不是装置失灵。见 `docs/daily/Day-31-DROP实验-索引可删性验证.md`。
 
 > ★ 另一条只在**使用层**才踩得到的坑：批量灌数后 GIN 的 `fastupdate` **待处理列表**未清时，
 > GIN 扫 32 行要 `13.3ms / 298 次 buffer`，计划器因此**放弃索引**；

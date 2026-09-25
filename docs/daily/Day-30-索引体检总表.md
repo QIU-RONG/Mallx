@@ -141,6 +141,9 @@ PG 为此已经自动建了 `role_permissions_pkey`。而额外这个**单列** 
    写成新补丁 `backend/sql/15-drop-dead-indexes.sql`（`DROP INDEX IF EXISTS`，幂等）。
    ⚠️ **必须先实测确认它们真的没被选中**：目前只有 `idx_products_status` 有 day27 的实测，
    另两个是「无调用方」推断（等级 C）。**推断不是实测** —— 建议先补一轮 EXPLAIN。
+   → ✅ **已由 Day 31 补测**：`docs/daily/Day-31-DROP实验-索引可删性验证.md` ——
+   两个候选索引 **DROP 前后计划逐字节相同**，且**对照组**（DROP 两个确实在用的索引）计划都变了，
+   证明装置有区分度 ⇒ **删除安全，证据已备齐**。
 2. **实测 `idx_coupons_status`**（等级 B → A），判据同 Day 29 的 A/B 对照。
 3. **把 `day27` / `day28` / `day29` 挂进 CI**（三个都是幂等 + 零副作用的临时库脚本）。
 4. 实现 Day 28 的搜索修复（唯一有量级收益的一条，**29x**）。

@@ -1,0 +1,66 @@
+==============================================================================
+Day 31 -- DROP 实验：候选索引删掉之后，计划会不会变？（临时库 mallx_drop_probe）
+==============================================================================
+
+[0] 建临时库（★ 只动这一个名字，开发库不碰）
+  [OK]   CREATE DATABASE mallx_drop_probe   rc=0 err=NOTICE:  database "mallx_drop_probe" does not exist, skipping
+
+[1] 按序灌 01→14
+  [OK]   14 份补丁全部 rc == 0   bad=[]
+
+[2] 造数
+  [OK]   造数 维表 300 分类   rc=0 err=
+  [OK]   造数 维表 5000 用户   rc=0 err=
+  [OK]   造数 商品 30000（status=1 占 99%）   rc=0 err=
+  [OK]   造数 SKU x2/商品（is_deleted=0 占 99%%）   rc=0 err=
+  [OK]   造数 订单 30000（user_id 有选择性）   rc=0 err=
+
+[3] VACUUM (ANALYZE)（★ Day 27 教训：只 ANALYZE 会得到会翻转的结论）
+  [OK]   基线 VACUUM (ANALYZE)   err=
+
+[4] 规模核对（★ 没有规模，索引本来就无胜算，实验等于没做）
+  [OK]   products 行数 >= 30000   actual=30005
+  [OK]   product_skus 行数 >= 60000   actual=60007
+  [OK]   orders 行数 >= 30000   actual=30000
+
+[5] 阶段 A —— 索引都在（4 个索引：2 候选 + 2 对照）
+      P1  idx=products_pkey                    seq=-              C 端商品列表（status = 1 + ORD
+      P2  idx=idx_product_skus_product_id,pr   seq=-              商品列表带 SKU 存在性（is_deleted
+      C1  idx=idx_orders_user_id,users_pkey    seq=-              我的订单列表（按 user_id）
+      C2  idx=idx_products_is_deleted          seq=-              管理端商品计数（is_deleted = 0）
+
+[6] 阶段 B —— 把这 4 个索引 DROP 掉 + VACUUM (ANALYZE)
+  [OK]   DROP 4 个索引   rc=0 err=
+  [OK]   DROP 后 VACUUM (ANALYZE)   err=
+
+[7] 阶段 B —— 重测
+      P1  idx=products_pkey                    seq=-              C 端商品列表（status = 1 + ORD
+      P2  idx=idx_product_skus_product_id,pr   seq=-              商品列表带 SKU 存在性（is_deleted
+      C1  idx=users_pkey                       seq=orders         我的订单列表（按 user_id）
+      C2  idx=-                                seq=products       管理端商品计数（is_deleted = 0）
+
+[8] ★ 候选索引：DROP 前后计划必须【完全不变】（不变 ⇒ 删它安全）
+  [OK]   P1 DROP idx_products_status 后计划不变   A_used=['products_pkey'] B_used=['products_pkey']
+  [OK]   P2 DROP idx_product_skus_is_deleted 后计划不变   A_used=['idx_product_skus_product_id', 'products_pkey'] B_used=['idx_product_skus_product_id', 'products_pkey']
+
+[9] ★★ 对照组：DROP 前后计划必须【发生变化】—— 证明本装置有区分度
+     （没有这一步，「计划不变」可能只是「装置根本测不出变化」）
+  [OK]   C1 DROP idx_orders_user_id 后计划确实变了   A_used=['idx_orders_user_id', 'users_pkey'] B_used=['users_pkey']
+  [OK]   C2 DROP idx_products_is_deleted 后计划确实变了   A_used=['idx_products_is_deleted'] B_used=[]
+
+[10] 删临时库
+  [OK]   DROP DATABASE mallx_drop_probe   rc=0 err=
+
+==============================================================================
+对照表（A = 索引都在 / B = 已 DROP）
+==============================================================================
+      ID   类型     被 DROP 的索引                       计划变化         A 用上的索引
+      P1   候选     idx_products_status              没变           products_pkey
+      P2   候选     idx_product_skus_is_deleted      没变           idx_product_skus_product_id,produc
+      C1   对照     idx_orders_user_id               变了           idx_orders_user_id,users_pkey
+      C2   对照     idx_products_is_deleted          变了           idx_products_is_deleted
+
+==============================================================================
+ASSERTIONS: 18 / 18 passed   (EXPECTED=18)
+VERDICT: OK -- 候选索引对现有查询零贡献（且对照组证明装置有区分度）
+==============================================================================
