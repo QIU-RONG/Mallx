@@ -7,7 +7,7 @@ V1.0 不引入 Elasticsearch / Redis / 消息队列 —— 「用关系库把该
 状态：V1.0 后端 API 已完成（Day 24/24）
 端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   模块 11 个
 Java 185 文件 / 14.5k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 14 份
-回归基线：全链路 245 条断言 + 各域验收 948 条（合计 1193），每次改动必跑（见 §测试与回归）
+回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
 ```
 
 第一次来？直接跳到 **[快速开始](#快速开始)**，或先看 **[接口文档](#接口文档)**。
@@ -283,11 +283,13 @@ python backend/loadtest/day25-api-inventory.py
 
 ## 测试与回归
 
-没有单元测试框架，取而代之的是 **61 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
-（**不信接口自报**），跑完自动回滚到跑前状态。
+没有单元测试框架，取而代之的是 **63 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
+（**不信接口自报**），跑完自动回滚到跑前状态。同一套流程已搬进 GitHub Actions（`.github/workflows/ci.yml`）：
+每次 push 自动执行「构建 → 全新库 → SQL 严格检查 → 夹具 → M1 回归 → 各域验收」，判定全部来自脚本退出码。
 
 ```bash
 cd backend/loadtest
+python day26-m1-fixture.py                    # ⓪ 从零复现夹具：intruder 账号 + demo 地址 + 6 张 PAID 订单
 python day17-m1-regression.py --baseline      # ① 记录基线（全表计数快照）
 python day14-e2e-walk.py                      # ② 走全链路：下单→支付→发货→收货→评价
 python day15-ship-confirm.py
@@ -296,6 +298,12 @@ python day17-a-order-list-verify.py           #    读侧
 python day17-b-order-detail-verify.py
 python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 ```
+
+> ★★ **为什么需要 ⓪**：M1 的五个脚本各自带着「干净起始态」的隐藏前置——
+> 流水必须空、全库无挂起单、sold 与已付订单对账一致、读侧要有历史订单可读、
+> 还要 `intruder` 账号和 `address_id=2`。这些在 dev 库里从来都是手工测试的残留，
+> 全新 initdb 库直接跑 M1 只有 202/245。夹具把它们固化成脚本（幂等，可重复），
+> **245/245 从此可以从零复现**——这也是 CI 能成立的前提。
 
 | 脚本 | 覆盖 | 断言 |
 |---|---|---|
@@ -311,6 +319,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day20-l5-brand-verify.py` | 品牌字典（C 端 / 管理端口径成对） | 24 |
 | `day12/13-*` | 并发下单（不超卖）/ 并发支付（不重复扣款） | 见 `docs/perf-report.md` |
 | `day25-sql-strict-check.py` | **SQL 补丁严格模式自检**：14 份补丁 × **全新临时库** × `ON_ERROR_STOP=1` | 16 |
+| `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数 | 31 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 
 写脚本的三条硬规矩（都来自踩过的坑）：
