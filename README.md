@@ -72,7 +72,7 @@ MallX/
 │   └── README.md                  #   部署说明与排错
 ├── docs/
 │   ├── api/                       # ★ API-总览.md（自动生成）+ openapi.json 快照 + users-api.md
-│   ├── daily/                     # Day 01–27 的学习/交付文档（含每一步的实测记录）
+│   ├── daily/                     # Day 01–27 的学习/交付文档（含 Day 28 方案稿）
 │   ├── perf-report.md             # 并发压测与全链路回归汇总
 │   └── backlog.md                 # 缺陷与改进清单（当前一览表已归零）
 └── README.md
@@ -283,7 +283,7 @@ python backend/loadtest/day25-api-inventory.py
 
 ## 测试与回归
 
-没有单元测试框架，取而代之的是 **64 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
+没有单元测试框架，取而代之的是 **65 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
 （**不信接口自报**），跑完自动回滚到跑前状态。同一套流程已搬进 GitHub Actions（`.github/workflows/ci.yml`）：
 每次 push 自动执行「构建 → 全新库 → SQL 严格检查 → 夹具 → M1 回归 → 各域验收」，判定全部来自脚本退出码。
 
@@ -320,6 +320,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day12/13-*` | 并发下单（不超卖）/ 并发支付（不重复扣款） | 见 `docs/perf-report.md` |
 | `day25-sql-strict-check.py` | **SQL 补丁严格模式自检**：14 份补丁 × **全新临时库** × `ON_ERROR_STOP=1` | 16 |
 | `day27-explain-audit.py` | **索引 EXPLAIN 审计**：临时库 + 3 万行 + `VACUUM (ANALYZE)`，13 条查询验「索引是否真被用上」 | 38 |
+| `day28-search-rewrite-probe.py` | **搜索改法预研**：临时库对照 V0 现状 / V1 补 trgm 索引 / V2 拆 UNION / V3 只留全文（含中文黑洞与 `UNION ALL` 重复） | 24 |
 | `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数 | 31 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 

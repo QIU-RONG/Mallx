@@ -1,0 +1,89 @@
+==============================================================================
+Day 28 预研 -- 让全文检索走上索引：三个候选改法，谁快且结果不变？
+==============================================================================
+
+[0] 建临时库（★ 只动这一个名字，开发库不碰）
+  [OK]   CREATE DATABASE mallx_search_probe   rc=0 err=NOTICE:  database "mallx_search_probe" does not exist, skipping
+
+[1] 按序灌 01→14
+  [OK]   14 份补丁全部 rc == 0   bad=[]
+
+[2] 造数
+  [OK]   造数 维表 300 分类   rc=0 err=
+  [OK]   造数 商品 30000 行（iphone 0.1% / 笔记本 三种落点）   rc=0 err=
+  [OK]   造数 SKU x2/商品   rc=0 err=
+
+[3] VACUUM (ANALYZE)（★ Day 27 教训：只 ANALYZE 会得到会翻转的结论）
+  [OK]   基线 VACUUM (ANALYZE)   err=
+
+[4] 选择性核对（★ 没有选择性，任何改法都看不出差别）
+  [OK]   EN 关键词 'iphone' 命中 < 5%   hit=31 / 30000
+  [OK]   CN 关键词 '笔记本' 命中 < 5%   hit=92 / 30000
+
+[5] 阶段 A —— 补索引【之前】测 V0（现状）/ V3（只留全文，参照项）
+
+  --- EN 关键词 'iphone' ---
+      V0  rows=31     23.74ms   idx=- seq=['products']
+      V3  rows=31     0.37ms    idx=['idx_products_search'] seq=-
+
+  --- CN 关键词 '笔记本' ---
+      V0  rows=92     4.62ms    idx=- seq=['products']
+      V3  rows=0      0.19ms    idx=['idx_products_search'] seq=-
+
+[6] 补 trgm 索引（★ 只在临时库里建）+ VACUUM (ANALYZE)
+  [OK]   CREATE INDEX idx_products_subtitle_trgm / description_trgm   rc=0 err=
+  [OK]   补索引后 VACUUM (ANALYZE)   err=
+
+[7] 阶段 B —— 补索引【之后】测 V1（同 SQL）/ V2（OR 拆 UNION）
+
+  --- EN 关键词 'iphone' ---
+      V1  rows=31     0.82ms    idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm'] seq=-
+  [OK]   V1/EN 结果行数与 V0 相等（31）   V0=31 本变体=31
+      V2  rows=31     1.48ms    idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm'] seq=-
+  [OK]   V2/EN 结果行数与 V0 相等（31）   V0=31 本变体=31
+
+  --- CN 关键词 '笔记本' ---
+      V1  rows=92     0.84ms    idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm'] seq=-
+  [OK]   V1/CN 结果行数与 V0 相等（92）   V0=92 本变体=92
+      V2  rows=92     1.82ms    idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm'] seq=-
+  [OK]   V2/CN 结果行数与 V0 相等（92）   V0=92 本变体=92
+
+[8] ★ V3（去掉 ILIKE 兜底）为什么不可选 —— 中文
+  [OK]   V3 对中文 '笔记本' 返回 0 行（全文不切中文）   rows=0
+  [OK]   V0 对中文 '笔记本' 返回 > 0 行（兜底在起作用）   rows=92
+      ⇒ ILIKE 兜底对中文是【功能】，任何改法都必须保住它。
+
+[9] ★ V2 必须用 UNION 而不是 UNION ALL
+  [OK]   V2(UNION) 行数 == V0 行数（语义等价）   V2=92 V0=92
+  [OK]   UNION ALL 会多出行（证明必须去重）   UNION ALL=122 UNION=92
+
+[10] 关键计划断言
+  [OK]   V0/CN 走 Seq Scan（现状确认）   seq=['products']
+  [OK]   V1/CN 用上 trgm 索引（补索引后 OR 能拼出 BitmapOr）   idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm']
+  [OK]   V2/CN 用上 trgm 索引（UNION 各支独立走索引）   idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm']
+  [OK]   V0/EN 不用 idx_products_search（OR 挡住 GIN）   idx=[]
+  [OK]   V1/EN 用上索引（GIN 或 trgm）   idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm']
+
+[11] 删临时库
+  [OK]   DROP DATABASE mallx_search_probe   rc=0 err=
+
+==============================================================================
+变体对比（rows = 结果行数；ms = 带 LIMIT 10 的执行时间）
+==============================================================================
+      变体         rows    耗时         用上的索引                    Seq Scan
+      --- EN ('iphone') ---
+      V0         31      23.74ms    -                        products
+      V1         31      0.82ms     idx_products_descripti   -
+      V2         31      1.48ms     idx_products_descripti   -
+      V3         31      0.37ms     idx_products_search      -
+
+      --- CN ('笔记本') ---
+      V0         92      4.62ms     -                        products
+      V1         92      0.84ms     idx_products_descripti   -
+      V2         92      1.82ms     idx_products_descripti   -
+      V3         0       0.19ms     idx_products_search      -
+
+==============================================================================
+ASSERTIONS: 24 / 24 passed   (EXPECTED=24)
+VERDICT: OK -- 三个候选改法已量化，结果集等价性成立
+==============================================================================
