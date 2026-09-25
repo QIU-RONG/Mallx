@@ -1,5 +1,7 @@
 # MallX 企业级电商系统
 
+[![CI](https://github.com/QIU-RONG/Mallx/actions/workflows/ci.yml/badge.svg)](https://github.com/QIU-RONG/Mallx/actions/workflows/ci.yml)
+
 模块化单体的 B2C 电商**后端**。存储与商品搜索全部落在 **PostgreSQL**，
 V1.0 不引入 Elasticsearch / Redis / 消息队列 —— 「用关系库把该做的事做完」是本项目的第一条约束。
 
