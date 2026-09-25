@@ -4,7 +4,7 @@
 V1.0 不引入 Elasticsearch / Redis / 消息队列 —— 「用关系库把该做的事做完」是本项目的第一条约束。
 
 ```text
-状态：V1.0 后端 API 已完成（Day 01–29）
+状态：V1.0 后端 API 已完成（Day 01–30）
 端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   模块 11 个
 Java 185 文件 / 14.5k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 14 份
 回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
@@ -72,7 +72,7 @@ MallX/
 │   └── README.md                  #   部署说明与排错
 ├── docs/
 │   ├── api/                       # ★ API-总览.md（自动生成）+ openapi.json 快照 + users-api.md
-│   ├── daily/                     # Day 01–29 的学习/交付文档（含 Day 28 方案稿）
+│   ├── daily/                     # Day 01–30 的学习/交付文档（含 Day 28 方案稿）
 │   ├── perf-report.md             # 并发压测与全链路回归汇总
 │   └── backlog.md                 # 缺陷与改进清单（当前一览表已归零）
 └── README.md
@@ -368,7 +368,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 
 ## 文档导航
 
-- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–29，每天一份，含设计取舍、实测记录、踩坑与判据。
+- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–30，每天一份，含设计取舍、实测记录、踩坑与判据。
 - **想知道还剩什么问题** → [`docs/backlog.md`](docs/backlog.md)：缺陷/改进清单（一览表已归零，遗留项与「刻意不做」的原因都写着）。
 - **想直接调接口** → [`docs/api/API-总览.md`](docs/api/API-总览.md) 或 Swagger UI。
 
@@ -377,7 +377,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 ## 版本规划
 
 ```text
-V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–29，77 端点；界面由 Swagger UI 承担）
+V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–30，77 端点；界面由 Swagger UI 承担）
 V1.1 Redis + RabbitMQ                缓存与异步（订单超时关单、库存预占释放）
 V1.2 性能优化                        读写分离、慢查询治理、索引复盘
 V1.3 Docker 容器化                   ✅ 完成（Day 25：deploy/ 三件套，非 root + healthcheck + 一键全栈）
