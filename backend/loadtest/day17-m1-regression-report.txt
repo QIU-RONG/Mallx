@@ -1,13 +1,13 @@
 ==============================================================================
 MallX  M1 milestone regression   (place -> pay -> ship -> confirm -> review)
 ==============================================================================
-run at : 2026-09-25 01:20:56
+run at : 2026-09-25 15:43:13
 
 [1] CHAIN -- each link's own end-to-end report, regenerated in this run
     (produce side: place -> pay -> ship -> confirm -> review)
   -> Day 14  day14-e2e-walk.py
      proves: place -> pay  (both state-machine exits + the ledger)
-     report mtime : 2026-09-25 01:09:32   (regenerated this run)
+     report mtime : 2026-09-25 15:42:40   (regenerated this run)
      RESULT: 67 / 67 passed
        [0] BASELINE FINGERPRINT (all 7 SKUs)
        [1] login demo (token stays in memory, never on disk)
@@ -23,7 +23,7 @@ run at : 2026-09-25 01:20:56
 
   -> Day 15  day15-ship-confirm.py
      proves: pay -> ship -> confirm
-     report mtime : 2026-09-25 01:10:17   (regenerated this run)
+     report mtime : 2026-09-25 15:42:53   (regenerated this run)
      RESULT: 56 / 56 passed
        [0] BASELINE FINGERPRINT (all 7 SKUs)
        [1] logins (tokens stay in memory, never on disk)
@@ -41,7 +41,7 @@ run at : 2026-09-25 01:20:56
 
   -> Day 16  day16-review-e2e.py
      proves: confirm -> review
-     report mtime : 2026-09-25 01:11:07   (regenerated this run)
+     report mtime : 2026-09-25 15:43:09   (regenerated this run)
      RESULT: 75 / 75 passed
        [0] BASELINE FINGERPRINT
        [1] logins (tokens stay in memory, never on disk)
@@ -64,12 +64,12 @@ run at : 2026-09-25 01:20:56
        slipped past every automated regression.
   -> Day 17a  day17-a-order-list-verify.py
      proves: read-side: admin order list, 10 fields reconciled against the DB
-     report mtime : 2026-09-25 01:11:17   (regenerated this run)
+     report mtime : 2026-09-25 15:43:12   (regenerated this run)
      RESULT: 26 / 26 passed
 
   -> Day 17b  day17-b-order-detail-verify.py
      proves: read-side: order detail, 15 fields + items (the T2 blind spot)
-     report mtime : 2026-09-25 01:11:22   (regenerated this run)
+     report mtime : 2026-09-25 15:43:13   (regenerated this run)
      RESULT: 21 / 21 passed
 
 [1c] COVERAGE

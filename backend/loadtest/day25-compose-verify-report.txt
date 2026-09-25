@@ -1,0 +1,28 @@
+==============================================================================
+MallX Docker Compose 全栈验收（宿主端口 8081）
+==============================================================================
+
+[A] 容器层
+  [OK]   A1 app 容器 health 状态 = healthy   out='healthy'
+  [OK]   A2 postgres 容器 health 状态 = healthy   out='healthy'
+  [OK]   A3 app 容器【非 root】运行（User=mallx）   User='mallx'
+
+[B] initdb 链路（01→14 是否真的按序跑完）
+  [OK]   B1 核心表已建（public schema 表数 >= 22）   tables=22
+  [OK]   B2 权限码全部补发到位（permissions = 41）   permissions=41
+  [OK]   B3 最后一份补丁（14 号 · brand:*）的授权也在（超管持有 4 条 brand 权限）   rows=4
+  [OK]   B4 DDL 补丁 11 号生效（orders.discount_amount 存在）   cols=1
+
+[C] 端到端可用性（对外端口 8081）
+  [OK]   C1 GET /api/hello -> 200   http=200
+  [OK]   C2 匿名 GET /api/products -> 200（白名单在容器里同样生效）   http=200
+  [OK]   C3 管理员登录 -> 200 + 有 token   code=200
+
+[D] ★ 核心一条：权限码真的经【新库】生效
+  [OK]   D1 GET /api/admin/roles 带超管 token -> 200（说明 role_permissions 种子齐）   code=200
+  [OK]   D2 同一端点匿名 -> HTTP 401（未配错成公开）   http=401
+
+==============================================================================
+ASSERTIONS: 12 / 12 passed   (EXPECTED=12)
+VERDICT: OK
+==============================================================================
