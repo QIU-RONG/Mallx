@@ -196,7 +196,7 @@ python day17-m1-regression.py
 > | 口径 | 条数 |
 > |---|---|
 > | **应用级验收**（打真实 HTTP + 直查库，本表所列） | **1224** |
-> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条） | **1240** |
+> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条） | **1278** |
 >
 > （实测：全仓 55 份 `*-report.txt` 中，当前仅 **9** 份以 `ASSERTIONS: n / m passed` 结尾、
 > **6** 份用 `TOTAL:` / `FIXTURE:`，其余是逐次运行留下的一次性产物
@@ -241,8 +241,45 @@ ROLLBACK;
 ```
 
 > **诚实记录**：完整生产 SQL 在 5 行小表上，规划器选的仍然是 `Seq Scan`。
-> **绝不为了「让 EXPLAIN 好看」往库里插几千行测试数据** —— Day 18 已经发生过一次
+> **绝不为了「让 EXPLAIN 好看」往真实表里插几千行测试数据** —— Day 18 已经发生过一次
 > 测试数据污染真实表的事故（误建商品 31 / 分类 36-37），代价远大于一张好看的执行计划。
+>
+> ★★ 但这句话有个危险的副作用：**它让「索引没被用上」永远无法被证伪** ——
+> 5 行时是「正常」，30 万行时也能被同一句话糊过去。
+> **正确做法是建临时库，而不是往真实表灌数**（Day 27 已这么做，见下）。
+
+### ★★★ Day 27 实测：这 8 个索引，生产形状下到底有几个真在用（3 万行）
+
+```bash
+python backend/loadtest/day27-explain-audit.py
+# 临时库 mallx_perf_probe：01→14 + 造数（products 3 万 / orders 3 万 / 流水 6 万）
+# → VACUUM (ANALYZE) → 13 条查询 EXPLAIN (ANALYZE, BUFFERS) → DROP DATABASE
+# 结果：38 / 38 passed，连跑三次一致。开发库零改动。
+```
+
+| 索引 | 生产形状下是否被用上 |
+|---|---|
+| `idx_products_search`（GIN） | ❌ **用不上** —— `searchProducts` 的 `OR` 把它挡住了 |
+| `idx_products_name_trgm` | ❌ 同上（**单列**查询才生效：`1.3ms` vs 全表扫 `68.5ms`） |
+| `idx_products_category_id` | ⚠️ 仅**不带 LIMIT** 的查询生效（C 端列表是 `ORDER BY id DESC LIMIT 10`，走 PK 反向扫） |
+| `idx_products_status` | ❌ **死索引**（`status=1` 命中 99%，从不被选中） |
+| `idx_products_skus_attributes`（GIN） | ✅ 有效（★ 计划器会把 `EXISTS` 反写成从 SKU 侧驱动） |
+| `orders.user_id` · `orders.status` · `order_items.order_id` · `inventory_logs.sku_id` · `reviews.product_id` | ✅ 全部有效 |
+
+**★★ 最值钱的一条**：`searchProducts` 的 `WHERE` 是
+`(search_vector @@ ... OR name ILIKE ... OR subtitle ILIKE ... OR description ILIKE ...)`，
+后两支 ILIKE 的列**没有索引** ⇒ 拼不出 `BitmapOr` ⇒ 只能全表扫。
+**同一条 SQL 去掉 OR 之后，GIN 立刻被用上 —— 1.3 ms vs 68.5 ms，差 50 倍。**
+
+⇒ **索引是好的，挡住它的是查询写法。** 这也正是「要不要上 ES / 加中间件」这个问题
+必须先看 `EXPLAIN` 的原因：**当前最贵的一条查询是纯 SQL 问题，不是缺组件。**
+（3 万行上 `orders.status` 那条 —— 即每 60 秒自动跑一次的超时关单扫描 —— 走的是索引，1.1ms。）
+
+> ★ 另一条只在**使用层**才踩得到的坑：批量灌数后 GIN 的 `fastupdate` **待处理列表**未清时，
+> GIN 扫 32 行要 `13.3ms / 298 次 buffer`，计划器因此**放弃索引**；
+> `VACUUM (ANALYZE)` 之后同一条查询降到 `0.9ms / 19 次`，成本估算从 `1266` 掉到 `21.4`。
+> ⇒ **审计脚本必须 `VACUUM (ANALYZE)`，只 `ANALYZE` 会得到会翻转的结论**
+> （Day 27 前几轮就是这么被骗的，一度误判为「计划器临界区」）。
 
 搜索口径另有两条已修缺陷（均有回归断言盯着）：
 `description` 参与检索（修复前 `keyword=笔记本` 恒返回 0，属**搜索黑洞**）、
@@ -251,7 +288,8 @@ ROLLBACK;
 复现：
 
 ```bash
-python backend/loadtest/day19-search-verify.py
+python backend/loadtest/day19-search-verify.py    # 搜索口径断言
+python backend/loadtest/day27-explain-audit.py    # 索引是否真被用上
 ```
 
 ---
@@ -261,7 +299,7 @@ python backend/loadtest/day19-search-verify.py
 | 项 | 现状 | 说明 |
 |---|---|---|
 | 分页上限 | `size ≤ 100`，`size <= 0` 夹紧为默认值 | 夹紧写在 `new Page<>()` **之前**；四态（负 / 0 / 正常 / 超限）都有断言 |
-| 小表执行计划 | 规划器选 `Seq Scan` | 数据量上来才会自然切到 GIN，见 §五 |
+| 小表执行计划 | 规划器选 `Seq Scan` | ★ Day 27 已用**临时库 + 3 万行**实测：`idx_products_search` 在真实 SQL 下**仍然用不上**（被 `OR` 挡住），不是「数据量上来就自然切到 GIN」，见 §五 |
 | 订单侧幂等 | **缺** | 「一车多单」实测 1 件商品开出 7 张单；需 `requestId` 唯一索引或 Redis 去重（V1.1） |
 | 缓存 / 异步 | **无** | V1.0 刻意不引 Redis / MQ，「用关系库把该做的事做完」是第一约束 |
 | 连接池 / 限流 | 未做 | V1.2 性能优化 |

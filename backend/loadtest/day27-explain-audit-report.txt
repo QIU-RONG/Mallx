@@ -1,0 +1,109 @@
+==============================================================================
+Day 27 -- 性能基线：索引有没有被用上（临时库 mallx_perf_probe，EXPLAIN ANALYZE）
+==============================================================================
+
+[0] 建临时库（★ 只动这一个名字，开发库不碰）
+  [OK]   CREATE DATABASE mallx_perf_probe   rc=0 err=NOTICE:  database "mallx_perf_probe" does not exist, skipping
+
+[1] 按序灌 01→14（与 initdb 同序，ON_ERROR_STOP=1）
+      [OK  ] 01-schema.sql
+      [OK  ] 02-index.sql
+      [OK  ] 03-data.sql
+      [OK  ] 04-review-constraints.sql
+      [OK  ] 05-admin-permissions.sql
+      [OK  ] 06-day17-fixtures.sql
+      [OK  ] 07-admin-permissions.sql
+      [OK  ] 08-marketing-permissions.sql
+      [OK  ] 09-user-coupons-unique.sql
+      [OK  ] 10-brand-permissions.sql
+      [OK  ] 11-order-discount.sql
+      [OK  ] 12-day22-permissions.sql
+      [OK  ] 13-day23-permissions.sql
+      [OK  ] 14-brand-crud-permissions.sql
+  [OK]   14 份补丁全部 rc == 0   bad=[]
+
+[2] 造数（★ 规模 + **选择性**，否则「看不到索引」永远无法被证伪）
+  [OK]   造数 维表：300 个分类   rc=0 err=
+  [OK]   造数 维表：5000 个用户   rc=0 err=
+  [OK]   造数 商品 30000 行（含 1% 稀有词）   rc=0 err=
+  [OK]   造数 SKU x2/商品（黑色 0.05%）   rc=0 err=
+  [OK]   造数 库存 x1/SKU   rc=0 err=
+  [OK]   造数 订单 30000 行（PENDING 1%）   rc=0 err=
+  [OK]   造数 明细 x1/订单   rc=0 err=
+  [OK]   造数 库存流水 60000 行（1 条/SKU）   rc=0 err=
+  [OK]   造数 评价 20000 行   rc=0 err=
+
+[3] VACUUM (ANALYZE) —— ★ 两件事都必须做，少一件结论就是错的
+     · ANALYZE：不做的话 pg_class.reltuples 还是 0，计划器只能瞎猜
+     · VACUUM ：不做的话 GIN 索引的 fastupdate【待处理列表】里还堆着刚灌进去的几万条
+       —— 实测（本脚本第 5~7 轮）：待处理列表未清时，GIN 扫 32 行要 13.3ms / 298 次
+       buffer 命中，计划器于是改用 Seq Scan；清掉之后同一条查询 0.9ms。
+       ★★ 这才是前几轮「计划在 GIN 与 Seq Scan 之间反复翻转」的真正原因 ——
+          不是统计噪声，是**索引自身处于未整理状态**。
+  [OK]   VACUUM (ANALYZE) 全库   err=
+
+[4] 规模核对（造数真的落库了吗）
+  [OK]   products 行数 >= 30000（且 ANALYZE 估算同量级）   actual=30005 reltuples=30005
+  [OK]   product_skus 行数 >= 60000（且 ANALYZE 估算同量级）   actual=60007 reltuples=60007
+  [OK]   orders 行数 >= 30000（且 ANALYZE 估算同量级）   actual=30000 reltuples=30000
+  [OK]   order_items 行数 >= 30000（且 ANALYZE 估算同量级）   actual=30000 reltuples=30000
+  [OK]   inventory_logs 行数 >= 60000（且 ANALYZE 估算同量级）   actual=60000 reltuples=60000
+  [OK]   reviews 行数 >= 20000（且 ANALYZE 估算同量级）   actual=20000 reltuples=20000
+
+[4b] ★ 选择性核对 —— 断言「造数落在判据的取值域里」
+     （第一版脚本就是死在这一步：每条谓词都命中 20%~100%，索引必然不被选中）
+  [OK]   全文词 'iphone' 命中率 < 5%（有选择性）   hit=31 / 30000
+  [OK]   PENDING_PAYMENT 占比 < 5%（有选择性）   pending=300 / 30000
+
+[5] EXPLAIN (ANALYZE, BUFFERS) —— 逐条查询
+
+  [OK]   Q1 C 端列表：status = 1（低选择性）   idx=['products_pkey'] seq=- 0.209 ms
+  [OK]   Q2 C 端列表：按 category_id（无 LIMIT/ORDER BY）   idx=['categories_pkey', 'idx_products_category_id'] seq=- 1.739 ms
+  [OK]   Q3 countByCategoryId（删除分类的引用校验，含软删）   idx=['categories_pkey', 'idx_products_category_id'] seq=- 0.461 ms
+  [OK]   Q5 ★★ 真实 searchProducts（全文 **+ OR 兜底**）   idx=- seq=['products'] 64.033 ms
+  [OK]   Q6 搜索：中文兜底（ILIKE 三列 + OR）   idx=- seq=['products'] 17.277 ms
+  [OK]   Q7 搜索：**单列** ILIKE（去掉 OR）   idx=['idx_products_name_trgm'] seq=- 0.598 ms
+  [OK]   Q8a 搜索：属性筛选（**从 product 侧驱动**的 EXISTS）   idx=['idx_product_skus_attributes', 'products_pkey'] seq=- 3.120 ms
+  [OK]   Q8b 属性筛选：**直接从 SKU 侧**按属性查（对照）   idx=['idx_product_skus_attributes'] seq=- 2.242 ms
+  [OK]   Q9 订单列表：按 user_id   idx=['idx_orders_user_id', 'users_pkey'] seq=- 0.755 ms
+  [OK]   Q10 ★ 超时关单扫描（每 60 秒自动跑一次）   idx=['idx_orders_status'] seq=- 0.816 ms
+  [OK]   Q11 订单详情：按 order_id 取明细   idx=['idx_order_items_order_id', 'orders_pkey'] seq=- 0.298 ms
+  [OK]   Q12 库存流水：按 sku_id 倒序（管理端流水页）   idx=['idx_inventory_logs_sku_id', 'product_skus_pkey'] seq=- 0.380 ms
+  [OK]   Q13 商品评价：按 product_id   idx=['idx_reviews_product_id', 'products_pkey'] seq=- 0.350 ms
+
+[5b] 探针（只记录、不断言：用来解释「为什么某条查询没用索引」）
+      [R1] C 端列表：category_id **+ ORDER BY id DESC LIMIT 10**（生产真实形状）
+            idx=['categories_pkey', 'products_pkey'] seq=- 1.337 ms
+            与 Q2 对比：加了 ORDER BY + LIMIT 之后，计划器是否改走 PK 反向扫
+      [R2] 搜索：**纯**全文（无 OR 兜底）—— 与 Q5 成对照
+            idx=['idx_products_search'] seq=- 0.879 ms
+            ★★ 与 Q5 同一条 SQL 去掉 OR 之后：GIN 被用上（1.3ms）⇒ 证明「挡索引的是 OR，不是索引本身」
+
+[6] 汇总（★ 未命中不等于缺陷：要看是「索引没用」还是「查询写法挡住了索引」）
+
+      ID   查询                                       设计预期                             结论    实际计划
+      Q1   C 端列表：status = 1（低选择性）                   NOT_INDEX:idx_products_status    OK    ['products_pkey']
+      Q2   C 端列表：按 category_id（无 LIMIT/ORDER BY）    INDEX:idx_products_category_id   OK    ['categories_pkey', 'idx_products_category_id']
+      Q3   countByCategoryId（删除分类的引用校验，含软删）         INDEX:idx_products_category_id   OK    ['categories_pkey', 'idx_products_category_id']
+      Q5   ★★ 真实 searchProducts（全文 **+ OR 兜底**）     NOT_INDEX:idx_products_search    OK    ['products']
+      Q6   搜索：中文兜底（ILIKE 三列 + OR）                   NOT_INDEX:idx_products_name_trgm OK    ['products']
+      Q7   搜索：**单列** ILIKE（去掉 OR）                   INDEX:idx_products_name_trgm     OK    ['idx_products_name_trgm']
+      Q8a  搜索：属性筛选（**从 product 侧驱动**的 EXISTS）       INDEX:idx_product_skus_attributes OK    ['idx_product_skus_attributes', 'products_pkey']
+      Q8b  属性筛选：**直接从 SKU 侧**按属性查（对照）               INDEX:idx_product_skus_attributes OK    ['idx_product_skus_attributes']
+      Q9   订单列表：按 user_id                           INDEX:idx_orders_user_id         OK    ['idx_orders_user_id', 'users_pkey']
+      Q10  ★ 超时关单扫描（每 60 秒自动跑一次）                    INDEX:idx_orders_status          OK    ['idx_orders_status']
+      Q11  订单详情：按 order_id 取明细                      INDEX:idx_order_items_order_id   OK    ['idx_order_items_order_id', 'orders_pkey']
+      Q12  库存流水：按 sku_id 倒序（管理端流水页）                 INDEX:idx_inventory_logs_sku_id  OK    ['idx_inventory_logs_sku_id', 'product_skus_pkey']
+      Q13  商品评价：按 product_id                        INDEX:idx_reviews_product_id     OK    ['idx_reviews_product_id', 'products_pkey']
+  [OK]   13 条查询全部符合设计预期（命中 13）   hit=13/13
+  [OK]   ★★ 核心结论：生产真实搜索（Q5）用不上 idx_products_search —— OR 兜底把它挡住了   Q5=[]
+  [OK]   ★ 反向对照成立：Q7(单列 ILIKE) 用上 trgm，而 Q6(OR) 用不上   Q6=[] / Q7=['idx_products_name_trgm']
+  [OK]   ★ Q8a/Q8b 都用上 JSONB GIN（EXISTS 被计划器反写成从 SKU 侧驱动）   Q8a=['idx_product_skus_attributes', 'products_pkey'] / Q8b=['idx_product_skus_attributes']
+
+[7] 删临时库
+  [OK]   DROP DATABASE mallx_perf_probe   rc=0 err=
+
+==============================================================================
+ASSERTIONS: 38 / 38 passed   (EXPECTED=38)
+VERDICT: OK -- 索引命中情况与设计一致，反向对照成立
+==============================================================================
