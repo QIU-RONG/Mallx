@@ -52,7 +52,10 @@ USERNAME = "demo"
 PASSWORD = "demo123"
 METHODS = ["ALIPAY", "WECHAT", "BALANCE"]      # spread across the whitelist
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     try:

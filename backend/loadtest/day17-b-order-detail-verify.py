@@ -25,6 +25,7 @@
     ② 14 个字段（+ items 的 9 个字段）逐个与 DB 比，不采信接口自报；
     ③ 完整性与边界：VO 不含 userId；不存在 id → 业务 404；/abc → 业务 400。
 """
+from _paths import lp
 import json
 import subprocess
 import sys
@@ -35,9 +36,12 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8080"
-REPORT = r"D:\MallX\backend\loadtest\day17-b-order-detail-verify-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day17-b-order-detail-verify-report.txt")
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

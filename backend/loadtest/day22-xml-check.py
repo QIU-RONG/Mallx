@@ -18,6 +18,7 @@
 
 运行：python day22-xml-check.py
 """
+from _paths import lp
 import os
 import re
 import sys
@@ -25,7 +26,7 @@ import xml.etree.ElementTree as ET
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-ROOT = r"D:\MallX\backend\mallx"
+ROOT = lp(r"D:\MallX\backend\mallx")
 ADMIN = ROOT + r"\mall-admin\src\main"
 MK = ROOT + r"\mall-marketing\src\main"
 PROD = ROOT + r"\mall-product\src\main"
@@ -82,7 +83,7 @@ MODULES = [
 TODO_SCAN_ROOT = ROOT
 TODO_BASELINE = 7
 
-REPORT = r"D:\MallX\backend\loadtest\day22-xml-check-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day22-xml-check-report.txt")
 
 # 方法声明：行首 4 空格 + 返回类型开头，跨行到 ');'
 DECL_RE = re.compile(r"^ {4}\S[^;{}]*?(\w+)\s*\([^;{}]*\)\s*;", re.M)

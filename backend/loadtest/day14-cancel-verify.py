@@ -38,7 +38,9 @@ import urllib.error
 import urllib.request
 
 BASE = "http://127.0.0.1:8080"
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 TARGET_SKU = 4          # MATE80-BLK-512 @ 6999.00
 ADDRESS_ID = 2          # demo's default address
 HERE = os.path.dirname(os.path.abspath(__file__))

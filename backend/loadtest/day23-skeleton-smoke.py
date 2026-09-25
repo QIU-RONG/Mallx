@@ -41,7 +41,10 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 APP = "http://127.0.0.1:8080"
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 PSQL = [DOCKER, "exec", "mallx-postgres", "psql", "-U", "mallx", "-d", "mallx",
         "-t", "-A", "-F", "|"]
 

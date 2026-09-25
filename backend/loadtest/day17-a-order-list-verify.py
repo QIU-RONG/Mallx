@@ -17,6 +17,7 @@
     真 HTTP 401 / 403 由 Security 过滤器层给出（不经过 @RestControllerAdvice）；
     业务错误才是 HTTP 200 + body.code。
 """
+from _paths import lp
 import json
 import re
 import subprocess
@@ -28,9 +29,12 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8080"
-REPORT = r"D:\MallX\backend\loadtest\day17-a-order-list-verify-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day17-a-order-list-verify-report.txt")
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 
 # ★ 显式清空代理：系统代理会连 127.0.0.1 一起拦，表现是 502 os error 10061（不是服务挂了）

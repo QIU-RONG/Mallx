@@ -40,6 +40,7 @@
         迁移后：方法映射不存在              → 405
      两者依旧可区分（400 vs 405），且都不会写库。
 """
+from _paths import lp
 import json
 import sys
 import time
@@ -49,7 +50,7 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8080"
-REPORT = r"D:\MallX\backend\loadtest\day18-skeleton-smoke-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day18-skeleton-smoke-report.txt")
 
 # ★ 必须显式清空代理：本机系统代理会把 127.0.0.1 也拦下，
 #   表现是 502 upstream connect failed (os error 10061) —— 不是服务挂了。
@@ -134,10 +135,10 @@ def login(path, username, password):
 #    ⇒ 开跑前先数一遍源码里还有没有 UnsupportedOperationException：
 #      一个都没有 = 骨架期已过 = 立刻停（写端点一个都不许打）。
 SKELETON_SCAN_DIRS = [
-    r"D:\MallX\backend\mallx\mall-product\src\main\java",
-    r"D:\MallX\backend\mallx\mall-admin\src\main\java",
-    r"D:\MallX\backend\mallx\mall-order\src\main\java",
-    r"D:\MallX\backend\mallx\mall-inventory\src\main\java",
+    lp(r"D:\MallX\backend\mallx\mall-product\src\main\java"),
+    lp(r"D:\MallX\backend\mallx\mall-admin\src\main\java"),
+    lp(r"D:\MallX\backend\mallx\mall-order\src\main\java"),
+    lp(r"D:\MallX\backend\mallx\mall-inventory\src\main\java"),
 ]
 
 

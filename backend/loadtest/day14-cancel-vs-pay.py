@@ -62,7 +62,10 @@ TARGET_SKU = 4            # used only when the script creates its own target ord
 ADDRESS_ID = 2
 METHODS = ["ALIPAY", "WECHAT", "BALANCE"]
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     try:

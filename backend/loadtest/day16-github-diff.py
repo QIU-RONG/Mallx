@@ -4,6 +4,7 @@
 做法：取远端 HEAD 的完整树（blob 列表），与本地 `git ls-files` 求差集。
 纯只读，不改远端、不改本地。
 """
+from _paths import lp
 
 import json
 import subprocess
@@ -102,6 +103,6 @@ for p in remote_docs:
 report = "\n".join(lines)
 print(report)
 with open(
-    r"D:\MallX\backend\loadtest\day16-github-diff-report.txt", "w", encoding="utf-8"
+    lp(r"D:\MallX\backend\loadtest\day16-github-diff-report.txt"), "w", encoding="utf-8"
 ) as f:
     f.write(report + "\n")

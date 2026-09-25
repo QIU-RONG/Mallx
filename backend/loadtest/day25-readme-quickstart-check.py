@@ -22,6 +22,7 @@ README 是本项目**唯一面向外部读者**的文档，而它上一版（停
 
 运行：python day25-readme-quickstart-check.py
 """
+from _paths import lp
 import json
 import subprocess
 import sys
@@ -31,7 +32,10 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8080"
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 # ★ 护栏：断言条数写死。分解 = A 2 + B 3 + C 4 + D 5 + E 2 = 16
 #   （首跑时这里写的是 17 —— 立刻被护栏抓出来，见 Day-25 文档 §坑。
@@ -190,7 +194,7 @@ def _login(u, pw):
     return (b or {}).get("data", {}).get("token") if code_of(b) == 200 else None
 
 
-REPORT = r"D:\MallX\backend\loadtest\day25-readme-quickstart-check-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day25-readme-quickstart-check-report.txt")
 
 if __name__ == "__main__":
     sys.exit(main())

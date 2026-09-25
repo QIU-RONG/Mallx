@@ -20,17 +20,21 @@
   · `ON_ERROR_STOP=1`  让 SQL 报错时 psql 返回非 0（否则它默认「继续执行后面的语句并返回 0」，
                        于是一次失败的授权会被当成成功 —— 这个坑非常隐蔽）
 """
+from _paths import lp
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 DB_USER = "mallx"
 DB_NAME = "mallx"
-SQL_FILE = r"D:\MallX\backend\sql\07-admin-permissions.sql"
-REPORT = r"D:\MallX\backend\loadtest\day18-perm-apply-report.txt"
+SQL_FILE = lp(r"D:\MallX\backend\sql\07-admin-permissions.sql")
+REPORT = lp(r"D:\MallX\backend\loadtest\day18-perm-apply-report.txt")
 
 SNAPSHOT_SQL = """
 SELECT 'perm_total',       count(*)::text FROM permissions

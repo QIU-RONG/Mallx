@@ -25,7 +25,10 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 DB_USER = "mallx"
 DB_NAME = "mallx"

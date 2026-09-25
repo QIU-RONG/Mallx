@@ -21,6 +21,7 @@
 
 运行：python day25-api-inventory.py
 """
+from _paths import lp
 import json
 import os
 import re
@@ -29,15 +30,17 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-BACKEND = r"D:\MallX\backend\mallx"
-OPENAPI = r"D:\MallX\docs\api\openapi.json"
+BACKEND = lp(r"D:\MallX\backend\mallx")
+OPENAPI = lp(r"D:\MallX\docs\api\openapi.json")
 SECURITY = os.path.join(BACKEND, "mall-common", "src", "main", "java",
                         "com", "mallx", "common", "config", "SecurityConfig.java")
-DOC = r"D:\MallX\docs\api\API-总览.md"
+DOC = lp(r"D:\MallX\docs\api\API-总览.md")
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPORT = os.path.join(HERE, "day25-api-inventory-report.txt")
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 DB_USER = "mallx"
 DB_NAME = "mallx"

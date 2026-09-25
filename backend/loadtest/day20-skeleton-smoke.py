@@ -28,6 +28,7 @@
    这一对就是「精确路径 vs 通配路径」的实测差别。写错成 /** 时，第二条会变成 200 ——
    而那意味着**任何人可以看任何人的券**，且服务端不报任何错。
 """
+from _paths import lp
 
 import json
 import os
@@ -40,9 +41,11 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8080"
-REPORT = r"D:\MallX\backend\loadtest\day20-skeleton-smoke-report.txt"
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
-SKELETON_SCAN_DIR = r"D:\MallX\backend\mallx\mall-marketing\src\main\java"
+REPORT = lp(r"D:\MallX\backend\loadtest\day20-skeleton-smoke-report.txt")
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+SKELETON_SCAN_DIR = lp(r"D:\MallX\backend\mallx\mall-marketing\src\main\java")
 TODO_BASELINE = 11
 
 # ★ 必须显式清空代理：本机系统代理会把 127.0.0.1 也拦下，

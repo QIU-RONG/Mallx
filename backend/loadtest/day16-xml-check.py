@@ -6,11 +6,12 @@ mistake compiles fine (Maven just copies the file) and only blows up when MyBati
 parses it at startup - `SAXParseException: 注释中不允许出现字符串 "--"`.
 Day 13 hit exactly that. A plain well-formedness parse catches it in milliseconds.
 """
+from _paths import lp
 import xml.etree.ElementTree as ET
 
 FILES = [
-    r"D:\MallX\backend\mallx\mall-order\src\main\resources\mapper\OrderItemMapper.xml",
-    r"D:\MallX\backend\mallx\mall-review\src\main\resources\mapper\ReviewMapper.xml",
+    lp(r"D:\MallX\backend\mallx\mall-order\src\main\resources\mapper\OrderItemMapper.xml"),
+    lp(r"D:\MallX\backend\mallx\mall-review\src\main\resources\mapper\ReviewMapper.xml"),
 ]
 
 bad = 0

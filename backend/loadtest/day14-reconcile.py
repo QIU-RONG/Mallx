@@ -32,7 +32,9 @@ import os
 import subprocess
 import sys
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "day14-reconcile-report.txt")
 

@@ -19,6 +19,7 @@
 运行：python day25-sql-strict-check.py
 前置：容器 mallx-postgres 在运行（不要求应用在跑）。
 """
+from _paths import lp
 import glob
 import os
 import subprocess
@@ -26,13 +27,15 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 DB_USER = "mallx"
 ADMIN_DB = "mallx"                 # 借它来 CREATE/DROP 临时库
 PROBE_DB = "mallx_strict_probe"    # ★ 临时库，跑完就删
-SQL_DIR = r"D:\MallX\backend\sql"
-REPORT = r"D:\MallX\backend\loadtest\day25-sql-strict-check-report.txt"
+SQL_DIR = lp(r"D:\MallX\backend\sql")
+REPORT = lp(r"D:\MallX\backend\loadtest\day25-sql-strict-check-report.txt")
 
 # 14 份补丁的期望顺序（字典序恰好也是正确的执行序）
 FILES = ["01-schema.sql", "02-index.sql", "03-data.sql", "04-review-constraints.sql",

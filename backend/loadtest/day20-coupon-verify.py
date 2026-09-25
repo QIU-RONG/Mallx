@@ -27,6 +27,7 @@ Day 20 优惠券（阶段一）验收：A–K 共 11 条链路。
 
 运行：python day20-coupon-verify.py
 """
+from _paths import lp
 
 import atexit
 import json
@@ -44,11 +45,13 @@ from datetime import datetime, timedelta
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 APP = "http://127.0.0.1:8080"
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 PSQL = [DOCKER, "exec", "mallx-postgres", "psql", "-U", "mallx", "-d", "mallx",
         "-t", "-A", "-F", "|"]
-SRC_DIR = r"D:\MallX\backend\mallx\mall-marketing\src\main\java"
-XML_DIR = r"D:\MallX\backend\mallx\mall-marketing\src\main\resources\mapper"
+SRC_DIR = lp(r"D:\MallX\backend\mallx\mall-marketing\src\main\java")
+XML_DIR = lp(r"D:\MallX\backend\mallx\mall-marketing\src\main\resources\mapper")
 
 CP_PREFIX = "D20-TMP-"             # 临时券名前缀
 US_PREFIX = "d20tmp"               # 临时用户名前缀

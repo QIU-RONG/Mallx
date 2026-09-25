@@ -21,6 +21,7 @@
   · XML 有、Java 无 → MyBatis 启动**不报错**（namespace 类存在即可），
     于是它会静静躺在那儿，只能靠人工发现
 """
+from _paths import lp
 import re
 import sys
 import xml.etree.ElementTree as ET
@@ -30,25 +31,25 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 MODULES = [
     {
         "name": "mall-product（Day 18 主角）",
-        "java": r"D:\MallX\backend\mallx\mall-product\src\main\java\com\mallx\product\mapper\ProductMapper.java",
-        "xml": r"D:\MallX\backend\mallx\mall-product\src\main\resources\mapper\ProductMapper.xml",
+        "java": lp(r"D:\MallX\backend\mallx\mall-product\src\main\java\com\mallx\product\mapper\ProductMapper.java"),
+        "xml": lp(r"D:\MallX\backend\mallx\mall-product\src\main\resources\mapper\ProductMapper.xml"),
         "new": ["countByCategoryId"],
     },
     {
         "name": "mall-order（Day 17 回归）",
-        "java": r"D:\MallX\backend\mallx\mall-order\src\main\java\com\mallx\order\mapper\OrderMapper.java",
-        "xml": r"D:\MallX\backend\mallx\mall-order\src\main\resources\mapper\OrderMapper.xml",
+        "java": lp(r"D:\MallX\backend\mallx\mall-order\src\main\java\com\mallx\order\mapper\OrderMapper.java"),
+        "xml": lp(r"D:\MallX\backend\mallx\mall-order\src\main\resources\mapper\OrderMapper.xml"),
         "new": [],
     },
     {
         "name": "mall-inventory（Day 17 回归）",
-        "java": r"D:\MallX\backend\mallx\mall-inventory\src\main\java\com\mallx\inventory\mapper\InventoryMapper.java",
-        "xml": r"D:\MallX\backend\mallx\mall-inventory\src\main\resources\mapper\InventoryMapper.xml",
+        "java": lp(r"D:\MallX\backend\mallx\mall-inventory\src\main\java\com\mallx\inventory\mapper\InventoryMapper.java"),
+        "xml": lp(r"D:\MallX\backend\mallx\mall-inventory\src\main\resources\mapper\InventoryMapper.xml"),
         "new": [],
     },
 ]
 
-REPORT = r"D:\MallX\backend\loadtest\day18-xml-check-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day18-xml-check-report.txt")
 
 # 方法声明：行首 4 空格 + 返回类型开头，跨行到 ');'
 # （selectAdminOrders 的声明是跨三行的，单行正则抓不到 —— 这就是为什么这里没用单行匹配）

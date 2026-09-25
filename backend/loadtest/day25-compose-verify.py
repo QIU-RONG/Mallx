@@ -13,6 +13,7 @@
 
 运行：python day25-compose-verify.py [宿主端口，默认 8081]
 """
+from _paths import lp
 import json
 import subprocess
 import sys
@@ -23,8 +24,11 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8081
 BASE = "http://127.0.0.1:%d" % PORT
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
-COMPOSE_FILE = r"D:\MallX\deploy\docker-compose.app.yml"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+COMPOSE_FILE = lp(r"D:\MallX\deploy\docker-compose.app.yml")
 PROJECT = "mallx-stack"
 PG_CONTAINER = "mallx-stack-postgres-1"
 APP_CONTAINER = "mallx-stack-app-1"
@@ -159,7 +163,7 @@ def _verdict():
     return 0 if (n_fail == 0 and n_pass + n_fail == EXPECTED) else 1
 
 
-REPORT = r"D:\MallX\backend\loadtest\day25-compose-verify-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day25-compose-verify-report.txt")
 
 if __name__ == "__main__":
     sys.exit(main())

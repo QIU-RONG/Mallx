@@ -37,7 +37,10 @@ SKU_ID = 3
 BUY_QTY = 1
 STOCK = 100
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     try:

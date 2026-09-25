@@ -6,6 +6,7 @@
 
 纯只读：只用 GET，不动远端、不动本地仓库。
 """
+from _paths import lp
 
 import json
 import subprocess
@@ -154,6 +155,6 @@ say(f"  被 ignore 的路径   : {len(ign)} 个（这些不是「没推」，是
 report = "\n".join(lines)
 print(report)
 with open(
-    r"D:\MallX\backend\loadtest\day16-github-audit-report.txt", "w", encoding="utf-8"
+    lp(r"D:\MallX\backend\loadtest\day16-github-audit-report.txt"), "w", encoding="utf-8"
 ) as f:
     f.write(report + "\n")

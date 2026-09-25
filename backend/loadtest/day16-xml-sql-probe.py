@@ -11,13 +11,17 @@
   python day16-xml-sql-probe.py                 # 跑内置清单里的全部条目
   python day16-xml-sql-probe.py selectBuyContext # 只跑某一条
 """
+from _paths import lp
 import re
 import subprocess
 import sys
 from pathlib import Path
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
-MALLX = Path(r"D:\MallX\backend\mallx")
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+MALLX = Path(lp(r"D:\MallX\backend\mallx"))
 PG = ["exec", "-i", "-e", "PGCLIENTENCODING=UTF8", "mallx-postgres",
       "psql", "-U", "mallx", "-d", "mallx"]
 

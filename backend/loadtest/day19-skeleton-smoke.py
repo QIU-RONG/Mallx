@@ -26,6 +26,7 @@
     实测证据（本脚本 [3] 节）：匿名 GET → 500（进方法体）、匿名 POST → 401（被 Security 拒）、
     带 token 的 POST → 405（到 MVC 才发现方法不支持，顺带回归 Day 18 补的 handler）。
 """
+from _paths import lp
 import json
 import os
 import sys
@@ -36,7 +37,7 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8080"
-REPORT = r"D:\MallX\backend\loadtest\day19-skeleton-smoke-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day19-skeleton-smoke-report.txt")
 
 # ★ 必须显式清空代理：本机系统代理会把 127.0.0.1 也拦下，
 #   表现是 502 upstream connect failed (os error 10061) —— 不是服务挂了。
@@ -132,7 +133,7 @@ def wait_app(deadline=180):
 #   ⚠️ 本脚本自身只读，护栏的作用是「别把已实现当成故障」——
 #      护栏为 0 时仍会走完，但会明确提示「500 断言已过期」。
 SKELETON_SCAN_DIRS = [
-    r"D:\MallX\backend\mallx\mall-product\src\main\java",
+    lp(r"D:\MallX\backend\mallx\mall-product\src\main\java"),
 ]
 
 

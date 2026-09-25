@@ -22,6 +22,7 @@
   demo（C 端用户） → 期望 403（C 端 token 的 perms 是空集）
   admin（超管）    → 期望「非 401/403」（骨架期即 500）
 """
+from _paths import lp
 import json
 import sys
 import time
@@ -31,7 +32,7 @@ import urllib.request
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 BASE = "http://127.0.0.1:8080"
-REPORT = r"D:\MallX\backend\loadtest\day17-skeleton-smoke-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day17-skeleton-smoke-report.txt")
 
 # ★ 必须显式清空代理：本机系统代理会把 127.0.0.1 也拦下，
 #   表现是 502 upstream connect failed (os error 10061) —— 不是服务挂了。

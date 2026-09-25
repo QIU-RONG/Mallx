@@ -62,7 +62,9 @@ import subprocess
 import sys
 import time
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "day17-m1-regression-report.txt")
 BASELINE = os.path.join(HERE, "day17-m1-baseline.json")

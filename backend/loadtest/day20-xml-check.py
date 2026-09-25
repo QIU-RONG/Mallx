@@ -38,6 +38,7 @@
   · Java 有、XML 无 → 调用必然 Invalid bound statement
   · XML 有、Java 无 → MyBatis 启动**不报错**，静静躺着只能靠人工发现
 """
+from _paths import lp
 import os
 import re
 import sys
@@ -45,10 +46,10 @@ import xml.etree.ElementTree as ET
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-MK = r"D:\MallX\backend\mallx\mall-marketing\src\main"
-PROD = r"D:\MallX\backend\mallx\mall-product\src\main"
-ORDER = r"D:\MallX\backend\mallx\mall-order\src\main"
-INV = r"D:\MallX\backend\mallx\mall-inventory\src\main"
+MK = lp(r"D:\MallX\backend\mallx\mall-marketing\src\main")
+PROD = lp(r"D:\MallX\backend\mallx\mall-product\src\main")
+ORDER = lp(r"D:\MallX\backend\mallx\mall-order\src\main")
+INV = lp(r"D:\MallX\backend\mallx\mall-inventory\src\main")
 
 MODULES = [
     {
@@ -87,7 +88,7 @@ MODULES = [
 TODO_SCAN_DIR = MK + r"\java"
 TODO_BASELINE = 11
 
-REPORT = r"D:\MallX\backend\loadtest\day20-xml-check-report.txt"
+REPORT = lp(r"D:\MallX\backend\loadtest\day20-xml-check-report.txt")
 
 # 方法声明：行首 4 空格 + 返回类型开头，跨行到 ');'
 DECL_RE = re.compile(r"^ {4}\S[^;{}]*?(\w+)\s*\([^;{}]*\)\s*;", re.M)

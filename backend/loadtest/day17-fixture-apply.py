@@ -8,15 +8,19 @@
 
 ★ 幂等判据：连跑两次，第二次的 admins / admin_roles 快照必须与第一次完全相同。
 """
+from _paths import lp
 import subprocess
 import sys
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-SQL_FILE = r"D:\MallX\backend\sql\06-day17-fixtures.sql"
-REPORT = r"D:\MallX\backend\loadtest\day17-fixture-apply-report.txt"
+SQL_FILE = lp(r"D:\MallX\backend\sql\06-day17-fixtures.sql")
+REPORT = lp(r"D:\MallX\backend\loadtest\day17-fixture-apply-report.txt")
 
-DOCKER = r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
+import os
+# ★ Portability (CI runs on Linux): MALLX_DOCKER overrides this path.
+#   Unset locally => identical behaviour to before.
+DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"
 CONTAINER = "mallx-postgres"
 
 lines = []
