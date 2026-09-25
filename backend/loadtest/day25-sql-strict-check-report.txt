@@ -1,0 +1,52 @@
+==============================================================================
+SQL 补丁严格模式全量自检（全新临时库 mallx_strict_probe，ON_ERROR_STOP=1）
+==============================================================================
+
+[0] 文件清单：实得 14 份，期望 14 份
+  [OK]   清单份数 == 14   got=14
+  [OK]   清单里每个文件都存在   missing=[]
+  [OK]   磁盘上没有清单外的 .sql   extra=[]
+
+[1] 建临时库（★ 会先 DROP 掉同名库，只动这一个名字）
+  [OK]   CREATE DATABASE mallx_strict_probe   rc=0 err=
+
+[2] 按序执行（★ 忠实模拟 initdb：第一个 rc != 0 之后，其余文件【不会被执行】）
+      [OK  ] 01-schema.sql                      rc=0
+      [OK  ] 02-index.sql                       rc=0
+      [OK  ] 03-data.sql                        rc=0
+      [OK  ] 04-review-constraints.sql          rc=0
+      [OK  ] 05-admin-permissions.sql           rc=0
+      [OK  ] 06-day17-fixtures.sql              rc=0
+      [OK  ] 07-admin-permissions.sql           rc=0
+      [OK  ] 08-marketing-permissions.sql       rc=0
+      [OK  ] 09-user-coupons-unique.sql         rc=0
+      [OK  ] 10-brand-permissions.sql           rc=0
+      [OK  ] 11-order-discount.sql              rc=0
+      [OK  ] 12-day22-permissions.sql           rc=0
+      [OK  ] 13-day23-permissions.sql           rc=0
+      [OK  ] 14-brand-crud-permissions.sql      rc=0
+  [OK]   14 个文件全部 rc == 0（没有任何文件把链掐断）   bad=[]
+  [OK]   ★ 没有被跳过的文件（initdb 语义：前面的失败会掐断后面全部）   会被跳过 0 个：[]
+
+[3] ★ 09 号那段「期望抛错」的探针是否被内部消化（NOTICE 而不是 ERROR）
+  [OK]   09 输出了 NOTICE「SELF-CHECK OK」（异常在库内被接住）   ★ 没看到该 NOTICE ⇒ 要么探针没执行，要么异常漏到了 psql 层
+
+[4] 跑完全部补丁后的硬事实（必须与 day24-perm-apply.py 的口径一致）
+  [OK]   permissions 行数 == 41   got='41'
+  [OK]   permissions max(id) == 41（显式 id 种子区间连续）   got='41'
+  [OK]   DDL 补丁 11 号生效（orders.discount_amount 存在）   got='1'
+  [OK]   DDL 补丁 09 号生效（uk_user_coupons_user_coupon 存在）   got='1'
+  [OK]   最后一份补丁 14 号的授权也在（超管持有 4 条 brand:*）   got='4'
+  [OK]   核心表建齐（public schema 表数 >= 22）   tables=22
+
+[5] ★ 探针是否留下痕迹（09 用 ROLLBACK 保证零痕迹）
+  [OK]   临时券 id=999999 不存在（探针零痕迹）   got='0'
+  [OK]   user_coupons 为空（探针那两次 INSERT 已随 ROLLBACK 消失）   got='0'
+
+[6] 删临时库
+  [OK]   DROP DATABASE mallx_strict_probe   rc=0 err=
+
+==============================================================================
+ASSERTIONS: 16 / 16 passed   (EXPECTED=16)
+VERDICT: OK -- 14 份补丁在全新库上按序跑通，initdb 不会被掐断
+==============================================================================
