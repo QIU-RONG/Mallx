@@ -5,15 +5,15 @@ sku under test: 4
 ==============================================================================
 
 [0] BASELINE FINGERPRINT (all 7 SKUs)
-  baseline             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
-  baseline             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
-  baseline             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
-  baseline             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
-  baseline             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
-  baseline             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  baseline             sku1  total=100  available= 99  locked=  0  sold=  1  identity=OK
+  baseline             sku2  total= 80  available= 78  locked=  0  sold=  2  identity=OK
+  baseline             sku3  total= 60  available= 59  locked=  0  sold=  1  identity=OK
+  baseline             sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
+  baseline             sku5  total=120  available=119  locked=  0  sold=  1  identity=OK
+  baseline             sku6  total= 40  available= 39  locked=  0  sold=  1  identity=OK
   baseline             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
-  rows orders/payments/order_items/inventory_logs = 8/5/9/0
-  ★ A0 = available_stock of sku4 at start = 147
+  rows orders/payments/order_items/inventory_logs = 6/6/6/0
+  ★ A0 = available_stock of sku4 at start = 149
 
 [1] logins (tokens stay in memory, never on disk)
   demo      http=200 code=200 userId=1 token_len=191
@@ -25,32 +25,32 @@ ORDER A -- the full forward path: place -> pay -> SHIP -> CONFIRM
 ------------------------------------------------------------------------------
 
 [2] place order A (sku4 x1)
-  POST /api/orders -> order=9118 code=200 {"code":200,"message":"success","data":9118}
-  after place A        sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
+  POST /api/orders -> order=9 code=200 {"code":200,"message":"success","data":9}
+  after place A        sku4  total=150  available=148  locked=  1  sold=  1  identity=OK
   delta vs start: available -1  locked +1  sold +0
 
 [3] pay order A
   POST /api/payments -> http=200 code=200
-  after pay A          sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
+  after pay A          sku4  total=150  available=148  locked=  0  sold=  2  identity=OK
   delta vs after-place: available +0  locked -1  sold +1
 
 [4] ★ SHIP order A -- ADMIN token, needs order:ship
-  POST /api/orders/9118/ship (admin) -> http=200 code=200 {"code":200,"message":"success","data":null}
-  after ship A         sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
+  POST /api/orders/9/ship (admin) -> http=200 code=200 {"code":200,"message":"success","data":null}
+  after ship A         sku4  total=150  available=148  locked=  0  sold=  2  identity=OK
   delta vs after-pay: available +0  locked +0  sold +0   ★ must be all zeros
 
 [5] ★ CONFIRM order A -- C-end token, the owner
-  POST /api/orders/9118/confirm (demo) -> http=200 code=200 {"code":200,"message":"success","data":null}
-  after confirm A      sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
+  POST /api/orders/9/confirm (demo) -> http=200 code=200 {"code":200,"message":"success","data":null}
+  after confirm A      sku4  total=150  available=148  locked=  0  sold=  2  identity=OK
   delta vs after-ship: available +0  locked +0  sold +0   ★ must be all zeros
-  A timestamps: paid=15:42:43 shipped=15:42:44 completed=15:42:44
+  A timestamps: paid=17:13:34 shipped=17:13:34 completed=17:13:35
 
 ------------------------------------------------------------------------------
 ORDER B -- the guard rails: wrong state, wrong actor, repeated calls
 ------------------------------------------------------------------------------
 
 [6] ★★ RBAC -- ship is the first business endpoint that really uses it
-  order B placed -> 9119
+  order B placed -> 10
   demo (C-end) token  -> ship order B : http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
   anonymous           -> ship order B : http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
   intruder (C-end)    -> ship order B : http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
@@ -85,18 +85,18 @@ ORDER B -- the guard rails: wrong state, wrong actor, repeated calls
 ==============================================================================
 [11] CLEANUP -- remove this run's artifacts, restore the baseline
 ==============================================================================
-  orders to delete: [9118, 9119]
+  orders to delete: [9, 10]
   ledger rows to delete: id > 0
 
 [12] VERIFY -- the database is byte-for-byte back at baseline
-  restored             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
-  restored             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
-  restored             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
-  restored             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
-  restored             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
-  restored             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  restored             sku1  total=100  available= 99  locked=  0  sold=  1  identity=OK
+  restored             sku2  total= 80  available= 78  locked=  0  sold=  2  identity=OK
+  restored             sku3  total= 60  available= 59  locked=  0  sold=  1  identity=OK
+  restored             sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
+  restored             sku5  total=120  available=119  locked=  0  sold=  1  identity=OK
+  restored             sku6  total= 40  available= 39  locked=  0  sold=  1  identity=OK
   restored             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
-  rows orders/payments/order_items/inventory_logs = 8/5/9/0   (baseline 8/5/9/0)
+  rows orders/payments/order_items/inventory_logs = 6/6/6/0   (baseline 6/6/6/0)
 
 ==============================================================================
 ASSERTIONS: 56 / 56 passed

@@ -43,7 +43,7 @@ Day 23 验收：RBAC 权限管理（A–G 七组）
   [PASS] B5 GET 管理员详情 -> HTTP 200 + code 200
   [PASS] B6 ★★ 详情响应里【没有 password 键】（不是 "password": null）
   [PASS] B7 详情 roleIds / roleCodes 是空数组（新账号默认无角色）
-    夹具: d23tmpa1(启用, 昵称命中, id=14) / d23tmpb1(★禁用, 昵称命中, id=16) —— 后者是括号判据的靶子
+    夹具: d23tmpa1(启用, 昵称命中, id=4) / d23tmpb1(★禁用, 昵称命中, id=6) —— 后者是括号判据的靶子
   [PASS] B8 不传 status 的列表：keyword 命中【启用 + 禁用】两行（禁用不是删除）
   [PASS] B9 status=0 过滤 -> 只剩那行禁用的
   [PASS] B10 ★★ 括号正确性：keyword + status=1 时，「昵称命中但已禁用」的行【不许出现】

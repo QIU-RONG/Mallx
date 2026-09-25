@@ -8,6 +8,13 @@
 #  - 宿主 5433 在 Docker Desktop 层被"幽灵"转发占用（bind 冲突，勿用）；
 #  - 故统一映射到宿主 5434 -> 容器 5432。
 # 后端连接串默认 DB_PORT=5434（见 mall-server application.yml），两端保持一致。
+#
+# 初始化挂载（Day 26 加入，CI 与本地共用同一拓扑）：
+#  - 全新数据卷会按 backend/sql 的 01→14 顺序自动执行（与 deploy/docker-compose.app.yml 一致）；
+#  - ★ 语义见 docs/daily/Day-25：initdb 以 ON_ERROR_STOP=1 熔断 —— 任一文件报错即中止，
+#    其后补丁全部静默跳过；对全新库初始化是否成功，用
+#    `SELECT count(*) FROM permissions` = 41 来判（容器 healthy ≠ 业务可用）；
+#  - 已有数据的旧卷不受影响（initdb 只在数据目录为空时执行）。
 
 services:
   postgres:
@@ -23,6 +30,7 @@ services:
       - "5434:5432"
     volumes:
       - mallx_pgdata:/var/lib/postgresql/data
+      - ../backend/sql:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mallx -d mallx"]
       interval: 5s

@@ -8,7 +8,7 @@ SQL 补丁严格模式全量自检（全新临时库 mallx_strict_probe，ON_ERR
   [OK]   磁盘上没有清单外的 .sql   extra=[]
 
 [1] 建临时库（★ 会先 DROP 掉同名库，只动这一个名字）
-  [OK]   CREATE DATABASE mallx_strict_probe   rc=0 err=
+  [OK]   CREATE DATABASE mallx_strict_probe   rc=0 err=NOTICE:  database "mallx_strict_probe" does not exist, skipping
 
 [2] 按序执行（★ 忠实模拟 initdb：第一个 rc != 0 之后，其余文件【不会被执行】）
       [OK  ] 01-schema.sql                      rc=0

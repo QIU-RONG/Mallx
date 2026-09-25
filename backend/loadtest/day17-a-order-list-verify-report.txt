@@ -4,11 +4,11 @@ Day 17 · 链路 A 验收 —— GET /api/admin/orders
 应用可达: 是（等待 0.0s）
 
 [1] DB 基线（直接查库，作为唯一真相）
-      orders 总行数 = 8
-      id 降序 = [9015, 9007, 9006, 9005, 9004, 9002, 2, 1]
-      status=PAID             -> 5 行
+      orders 总行数 = 6
+      id 降序 = [6, 5, 4, 3, 2, 1]
+      status=PAID             -> 6 行
       status=PENDING_PAYMENT  -> 0 行
-      status=CANCELLED        -> 3 行
+      status=CANCELLED        -> 0 行
 
 [2] 登录  demo: OK   admin: OK
 
@@ -20,27 +20,27 @@ Day 17 · 链路 A 验收 —— GET /api/admin/orders
   ✅ HTTP 200                                                   实得 200
   ✅ body.code == 200                                           实得 200
   ✅ PageResult 四字段齐（records/total/current/size）                keys=['current', 'records', 'size', 'total']
-  ✅ total 与 DB 行数一致                                            接口 8 / DB 8
+  ✅ total 与 DB 行数一致                                            接口 6 / DB 6
 
 [5] ★ 逐记录逐字段对账（接口 vs DB，10 字段全覆盖）
-  ✅ id 列表与 DB 逐位一致且降序                                          接口 [9015, 9007, 9006, 9005, 9004, 9002, 2, 1]
+  ✅ id 列表与 DB 逐位一致且降序                                          接口 [6, 5, 4, 3, 2, 1]
   ✅ 每条 record 的 key 集合 == VO 的 10 字段                           []
   ✅ 无 null 字段（含上轮漏掉的 orderNo / status）                         []
   ✅ 逐字段值与 DB 完全一致                                              []
 
 [6] 两个可选筛选条件（<if>）
-  ✅ ?status=PAID -> total 与 DB 一致                              接口 5 / DB 5
+  ✅ ?status=PAID -> total 与 DB 一致                              接口 6 / DB 6
   ✅ ?status=PAID -> 每条 status 都是 PAID                          
   ✅ ?status=PAID -> id 集合与 DB 一致                               
-  ✅ ?userId=1 -> total 与 DB 一致                                 接口 8 / DB 8
+  ✅ ?userId=1 -> total 与 DB 一致                                 接口 6 / DB 6
   ✅ ?userId=2（DB 里 0 单）-> total=0 且不报错                         接口 0 / DB 0
   ✅ ?status=PENDING_PAYMENT（DB 里 0 单）-> total=0                
   ✅ ?status= (空串) -> 等同不筛                                      
-  ✅ ?status=%20(空格) -> 等同不筛【★区分性判据】                            实得 total=8，期望 8
+  ✅ ?status=%20(空格) -> 等同不筛【★区分性判据】                            实得 total=6，期望 6
 
 [7] 分页正确性（不重不漏）与参数夹紧
-  ✅ 每页 size=3                                                  3/3/2
-  ✅ 翻页不重不漏（并集 == 全量、无交集）                                       [9015, 9007, 9006] + [9005, 9004, 9002] + [2, 1]
+  ✅ 每页 size=3                                                  3/3/0
+  ✅ 翻页不重不漏（并集 == 全量、无交集）                                       [6, 5, 4] + [3, 2, 1] + []
   ✅ current 回显正确                                               1/2/3
   ✅ ?size=0 -> 夹紧成 1 行（不夹紧时 MP 会返回空列表）                         len=1 size=1
   ✅ ?size=-5 -> 夹紧成 1 行（不夹紧时 size<0 = 不执行分页、查全表）               len=1 size=1
@@ -48,7 +48,7 @@ Day 17 · 链路 A 验收 —— GET /api/admin/orders
   ✅ ?page=0 -> current 规范化为 1                                  current=1
 
 [8] 排序（不带排序的分页 = 随机翻页 / 漏行）
-  ✅ 严格按 id 降序                                                  [9015, 9007, 9006, 9005, 9004, 9002, 2, 1]
+  ✅ 严格按 id 降序                                                  [6, 5, 4, 3, 2, 1]
 
 ==============================================================================
 VERDICT: OK —— 26 / 26 项全过

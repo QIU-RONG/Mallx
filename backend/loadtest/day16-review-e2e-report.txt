@@ -5,14 +5,14 @@ skus under test: [3, 4, 5]
 ==============================================================================
 
 [0] BASELINE FINGERPRINT
-  baseline             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
-  baseline             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
-  baseline             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
-  baseline             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
-  baseline             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
-  baseline             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  baseline             sku1  total=100  available= 99  locked=  0  sold=  1  identity=OK
+  baseline             sku2  total= 80  available= 78  locked=  0  sold=  2  identity=OK
+  baseline             sku3  total= 60  available= 59  locked=  0  sold=  1  identity=OK
+  baseline             sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
+  baseline             sku5  total=120  available=119  locked=  0  sold=  1  identity=OK
+  baseline             sku6  total= 40  available= 39  locked=  0  sold=  1  identity=OK
   baseline             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
-  rows orders/payments/order_items/inventory_logs/reviews = 8/5/9/0/0
+  rows orders/payments/order_items/inventory_logs/reviews = 6/6/6/0/0
   ★ reviews at start = 0   (Day 03 built the table; Day 16 is its first use)
 
 [1] logins (tokens stay in memory, never on disk)
@@ -25,19 +25,19 @@ ORDER A -- one order, three lines: the review target for the whole run
 ------------------------------------------------------------------------------
 
 [2] place A -> pay -> ship(admin) -> confirm(demo) -> COMPLETED
-  POST /api/orders (skus [3, 4, 5]) -> order=9120 code=200
+  POST /api/orders (skus [3, 4, 5]) -> order=11 code=200
   POST /api/payments -> http=200 code=200
-  POST /api/orders/9120/ship (admin) -> http=200 code=200
-  POST /api/orders/9120/confirm (demo) -> http=200 code=200
-  order_items: [(214, 3, 5), (215, 2, 4), (216, 1, 3)]
-  review targets: item_a=216 (sku3)  item_b=215 (sku4)  item_c=214 (sku5)
+  POST /api/orders/11/ship (admin) -> http=200 code=200
+  POST /api/orders/11/confirm (demo) -> http=200 code=200
+  order_items: [(11, 3, 5), (12, 2, 4), (13, 1, 3)]
+  review targets: item_a=13 (sku3)  item_b=12 (sku4)  item_c=11 (sku5)
 
 ------------------------------------------------------------------------------
 [3] POST /api/reviews -- ★★ the three derived columns must come from the DB
 ------------------------------------------------------------------------------
-  POST /api/reviews {orderItemId:216, rating:5} -> http=200 code=200 {"code":200,"message":"success","data":{"content":"hello from day16","createdAt":"2026-09-25T15:42:58.575132", ...(truncated)
-  db row: {'id': 92, 'user_id': 1, 'order_id': 9120, 'product_id': 1, 'rating': 5, 'content': 'hello from day16', 'status': 1}
-  evidence: order_items says order_id=9120 product_id=1; orders says user_id=1
+  POST /api/reviews {orderItemId:13, rating:5} -> http=200 code=200 {"code":200,"message":"success","data":{"content":"hello from day16","createdAt":"2026-09-25T17:13:49.012755", ...(truncated)
+  db row: {'id': 1, 'user_id': 1, 'order_id': 11, 'product_id': 1, 'rating': 5, 'content': 'hello from day16', 'status': 1}
+  evidence: order_items says order_id=11 product_id=1; orders says user_id=1
 
 [4] the same order line again -- ON CONFLICT DO NOTHING must answer 0 rows
   POST /api/reviews (same orderItemId) -> http=200 code=400 {"code":400,"message":"该商品已评价过","data":null}
@@ -49,22 +49,22 @@ ORDER A -- one order, three lines: the review target for the whole run
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=200   {"code":200,"message":"success","data":{"content":"concurrent-3","crea ...(truncated)
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
-    http=200  code=200   {"code":200,"message":"success","data":{"content":"concurrent-5","crea ...(truncated)
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
 
 ------------------------------------------------------------------------------
 [6] IDOR -- reviewing somebody else's purchase must be invisible
 ------------------------------------------------------------------------------
-  intruder -> demo's item 214 : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
+  intruder -> demo's item 11 : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
   demo -> a non-existent item  : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
 
 ------------------------------------------------------------------------------
 [7] eligibility -- only COMPLETED orders may be reviewed
 ------------------------------------------------------------------------------
-  ORDER B placed -> 9121
+  ORDER B placed -> 12
   review a PENDING_PAYMENT order's line -> code=400 {"code":400,"message":"只有已完成的订单才能评价","data":null}
   pay order B -> code=200
   review a PAID order's line -> code=400 {"code":400,"message":"只有已完成的订单才能评价","data":null}
@@ -87,14 +87,14 @@ ORDER A -- one order, three lines: the review target for the whole run
 [9] ★★ forged fields -- the client cannot vote on somebody else's product
 ------------------------------------------------------------------------------
   POST with userId/orderId/productId = 999999 -> http=200 code=200
-  db row: {'id': 102, 'user_id': 1, 'order_id': 9120, 'product_id': 3, 'rating': 4, 'content': 'forged attempt', 'status': 1}   (evidence: real order=9120 product=3 user=1)
+  db row: {'id': 11, 'user_id': 1, 'order_id': 11, 'product_id': 3, 'rating': 4, 'content': 'forged attempt', 'status': 1}   (evidence: real order=11 product=3 user=1)
 
 ------------------------------------------------------------------------------
 [10] reading reviews -- per product (PUBLIC) / mine (logged in) / aggregates
 ------------------------------------------------------------------------------
   GET /api/products/1/reviews  (NO token) -> http=200 code=200
   total=1 current=1 size=10 reviewCount=1 avgRating=5.0
-  GET /api/reviews/my (demo) -> http=200 code=200 count=3 items=[214, 215, 216]
+  GET /api/reviews/my (demo) -> http=200 code=200 count=3 items=[11, 12, 13]
 
   pagination edges (Day 12's three traps)
     page=1&size=0    code=200   records=1   (size=0 -> clamped up to 1)
@@ -121,18 +121,18 @@ ORDER A -- one order, three lines: the review target for the whole run
 ==============================================================================
 [12] CLEANUP -- remove this run's artifacts, restore the baseline
 ==============================================================================
-  orders to delete: [9120, 9121]
+  orders to delete: [11, 12]
   ledger rows to delete: id > 0
 
 [13] VERIFY -- the database is byte-for-byte back at baseline
-  restored             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
-  restored             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
-  restored             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
-  restored             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
-  restored             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
-  restored             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  restored             sku1  total=100  available= 99  locked=  0  sold=  1  identity=OK
+  restored             sku2  total= 80  available= 78  locked=  0  sold=  2  identity=OK
+  restored             sku3  total= 60  available= 59  locked=  0  sold=  1  identity=OK
+  restored             sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
+  restored             sku5  total=120  available=119  locked=  0  sold=  1  identity=OK
+  restored             sku6  total= 40  available= 39  locked=  0  sold=  1  identity=OK
   restored             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
-  rows orders/payments/order_items/inventory_logs/reviews = 8/5/9/0/0   (baseline 8/5/9/0/0)
+  rows orders/payments/order_items/inventory_logs/reviews = 6/6/6/0/0   (baseline 6/6/6/0/0)
 
 ==============================================================================
 ASSERTIONS: 75 / 75 passed

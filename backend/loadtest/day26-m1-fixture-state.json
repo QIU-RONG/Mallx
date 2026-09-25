@@ -1,0 +1,43 @@
+{
+  "created_at": "2026-09-25 17:13:19",
+  "orders": [
+    {
+      "id": 1,
+      "sku": 1,
+      "qty": 1,
+      "target": "PAID"
+    },
+    {
+      "id": 2,
+      "sku": 4,
+      "qty": 1,
+      "target": "PAID"
+    },
+    {
+      "id": 3,
+      "sku": 2,
+      "qty": 2,
+      "target": "PAID"
+    },
+    {
+      "id": 4,
+      "sku": 3,
+      "qty": 1,
+      "target": "PAID"
+    },
+    {
+      "id": 5,
+      "sku": 5,
+      "qty": 1,
+      "target": "PAID"
+    },
+    {
+      "id": 6,
+      "sku": 6,
+      "qty": 1,
+      "target": "PAID"
+    }
+  ],
+  "address_id": 2,
+  "intruder_id": 2
+}

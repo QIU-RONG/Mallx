@@ -1,0 +1,116 @@
+# MallX CI —— 与本机验收完全同构的单 job 流水线
+#
+# 设计原则（为什么长这样）：
+#  1. 复用 deploy/docker-compose.yml（同一个容器名 mallx-postgres、同一个 5434、
+#     同一套 initdb 01→14）—— 63 个验收脚本一行不改即可在 runner 上运行；
+#     本地与 CI 的唯一差异：mvn 离线(-o) vs 在线、Windows docker 绝对路径 vs
+#     PATH 里的 docker（用 MALLX_DOCKER=docker 覆盖，见 loadtest/_paths.py 与各脚本）。
+#  2. 「等数据库就绪」必须用数据判据（permissions=41），不能用 pg_isready /
+#     容器 healthy —— initdb 以 ON_ERROR_STOP=1 熔断，healthy 时补丁可能还没跑完
+#     （Day 25 事故判据，见 docs/daily/Day-25）。
+#  3. 全部判定来自脚本退出码（所有纳管脚本失败即 exit 1），CI 不 grep 人类可读文本。
+#  4. M1 回归按收集器协议执行：--baseline → 五个链路脚本 → 收集器（缺一不可，
+#     收集器靠报告 mtime 戳验证「本轮重新生成」）。
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      MALLX_DOCKER: docker        # 覆盖脚本里硬编码的 Windows docker 路径
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build (mvn install, 在线 —— CI 没有本地离线仓库)
+        working-directory: backend/mallx
+        run: mvn -B -ntp install -DskipTests
+
+      - name: Start PostgreSQL (dev topology + initdb 01-14)
+        working-directory: deploy
+        run: |
+          docker compose down -v --remove-orphans || true
+          docker compose up -d
+
+      - name: Wait for initdb (数据判据：permissions=41，而非 pg_isready)
+        run: |
+          n=0
+          for i in $(seq 1 60); do
+            n=$(docker exec mallx-postgres psql -U mallx -d mallx -tAc \
+                "SELECT count(*) FROM permissions" 2>/dev/null || echo 0)
+            n=$(echo "$n" | tr -d '[:space:]')
+            if [ "$n" = "41" ]; then
+              echo "initdb complete: permissions=$n"
+              break
+            fi
+            echo "waiting for initdb... ($i) permissions=$n"
+            sleep 3
+          done
+          if [ "$n" != "41" ]; then
+            echo "::error::initdb 未完成（permissions=$n，期望 41）—— 01→14 有文件熔断"
+            docker logs mallx-postgres 2>&1 | tail -60
+            exit 1
+          fi
+
+      - name: SQL strict check (熔断语义 / 临时库 / 零痕迹)
+        working-directory: backend/loadtest
+        run: python day25-sql-strict-check.py
+
+      - name: Start app (jar 由上一步 mvn install 产出)
+        run: |
+          nohup java -jar backend/mallx/mall-server/target/mall-server-0.0.1-SNAPSHOT.jar \
+            --server.port=8080 > /tmp/app.log 2>&1 &
+          code=000
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8080/api/hello || true)
+            if [ "$code" = "200" ]; then echo "app up after $((i*3))s"; break; fi
+            sleep 3
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::应用未在 180s 内就绪"
+            tail -80 /tmp/app.log
+            exit 1
+          fi
+
+      - name: Apply M1 fixture (intruder + address + 6 PAID orders —— 245/245 的隐藏前置，见脚本 docstring)
+        working-directory: backend/loadtest
+        run: python day26-m1-fixture.py
+
+      - name: M1 regression (baseline -> 5 chain scripts -> collect, 245/245)
+        working-directory: backend/loadtest
+        run: |
+          python day17-m1-regression.py --baseline
+          python day14-e2e-walk.py
+          python day15-ship-confirm.py
+          python day16-review-e2e.py
+          python day17-a-order-list-verify.py
+          python day17-b-order-detail-verify.py
+          python day17-m1-regression.py
+
+      - name: Extended suites (券 L1/L2、用券、RBAC、品牌 CRUD)
+        working-directory: backend/loadtest
+        run: |
+          python day20-coupon-verify.py
+          python day21-coupon-use-verify.py
+          python day23-rbac-verify.py
+          python day24-brand-crud-verify.py
+
+      - name: Dump app log on failure
+        if: failure()
+        run: tail -100 /tmp/app.log || true

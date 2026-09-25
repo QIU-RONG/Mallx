@@ -4,17 +4,17 @@ Day 17 · 链路 B 验收 —— GET /api/admin/orders/{id}
 应用可达: 是（等待 0.0s）
 
 [1] DB 基线
-      orders 8 张；归属 user_id 集合 = ['1']；明细共 9 条
-      逐单明细条数 = {1: 2, 2: 1, 9002: 1, 9004: 1, 9005: 1, 9006: 1, 9007: 1, 9015: 1}
+      orders 6 张；归属 user_id 集合 = ['1']；明细共 6 条
+      逐单明细条数 = {1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1}
 
 [2] 登录  demo:OK  intruder:OK  admin:OK  op_order:OK
   ✅ 四个身份全部登录成功                                                 op_order token 可用于权限矩阵
 
 [3] 判别力前提（实测，不假设）
-      op_order 的 admins.id = 2 ；订单 9005 的 user_id = 1
+      op_order 的 admins.id = 2 ；订单 6 的 user_id = 1
   ✅ op_order.id ≠ 该订单的 user_id（降级实现会被这条抓出来）                    2 vs 1
 
-[4] 权限三态 —— /api/admin/orders/9005
+[4] 权限三态 —— /api/admin/orders/6
   ✅ 匿名（不带头）-> 真 HTTP 401                                       实得 401
   ✅ C 端 demo token -> 真 HTTP 403                               实得 403
   ✅ C 端 intruder token -> 真 HTTP 403                           实得 403
@@ -36,11 +36,11 @@ Day 17 · 链路 B 验收 —— GET /api/admin/orders/{id}
 
 [7] ★ 逐单逐字段对账（管理端，14 个字段 + items 9 个字段）
   ✅ 每次返回的 key 集合 == VO 的 14 字段                                 []
-  ✅ ★ VO 不含 userId（8 单全覆盖，key 集合里没有它）                          8 单
+  ✅ ★ VO 不含 userId（6 单全覆盖，key 集合里没有它）                          6 单
   ✅ 无 null 字段（未流转的时间戳除外）                                       []
   ✅ 订单头 13 个标量字段逐个与 DB 一致                                      []
   ✅ items 逐条逐字段与 DB 一致（含 9006 的 2 条明细）                         []
-      覆盖订单 = [9015, 9007, 9006, 9005, 9004, 9002, 2, 1]
+      覆盖订单 = [6, 5, 4, 3, 2, 1]
 
 [8] 边界（HTTP 200 + body.code，不是真 404/400）
   ✅ 不存在的 id -> HTTP 200 + code 404                             HTTP 200 + code 404

@@ -1,13 +1,13 @@
 ==============================================================================
 MallX  M1 milestone regression   (place -> pay -> ship -> confirm -> review)
 ==============================================================================
-run at : 2026-09-25 15:43:13
+run at : 2026-09-25 17:14:04
 
 [1] CHAIN -- each link's own end-to-end report, regenerated in this run
     (produce side: place -> pay -> ship -> confirm -> review)
   -> Day 14  day14-e2e-walk.py
      proves: place -> pay  (both state-machine exits + the ledger)
-     report mtime : 2026-09-25 15:42:40   (regenerated this run)
+     report mtime : 2026-09-25 17:13:31   (regenerated this run)
      RESULT: 67 / 67 passed
        [0] BASELINE FINGERPRINT (all 7 SKUs)
        [1] login demo (token stays in memory, never on disk)
@@ -23,7 +23,7 @@ run at : 2026-09-25 15:43:13
 
   -> Day 15  day15-ship-confirm.py
      proves: pay -> ship -> confirm
-     report mtime : 2026-09-25 15:42:53   (regenerated this run)
+     report mtime : 2026-09-25 17:13:44   (regenerated this run)
      RESULT: 56 / 56 passed
        [0] BASELINE FINGERPRINT (all 7 SKUs)
        [1] logins (tokens stay in memory, never on disk)
@@ -41,7 +41,7 @@ run at : 2026-09-25 15:43:13
 
   -> Day 16  day16-review-e2e.py
      proves: confirm -> review
-     report mtime : 2026-09-25 15:43:09   (regenerated this run)
+     report mtime : 2026-09-25 17:13:59   (regenerated this run)
      RESULT: 75 / 75 passed
        [0] BASELINE FINGERPRINT
        [1] logins (tokens stay in memory, never on disk)
@@ -64,31 +64,31 @@ run at : 2026-09-25 15:43:13
        slipped past every automated regression.
   -> Day 17a  day17-a-order-list-verify.py
      proves: read-side: admin order list, 10 fields reconciled against the DB
-     report mtime : 2026-09-25 15:43:12   (regenerated this run)
+     report mtime : 2026-09-25 17:14:02   (regenerated this run)
      RESULT: 26 / 26 passed
 
   -> Day 17b  day17-b-order-detail-verify.py
      proves: read-side: order detail, 15 fields + items (the T2 blind spot)
-     report mtime : 2026-09-25 15:43:13   (regenerated this run)
+     report mtime : 2026-09-25 17:14:04   (regenerated this run)
      RESULT: 21 / 21 passed
 
 [1c] COVERAGE
      listed 5, collected 5   OK
 
 [2] DATABASE -- snapshot now, compare with the baseline
-  orders           = 8     unchanged
-  order_items      = 9     unchanged
-  payments         = 5     unchanged
+  orders           = 6     unchanged
+  order_items      = 6     unchanged
+  payments         = 6     unchanged
   reviews          = 0     unchanged
   inventory_logs   = 0     unchanged
   cart_items       = 0     unchanged
   inventories     : identical to baseline
-      sku 1   total=100   available=100   locked=0     sold=0
-      sku 2   total=80    available=80    locked=0     sold=0
-      sku 3   total=60    available=56    locked=0     sold=4
-      sku 4   total=150   available=147   locked=0     sold=3
-      sku 5   total=120   available=117   locked=0     sold=3
-      sku 6   total=40    available=40    locked=0     sold=0
+      sku 1   total=100   available=99    locked=0     sold=1
+      sku 2   total=80    available=78    locked=0     sold=2
+      sku 3   total=60    available=59    locked=0     sold=1
+      sku 4   total=150   available=149   locked=0     sold=1
+      sku 5   total=120   available=119   locked=0     sold=1
+      sku 6   total=40    available=39    locked=0     sold=1
       sku 7   total=90    available=90    locked=0     sold=0
   milestone invariants (all must be 0):
     stock identity: available + locked + sold == total = 0

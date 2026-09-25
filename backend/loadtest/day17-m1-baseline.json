@@ -1,13 +1,13 @@
 {
  "counts": {
-  "orders": 8,
-  "order_items": 9,
-  "payments": 5,
+  "orders": 6,
+  "order_items": 6,
+  "payments": 6,
   "reviews": 0,
   "inventory_logs": 0,
   "cart_items": 0
  },
- "inv": "1|100|100|0|0\n2|80|80|0|0\n3|60|56|0|4\n4|150|147|0|3\n5|120|117|0|3\n6|40|40|0|0\n7|90|90|0|0",
+ "inv": "1|100|99|0|1\n2|80|78|0|2\n3|60|59|0|1\n4|150|149|0|1\n5|120|119|0|1\n6|40|39|0|1\n7|90|90|0|0",
  "bad": {
   "stock identity: available + locked + sold == total": 0,
   "no negative stock buckets": 0,

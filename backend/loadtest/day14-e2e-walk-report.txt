@@ -4,15 +4,15 @@ target : http://127.0.0.1:8080   account: demo(id=1)   sku under test: 4
 ==============================================================================
 
 [0] BASELINE FINGERPRINT (all 7 SKUs)
-  baseline             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
-  baseline             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
-  baseline             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
-  baseline             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
-  baseline             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
-  baseline             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  baseline             sku1  total=100  available= 99  locked=  0  sold=  1  identity=OK
+  baseline             sku2  total= 80  available= 78  locked=  0  sold=  2  identity=OK
+  baseline             sku3  total= 60  available= 59  locked=  0  sold=  1  identity=OK
+  baseline             sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
+  baseline             sku5  total=120  available=119  locked=  0  sold=  1  identity=OK
+  baseline             sku6  total= 40  available= 39  locked=  0  sold=  1  identity=OK
   baseline             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
-  rows orders/payments/order_items/inventory_logs = 8/5/9/0
-  ★ A0 = available_stock of sku4 at start = 147
+  rows orders/payments/order_items/inventory_logs = 6/6/6/0
+  ★ A0 = available_stock of sku4 at start = 149
   ★ ledger high-water id = 0 (only rows id > 0 are judged)
 
 [1] login demo (token stays in memory, never on disk)
@@ -23,58 +23,58 @@ PATH A -- place, then CANCEL (goods return to the shelf)
 ------------------------------------------------------------------------------
 
 [2] PATH A / place order A (sku4 x1)
-  POST /api/orders -> order=9116 code=200 {"code":200,"message":"success","data":9116}
+  POST /api/orders -> order=7 code=200 {"code":200,"message":"success","data":7}
   order A status = PENDING_PAYMENT
-  after place A        sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
+  after place A        sku4  total=150  available=148  locked=  1  sold=  1  identity=OK
   delta vs start: available -1  locked +1  sold +0
 
 [3] PATH A / cancel order A
-  POST /api/orders/9116/cancel -> http=200 code=200
+  POST /api/orders/7/cancel -> http=200 code=200
   order A status now = CANCELLED
-  after cancel A       sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  after cancel A       sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
   delta vs after-place: available +1  locked -1  sold +0
 
 [3b] PATH A / reconcile -- the shelf is exactly where it started
-  A0 = 147   Σ(change) = +0   A0 + Σ = 147   available now = 147
+  A0 = 149   Σ(change) = +0   A0 + Σ = 149   available now = 149
 
 ------------------------------------------------------------------------------
 PATH B -- place, then PAY (goods leave for good)
 ------------------------------------------------------------------------------
 
 [4] PATH B / place order B (sku4 x1)
-  POST /api/orders -> order=9117 code=200 {"code":200,"message":"success","data":9117}
+  POST /api/orders -> order=8 code=200 {"code":200,"message":"success","data":8}
   order B status = PENDING_PAYMENT
-  after place B        sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
+  after place B        sku4  total=150  available=148  locked=  1  sold=  1  identity=OK
   delta vs start: available -1  locked +1  sold +0
 
 [5] PATH B / pay order B
-  POST /api/payments -> http=200 code=200 paymentId=227
+  POST /api/payments -> http=200 code=200 paymentId=7
   order B status now = PAID
-  after pay B          sku4  total=150  available=146  locked=  0  sold=  4  identity=OK
+  after pay B          sku4  total=150  available=148  locked=  0  sold=  2  identity=OK
   delta vs after-place: available +0  locked -1  sold +1   ★ available must NOT move
 
 [5b] PATH B / reconcile -- the shelf lost exactly one, and it is sold
-  A0 = 147   Σ(change) = -1   A0 + Σ = 146   available now = 146
+  A0 = 149   Σ(change) = -1   A0 + Σ = 148   available now = 148
 
 ==============================================================================
 [6] ★★ THE CONTRAST -- same start, same first step, different exit
 ==============================================================================
   step            available     locked     sold order status
-  start                 147          0        3 -
-  A/placed              146          1        3 PENDING_PAYMENT
-  A/cancelled           147          0        3 CANCELLED
-  B/placed              146          1        3 PENDING_PAYMENT
-  B/paid                146          0        4 PAID
+  start                 149          0        1 -
+  A/placed              148          1        1 PENDING_PAYMENT
+  A/cancelled           149          0        1 CANCELLED
+  B/placed              148          1        1 PENDING_PAYMENT
+  B/paid                148          0        2 PAID
 
 ==============================================================================
 [7] LEDGER AUDIT OVER BOTH PATHS (4 rows, one contiguous chain)
 ==============================================================================
     id   type               change   before    after ref      at
-    213  ORDER_LOCK             -1      147      146 NULL     15:42:33.594
-    214  CANCEL_RELEASE         +1      146      147 9116     15:42:34.657
-    215  ORDER_LOCK             -1      147      146 NULL     15:42:35.897
-    216  PAY_SOLD               +0      146      146 9117     15:42:36.928
-  A0 = 147   Σ(change) = -1   A0 + Σ = 146   available now = 146
+    13   ORDER_LOCK             -1      149      148 NULL     17:13:24.087
+    14   CANCEL_RELEASE         +1      148      149 7        17:13:25.092
+    15   ORDER_LOCK             -1      149      148 NULL     17:13:26.373
+    16   PAY_SOLD               +0      148      148 8        17:13:27.380
+  A0 = 149   Σ(change) = -1   A0 + Σ = 148   available now = 148
 
 [8] BUSINESS CONSERVATION (locked == Σ PENDING_PAYMENT units)
   drifting SKUs -- locked: 0   sold: 0
@@ -82,19 +82,19 @@ PATH B -- place, then PAY (goods leave for good)
 ==============================================================================
 [9] CLEANUP -- remove this run's artifacts, restore the baseline
 ==============================================================================
-  orders to delete: [9116, 9117]
+  orders to delete: [7, 8]
   ledger rows to delete: id > 0
-  sku4 restored to: locked=0 sold=3 available=total-3-0
+  sku4 restored to: locked=0 sold=1 available=total-1-0
 
 [10] VERIFY -- the database is byte-for-byte back at baseline
-  restored             sku1  total=100  available=100  locked=  0  sold=  0  identity=OK
-  restored             sku2  total= 80  available= 80  locked=  0  sold=  0  identity=OK
-  restored             sku3  total= 60  available= 56  locked=  0  sold=  4  identity=OK
-  restored             sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
-  restored             sku5  total=120  available=117  locked=  0  sold=  3  identity=OK
-  restored             sku6  total= 40  available= 40  locked=  0  sold=  0  identity=OK
+  restored             sku1  total=100  available= 99  locked=  0  sold=  1  identity=OK
+  restored             sku2  total= 80  available= 78  locked=  0  sold=  2  identity=OK
+  restored             sku3  total= 60  available= 59  locked=  0  sold=  1  identity=OK
+  restored             sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
+  restored             sku5  total=120  available=119  locked=  0  sold=  1  identity=OK
+  restored             sku6  total= 40  available= 39  locked=  0  sold=  1  identity=OK
   restored             sku7  total= 90  available= 90  locked=  0  sold=  0  identity=OK
-  rows orders/payments/order_items/inventory_logs = 8/5/9/0   (baseline 8/5/9/0)
+  rows orders/payments/order_items/inventory_logs = 6/6/6/0   (baseline 6/6/6/0)
 
 ==============================================================================
 ASSERTIONS: 67 / 67 passed

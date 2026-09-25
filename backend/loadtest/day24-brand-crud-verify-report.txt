@@ -17,11 +17,11 @@ target : http://127.0.0.1:8080/api/admin/brands
   demo(C 端)    POST -> http=403 code=403
   op_order      POST -> http=403 code=403
   op_order      GET  -> http=403 code=403
-  op_product    POST -> http=200 code=200 data=15
+  op_product    POST -> http=200 code=200 data=8
 
 [2] 新增：字段落库 / 默认值 / trim / 唯一约束 / 校验
   DB 主夹具行 name|logo|desc|status = FX-BRAND-MAIN|https://mallx.local/fx-main.png|day24 fixture|0
-  不传 status   POST -> code=200 data=16
+  不传 status   POST -> code=200 data=9
   name 带空格   POST -> code=200 入库 name='FX-BRAND-TRIMMED'
   重名         POST -> code=400 {"code":400,"message":"品牌名称已存在：FX-BRAND-MAIN","data":null}
   name 空串     POST -> code=400
@@ -38,7 +38,7 @@ target : http://127.0.0.1:8080/api/admin/brands
   空串 name    PUT -> code=400
 
 [4] 删除：引用校验（★ 含已软删商品）
-  建夹具商品   POST -> code=200 data=789
+  建夹具商品   POST -> code=200 data=7
   删『有商品的品牌』-> code=400 {"code":400,"message":"该品牌下有商品，不能删除（可改为停用）","data":null}
   软删该商品   DELETE -> code=200 is_deleted=True
   删『只挂着已软删商品』的品牌 -> code=400 {"code":400,"message":"该品牌下有商品，不能删除（可改为停用）","data":null}
@@ -78,8 +78,8 @@ PASS #25 重新启用 → code=200 且 DB status=1
 PASS #26 ★★ C 端字典里【又出现】它 —— 证明 #23 不是「接口坏了/永远看不见」
 PASS #27 改不存在的品牌 → code=404
 PASS #28 传空串 name → code=400（Service 显式挡：@Size 管不了空串）
-PASS #29 在品牌 15 下建一个商品（建立引用）
-PASS #30 DB：该商品的 brand_id 确实指向 15
+PASS #29 在品牌 8 下建一个商品（建立引用）
+PASS #30 DB：该商品的 brand_id 确实指向 8
 PASS #31 ★ 有商品引用 → code=400（不是 500/外键错误）
 PASS #32 DB：品牌仍在（拒绝不是假装的）
 PASS #33 软删商品成功（is_deleted=1，但 fk_product_brand 的引用仍在）

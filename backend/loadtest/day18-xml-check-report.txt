@@ -3,11 +3,13 @@
 ==========================================================================
   ✅ WELL_FORMED   namespace=com.mallx.product.mapper.ProductMapper
              <select id=countByCategoryId>
+             <select id=countByBrandId>
+             <select id=searchProducts>
 
   本日新增 statement：
      ✅ countByCategoryId
 
-  Java 声明 1 个 / XML statement 1 个
+  Java 声明 3 个 / XML statement 3 个
      ✅ 双向一致
 
 ==========================================================================
