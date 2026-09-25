@@ -1,0 +1,76 @@
+==============================================================================
+Day 29 -- 管理端 / Dashboard 聚合查询的索引审计（临时库 mallx_dash_probe）
+==============================================================================
+
+[0] 建临时库（★ 只动这一个名字，开发库不碰）
+  [OK]   CREATE DATABASE mallx_dash_probe   rc=0 err=NOTICE:  database "mallx_dash_probe" does not exist, skipping
+
+[1] 按序灌 01→14
+  [OK]   14 份补丁全部 rc == 0   bad=[]
+
+[2] 造数
+  [OK]   造数 维表 300 分类   rc=0 err=
+  [OK]   造数 维表 5000 用户   rc=0 err=
+  [OK]   造数 商品 30000（全部未删）   rc=0 err=
+  [OK]   造数 订单 30000（created_at 铺开 20 天）   rc=0 err=
+  [OK]   造数 支付 30000（SUCCESS 95%，paid_at 铺开）   rc=0 err=
+
+[3] VACUUM (ANALYZE)（★ Day 27 教训：只 ANALYZE 会得到会翻转的结论）
+  [OK]   基线 VACUUM (ANALYZE)   err=
+
+[4] 规模核对
+  [OK]   orders 行数 >= 30000   actual=30000
+  [OK]   payments 行数 >= 30000   actual=30000
+
+[5] 阶段 A —— 基线（payments 上只有 idx_payments_order_id）
+      D1  1.78ms    idx=-                                  seq=users            countUsers 全表计数（★ 已知边界，只记录
+      D2  8.98ms    idx=idx_products_is_deleted            seq=-                countProducts（is_deleted =
+      D3  8.67ms    idx=idx_orders_status                  seq=-                countOrders 全表计数（★ 已知边界，只记
+      D4  10.66ms   idx=-                                  seq=payments         sumPaidAmount（status = 'SU
+      D5  32.49ms   idx=idx_orders_created_at              seq=payments         selectDailyTrend（日期骨架 LEFT
+
+[6] 阶段 B —— 加上候选索引 + VACUUM (ANALYZE)
+     候选：probe_payments_status(status) / probe_payments_status_paid_at(status, paid_at)
+  [OK]   建候选索引   rc=0 err=
+  [OK]   加索引后 VACUUM (ANALYZE)   err=
+
+[7] 阶段 B —— 重测
+      D1  2.14ms    idx=-                                  seq=users            countUsers 全表计数（★ 已知边界，只记录
+      D2  6.57ms    idx=idx_products_is_deleted            seq=-                countProducts（is_deleted =
+      D3  6.36ms    idx=idx_orders_status                  seq=-                countOrders 全表计数（★ 已知边界，只记
+      D4  11.10ms   idx=-                                  seq=payments         sumPaidAmount（status = 'SU
+      D5  24.85ms   idx=idx_orders_created_at,probe_paym   seq=-                selectDailyTrend（日期骨架 LEFT
+
+[8] ★ 加索引不能改数：5 条查询的返回值必须逐值相等
+  [OK]   D1 返回值不变   A=230949cddfa8 B=230949cddfa8
+  [OK]   D2 返回值不变   A=408fdcbdb5b9 B=408fdcbdb5b9
+  [OK]   D3 返回值不变   A=ceb280b25e1d B=ceb280b25e1d
+  [OK]   D4 返回值不变   A=c7fe5012b4c2 B=c7fe5012b4c2
+  [OK]   D5 返回值不变   A=07917fffbbdb B=07917fffbbdb
+
+[9] ★ 候选索引是否真被用上
+  [OK]   D5 加索引后用上 probe_payments_status_paid_at   idx=['idx_orders_created_at', 'probe_payments_status_paid_at']
+  [OK]   D4 加索引后【仍然不该】用 probe_payments_status（低选择性，计划器应当绕开）   idx=[]
+
+[10] ★ 全表 count 只记录不断言（PG 里 O(n) 消不掉，断言它只会得到假结论）
+      D1  A=1.78ms  B=2.14ms   （加索引前后都全表扫，属已知边界）
+      D2  A=8.98ms  B=6.57ms   （加索引前后都全表扫，属已知边界）
+      D3  A=8.67ms  B=6.36ms   （加索引前后都全表扫，属已知边界）
+
+[11] 删临时库
+  [OK]   DROP DATABASE mallx_dash_probe   rc=0 err=
+
+==============================================================================
+对照表（A = 基线 / B = 加候选索引后）
+==============================================================================
+      ID   A 耗时       B 耗时       提升      B 用上的索引
+      D1   1.78ms     2.14ms     0.8x    users
+      D2   8.98ms     6.57ms     1.4x    idx_products_is_deleted
+      D3   8.67ms     6.36ms     1.4x    idx_orders_status
+      D4   10.66ms    11.10ms    1.0x    payments
+      D5   32.49ms    24.85ms    1.3x    idx_orders_created_at,probe_payments_sta
+
+==============================================================================
+ASSERTIONS: 20 / 20 passed   (EXPECTED=20)
+VERDICT: OK -- 候选索引的效果与「不改数」都已取证
+==============================================================================

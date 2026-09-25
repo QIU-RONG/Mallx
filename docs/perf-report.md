@@ -196,7 +196,7 @@ python day17-m1-regression.py
 > | 口径 | 条数 |
 > |---|---|
 > | **应用级验收**（打真实 HTTP + 直查库，本表所列） | **1224** |
-> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条） | **1302** |
+> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条） | **1322** |
 >
 > （实测：全仓 55 份 `*-report.txt` 中，当前仅 **9** 份以 `ASSERTIONS: n / m passed` 结尾、
 > **6** 份用 `TOTAL:` / `FIXTURE:`，其余是逐次运行留下的一次性产物
@@ -321,6 +321,8 @@ python backend/loadtest/day27-explain-audit.py    # 索引是否真被用上
 |---|---|---|
 | 分页上限 | `size ≤ 100`，`size <= 0` 夹紧为默认值 | 夹紧写在 `new Page<>()` **之前**；四态（负 / 0 / 正常 / 超限）都有断言 |
 | 小表执行计划 | 规划器选 `Seq Scan` | ★ Day 27 已用**临时库 + 3 万行**实测：`idx_products_search` 在真实 SQL 下**仍然用不上**（被 `OR` 挡住），不是「数据量上来就自然切到 GIN」，见 §五 |
+| **全表 `count(*)`** | **O(n)，加索引消不掉** | 3 万行约 6–9 ms（`users` / `products` / `orders`）。按线性外推 **300 万行约 0.6–0.9 s**，届时需计数表 / 物化视图（V1.2 议题）。★ Day 29 **故意不对它做断言** —— 断言它只会得到假结论 |
+| **`payments` 索引** | **不建议加** | Day 29 A/B 对照：`payments(status)` 单列**完全不被用上**（`SUCCESS` 命中 95%，低选择性）；复合 `(status, paid_at)` 被用上但只快 **1.3x**（32.5 → 24.9 ms）⇒ 不值一份写入成本。见 Day 29 |
 | 订单侧幂等 | **缺** | 「一车多单」实测 1 件商品开出 7 张单；需 `requestId` 唯一索引或 Redis 去重（V1.1） |
 | 缓存 / 异步 | **无** | V1.0 刻意不引 Redis / MQ，「用关系库把该做的事做完」是第一约束 |
 | 连接池 / 限流 | 未做 | V1.2 性能优化 |
