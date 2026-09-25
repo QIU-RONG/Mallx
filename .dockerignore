@@ -1,0 +1,27 @@
+# 构建上下文 = 仓库根。除 mall-server 的可执行 jar 之外，全部排除 ——
+# 否则 .git / docs / 压测脚本会被整包发给 docker 守护进程（慢，且可能几十 MB）。
+.git
+.github
+.idea
+.vscode
+.workbuddy
+.workbuddy-ai
+.omo
+.codegraph
+dsh-skin-v2
+dsh-themes
+learning
+frontend
+docs
+backend/loadtest
+backend/sql
+backend/_scaffold_backup_*
+*.log
+_*.txt
+build-check.*
+javap-out.txt
+
+# 各模块 target 下的中间产物（classes / test-classes / 各种 jar）
+**/target/*
+# ★ 唯一要留下的：mall-server 的 fat jar（Dockerfile 的 COPY 源）
+!backend/mallx/mall-server/target/mall-server-*.jar

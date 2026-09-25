@@ -1,0 +1,71 @@
+# ==============================================================================
+# MallX 全栈编排（PostgreSQL + mall-server）
+# ------------------------------------------------------------------------------
+# ★ 与同目录的 `docker-compose.yml`（只起一个开发用 PostgreSQL，宿主 5434）【二者选一】：
+#     · 只想连数据库、应用在 IDEA/本地跑  → 用 docker-compose.yml
+#     · 想一条命令起完整环境              → 用本文件
+#   为了不和开发库打架，本文件用了独立的 compose project 名（见下 `name:`）。
+#
+# 用法（★ 工作目录必须是 deploy/，`.env` 就在它旁边）：
+#     cd deploy
+#     cp .env.example .env        # 然后改掉 JWT_SECRET / DB_PASSWORD
+#     docker compose -f docker-compose.app.yml up -d --build
+#     docker compose -f docker-compose.app.yml ps         # 等 app 变 healthy
+#     curl http://127.0.0.1:8080/api/hello
+#     docker compose -f docker-compose.app.yml down       # 停（加 -v 连数据卷一起删）
+#
+# ★★ 镜像里的 jar 是【宿主 mvn 打好的】—— compose 不会替你编译，见 deploy/Dockerfile 文件头。
+# ==============================================================================
+name: mallx-stack
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    # ★ 不写 container_name：交给 compose 按 project 命名，避免与开发库 `mallx-postgres` 撞名
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mallx}
+      POSTGRES_USER: ${DB_USERNAME:-mallx}
+      # `:?` = 没设就【拒绝启动】。故意不给默认值：默认密码就是最容易被带进生产的那个坑
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 未设置（请检查 deploy/.env）}
+    volumes:
+      - mallx-pgdata:/var/lib/postgresql/data
+      # 首次启动（数据卷为空）时按文件名字典序自动执行 01→14；
+      # ★ 数据卷一旦存在，这里【不会】再跑 ⇒ 后续新增的 sql 补丁要手工应用，见 deploy/README.md
+      - ../backend/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    # 数据库【不】对外发布端口：只有 app 需要它。要进去 psql 就 `docker compose exec postgres psql -U mallx`
+    expose:
+      - "5432"
+
+  app:
+    image: mallx-server:local
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # ★ 容器内的 DB 地址是【服务名】postgres，不是 localhost ——
+      #   localhost 在容器里指容器自己（这是 compose 最常见的第一个坑）
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-mallx}
+      DB_USERNAME: ${DB_USERNAME:-mallx}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 未设置（请检查 deploy/.env）}
+      # ★★ 必须覆盖：不换掉它，任何人都能用仓库里的开发密钥自己签一个管理员 token
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 未设置（请检查 deploy/.env）}
+      JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    # 首次启动时 postgres 可能还在跑 initdb 初始化脚本；起早了先崩，restart 会把它拉回来
+    restart: unless-stopped
+
+volumes:
+  mallx-pgdata:

@@ -39,3 +39,14 @@ __pycache__/
 
 # --- 本地学习/练习产物（非项目代码） ---
 /learning/
+
+# --- 部署密钥 ---
+# deploy/.env 由 deploy/.env.example 复制而来，里面是【真实】的 JWT_SECRET 与 DB_PASSWORD。
+# ★ .env.example 是模板、要入库；.env 是密钥、绝不入库。
+#   （2026-09-25 订正：.env.example 里早就写着「.env 已在 .gitignore 排除」，
+#     但这条规则当时并不存在 —— 属于「注释描述了一个不存在的机制」，最坏的一类文档漂移。）
+/deploy/.env
+
+# --- 与本项目无关的本地目录 ---
+/dsh-skin-v2/
+/dsh-themes/
