@@ -27,30 +27,30 @@ Day 34 -- 「被复合索引覆盖」扫尾：购物车两个索引 + admin_role
   [OK]   categories 行数 >= 300（★ 保证 category_id 有选择性）   actual=307
 
 [5] 阶段 A —— 索引都在
-      C1  0.73ms    idx=idx_cart_items_user_id,users_pke   seq=-          购物车列表（按 user_id，ORDER BY id DE
-      C2  0.52ms    idx=product_skus_pkey,uk_cart_user_s   seq=-          加购查重（WHERE user_id = ? AND sku
-      C3  1.77ms    idx=categories_pkey,idx_products_cat   seq=-          C 端列表按 category_id（★ Day 27 已证
+      C1  0.77ms    idx=idx_cart_items_user_id,users_pke   seq=-          购物车列表（按 user_id，ORDER BY id DE
+      C2  0.44ms    idx=product_skus_pkey,uk_cart_user_s   seq=-          加购查重（WHERE user_id = ? AND sku
+      C3  1.81ms    idx=categories_pkey,idx_products_cat   seq=-          C 端列表按 category_id（★ Day 27 已证
 
 [6] 阶段 B —— DROP 3 个索引（2 候选 + 1 对照）+ VACUUM (ANALYZE)
   [OK]   DROP 3 个索引   rc=0 err=
   [OK]   DROP 后 VACUUM (ANALYZE)   err=
 
 [7] 阶段 B —— 重测
-      C1  0.69ms    idx=uk_cart_user_sku,users_pkey        seq=-          购物车列表（按 user_id，ORDER BY id DE
-      C2  0.49ms    idx=product_skus_pkey,uk_cart_user_s   seq=-          加购查重（WHERE user_id = ? AND sku
-      C3  9.83ms    idx=categories_pkey                    seq=products   C 端列表按 category_id（★ Day 27 已证
+      C1  0.63ms    idx=uk_cart_user_sku,users_pkey        seq=-          购物车列表（按 user_id，ORDER BY id DE
+      C2  0.41ms    idx=product_skus_pkey,uk_cart_user_s   seq=-          加购查重（WHERE user_id = ? AND sku
+      C3  10.51ms   idx=categories_pkey                    seq=products   C 端列表按 category_id（★ Day 27 已证
 
 [8] ★ 候选索引的定性
      A 型（cand）：从来没被用上 ⇒ DROP 后计划【不变】
      B 型（cand_sub）：被用上但有替代索引 ⇒ DROP 后计划【会变】，但**仍走索引、耗时不变**
   [OK]   C1 [B型] DROP idx_cart_items_user_id 后**仍然走索引**（有替代索引，未退化成全表扫）   B_used=['uk_cart_user_sku', 'users_pkey'] B_seq=[]
-  [OK]   C1 [B型] DROP idx_cart_items_user_id 后耗时基本不变（0.73ms → 0.69ms）   差 -0.05ms
+  [OK]   C1 [B型] DROP idx_cart_items_user_id 后耗时基本不变（0.77ms → 0.63ms）   差 -0.15ms
       替代索引：A 用 idx_cart_items_user_id,users_pkey → B 用 uk_cart_user_sku,users_pkey
   [OK]   C2 [A型] DROP idx_cart_items_sku_id 后计划不变   A_used=['product_skus_pkey', 'uk_cart_user_sku', 'users_pkey'] B_used=['product_skus_pkey', 'uk_cart_user_sku', 'users_pkey']
 
 [8b] 记录型探针：小表上的索引（只记录、不断言）
       角色下的管理员（WHERE role_id = ?）—— admin_roles 仅 203 行（admin_roles 仅 203 行）
-      idx=- seq=admin_roles,roles  0.25ms
+      idx=- seq=admin_roles,roles  0.35ms
       ⇒ 计划器**不用** idx_admin_roles_role_id —— 那是**表太小**，不是索引没用
         （同 Day 33 的 coupons 200 行）。若 admin 规模真涨起来，它会开始有用。
 
@@ -64,9 +64,9 @@ Day 34 -- 「被复合索引覆盖」扫尾：购物车两个索引 + admin_role
 对照表（A = 索引都在 / B = 已 DROP）
 ==============================================================================
       ID   类型     被 DROP 的索引                     计划变化       A 耗时       A 用上的索引
-      C1   候选     idx_cart_items_user_id         变了         0.73ms     idx_cart_items_user_id,users_pkey
-      C2   候选     idx_cart_items_sku_id          没变         0.52ms     product_skus_pkey,uk_cart_user_sku
-      C3   对照     idx_products_category_id       变了         1.77ms     categories_pkey,idx_products_categ
+      C1   候选     idx_cart_items_user_id         变了         0.77ms     idx_cart_items_user_id,users_pkey
+      C2   候选     idx_cart_items_sku_id          没变         0.44ms     product_skus_pkey,uk_cart_user_sku
+      C3   对照     idx_products_category_id       变了         1.81ms     categories_pkey,idx_products_categ
 
 ==============================================================================
 ASSERTIONS: 21 / 21 passed   (EXPECTED=21)

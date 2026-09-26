@@ -22,18 +22,18 @@ Day 33 -- 券侧索引收尾：idx_coupons_status 有没有用 / user_id 那个�
   [OK]   uk_user_coupons_user_coupon 存在（(user_id, coupon_id) 唯一索引）   got=1
 
 [5] 阶段 A —— 索引都在
-      S1  0.28ms    idx=coupons_pkey                       seq=-          C 端可领券列表（status=1 + 时间窗 + 有余量，
-      S2  0.75ms    idx=uk_user_coupons_user_coupon,user   seq=-          我的券列表（按 user_id，ORDER BY id DE
-      S3  1.60ms    idx=coupons_pkey,idx_user_coupons_co   seq=-          券删除前的引用校验（按 coupon_id count）
+      S1  0.62ms    idx=coupons_pkey                       seq=-          C 端可领券列表（status=1 + 时间窗 + 有余量，
+      S2  0.76ms    idx=uk_user_coupons_user_coupon,user   seq=-          我的券列表（按 user_id，ORDER BY id DE
+      S3  1.39ms    idx=coupons_pkey,idx_user_coupons_co   seq=-          券删除前的引用校验（按 coupon_id count）
 
 [6] 阶段 B —— DROP 3 个索引（2 候选 + 1 对照）+ VACUUM (ANALYZE)
   [OK]   DROP 3 个索引   rc=0 err=
   [OK]   DROP 后 VACUUM (ANALYZE)   err=
 
 [7] 阶段 B —— 重测
-      S1  0.26ms    idx=coupons_pkey                       seq=-          C 端可领券列表（status=1 + 时间窗 + 有余量，
-      S2  0.91ms    idx=uk_user_coupons_user_coupon,user   seq=-          我的券列表（按 user_id，ORDER BY id DE
-      S3  7.80ms    idx=coupons_pkey                       seq=user_coupons 券删除前的引用校验（按 coupon_id count）
+      S1  0.23ms    idx=coupons_pkey                       seq=-          C 端可领券列表（status=1 + 时间窗 + 有余量，
+      S2  0.69ms    idx=uk_user_coupons_user_coupon,user   seq=-          我的券列表（按 user_id，ORDER BY id DE
+      S3  7.07ms    idx=coupons_pkey                       seq=user_coupons 券删除前的引用校验（按 coupon_id count）
 
 [8] ★ 候选：DROP 前后计划必须【不变】
   [OK]   S1 DROP idx_coupons_status 后计划不变   A_used=['coupons_pkey'] B_used=['coupons_pkey']
@@ -47,8 +47,8 @@ Day 33 -- 券侧索引收尾：idx_coupons_status 有没有用 / user_id 那个�
   [OK]   重建 idx_coupons_status + 把 coupons 缩到 200 行   rc=0 err=
   [OK]   缩规模后 VACUUM (ANALYZE)   err=
   [OK]   coupons 缩到 200 行   actual=200
-      S1 真实规模：0.420ms  idx=- seq=coupons
-  [OK]   真实规模下 S1 耗时 < 5ms（规模小到无所谓）   0.420ms
+      S1 真实规模：0.472ms  idx=- seq=coupons
+  [OK]   真实规模下 S1 耗时 < 5ms（规模小到无所谓）   0.472ms
 
 [11] 删临时库
   [OK]   DROP DATABASE mallx_coupon_probe   rc=0 err=
@@ -57,11 +57,11 @@ Day 33 -- 券侧索引收尾：idx_coupons_status 有没有用 / user_id 那个�
 对照表（A = 索引都在 / B = 已 DROP）
 ==============================================================================
       ID   类型     被 DROP 的索引                       计划变化       A 耗时       A 用上的索引
-      S1   候选     idx_coupons_status               没变         0.28ms     coupons_pkey
-      S2   候选     idx_user_coupons_user_id         没变         0.75ms     uk_user_coupons_user_coupon,users_
-      S3   对照     idx_user_coupons_coupon_id       变了         1.60ms     coupons_pkey,idx_user_coupons_coup
+      S1   候选     idx_coupons_status               没变         0.62ms     coupons_pkey
+      S2   候选     idx_user_coupons_user_id         没变         0.76ms     uk_user_coupons_user_coupon,users_
+      S3   对照     idx_user_coupons_coupon_id       变了         1.39ms     coupons_pkey,idx_user_coupons_coup
 
-      真实规模（coupons 200 行）：S1 = 0.420ms  idx=-
+      真实规模（coupons 200 行）：S1 = 0.472ms  idx=-
 
 ==============================================================================
 ASSERTIONS: 19 / 19 passed   (EXPECTED=19)
