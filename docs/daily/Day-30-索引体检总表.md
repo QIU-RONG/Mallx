@@ -61,8 +61,8 @@
 |---|---|---|---|
 | `idx_user_addresses_user_id` | `AddressServiceImpl` ×4 `.eq(getUserId)` | B | ✅ 有效 |
 | `uk_user_addresses_default` | **不是性能索引** —— 把「每用户最多一条默认地址」下推到 DB | — | ✅ 业务约束，保留 |
-| `idx_cart_items_user_id` | `CartItemMapper.xml:42` 购物车列表 | B | ✅ 有效 |
-| `idx_cart_items_sku_id` | `CartServiceImpl:44` `.eq(getSkuId)` 加购查重 | B | ✅ 有效 |
+| `idx_cart_items_user_id` | `CartItemMapper.xml:42` 购物车列表 | **A**（Day 34 实测） | ❌ **冗余（B 型）** —— 被 `uk_cart_user_sku`（建表自带的 `UNIQUE(user_id, sku_id)`）替代：DROP 后**仍走索引**、耗时不变（0.73 → 0.67 ms） |
+| `idx_cart_items_sku_id` | `CartServiceImpl:44` `.eq(getSkuId)` 加购查重 | **A**（Day 34 实测） | ❌ **冗余（A 型）** —— **从来没被用上**：那条查询同时带 `user_id`，由 `uk_cart_user_sku` 服务 |
 | `idx_reviews_product_id` | 商品详情页评价列表 | **A** | ✅ 有效 |
 | `idx_reviews_user_id` | `ReviewMapper.xml:91 WHERE r.user_id = ?`（`GET /api/reviews/my`） | B | ✅ 有效 |
 
@@ -84,8 +84,8 @@
 |---|---|---|
 | ✅ **实测确认有效**（A 级） | **11** | 含 Day 33 对照实测的 `idx_user_coupons_coupon_id` |
 | ⚠️ 有效但有条件（A 级） | 2 | `idx_products_category_id`（仅无 LIMIT 时）、`idx_products_search`（生产形状被 OR 挡住） |
-| ✅ 代码取证有效（**B 级**，未经实测） | 8 | ★ Day 33 已证明 **B 级不足以判「有效」**，见 §三.4 |
-| ❌ 死 / 无调用方 / 冗余 | **8** | `idx_products_status` · `idx_product_skus_is_deleted` · `idx_order_items_sku_id` · `idx_user_coupons_user_id` · `idx_coupons_status` · `idx_role_permissions_permission_id` · `idx_after_sales_order_id` · `idx_after_sales_user_id` |
+| ✅ 代码取证有效（**B 级**，未经实测） | **6** | ★ Day 33/34 已证明 **B 级不足以判「有效」**，见 §三.4 |
+| ❌ 死 / 无调用方 / 冗余 | **10** | `idx_products_status` · `idx_product_skus_is_deleted` · `idx_order_items_sku_id` · `idx_user_coupons_user_id` · `idx_coupons_status` · `idx_role_permissions_permission_id` · `idx_cart_items_user_id` · `idx_cart_items_sku_id` · `idx_after_sales_order_id` · `idx_after_sales_user_id` |
 | ✅ 业务约束（非性能索引） | 1 | `uk_user_addresses_default` |
 
 ---

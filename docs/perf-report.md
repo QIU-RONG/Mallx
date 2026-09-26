@@ -196,7 +196,7 @@ python day17-m1-regression.py
 > | 口径 | 条数 |
 > |---|---|
 > | **应用级验收**（打真实 HTTP + 直查库，本表所列） | **1224** |
-> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条 + `day31-index-drop-probe.py` 18 条 + `day32-pagination-index-probe.py` 19 条 + `day33-coupon-status-probe.py` 19 条） | **1378** |
+> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条 + `day31-index-drop-probe.py` 18 条 + `day32-pagination-index-probe.py` 19 条 + `day33-coupon-status-probe.py` 19 条 + `day34-cart-index-probe.py` 21 条） | **1399** |
 >
 > （实测：全仓 55 份 `*-report.txt` 中，当前仅 **9** 份以 `ASSERTIONS: n / m passed` 结尾、
 > **6** 份用 `TOTAL:` / `FIXTURE:`，其余是逐次运行留下的一次性产物
@@ -335,6 +335,9 @@ python backend/loadtest/day27-explain-audit.py    # 索引是否真被用上
 | **分页复合索引** | **不建议加** | Day 32：`(user_id, created_at DESC, id DESC)` / `(status, created_at DESC, id DESC)` 都**被用上**，但绝对值只省 **≤1.4 ms** ⇒ 不值一份写入成本。（阶段 A 里计划器会自动选「时间索引逆序扫 + 过滤 + 提前停」，第 1 页本来就快） |
 | **`idx_coupons_status`** | **死索引** | Day 33 DROP 实验：删掉它，C 端可领券列表计划**逐字节不变**（`status=1` 命中 95%，计划器改用 PK 反向扫）。★ 但 `coupons` 是**小表**（真实几十~几百行）：200 行时直接全表扫、**0.42 ms** ⇒ **索引有无都不重要** |
 | **`idx_user_coupons_user_id`** | **冗余** | 被 09 号补丁的 `UNIQUE(user_id, coupon_id)` 索引 `uk_user_coupons_user_coupon` **完全覆盖** —— 实测「按 user_id 查」用的是**唯一索引**，单列那个从未被用上。★ 一般化：**建单列索引前先看有没有以它为前缀的复合 / 唯一索引** |
+| **`idx_cart_items_user_id`** | **冗余（B 型）** | 被建表自带的 `UNIQUE(user_id, sku_id)`（`uk_cart_user_sku`）**替代** —— Day 34 实测：DROP 后**仍走索引**、耗时不变（0.73 → 0.67 ms）。★ 这与「从来没被用上」**不是同一种冗余**，见 §七 |
+| **`idx_cart_items_sku_id`** | **冗余（A 型）** | **从来没被用上** —— 唯一使用者是加购查重 `WHERE user_id=? AND sku_id=?`，两个条件一起给 ⇒ 由 `uk_cart_user_sku` 服务 |
+| **`idx_admin_roles_role_id`** | **表太小，不是「没用」** | `admin_roles` 仅 **203 行** ⇒ 计划器直接 `Seq Scan`。★ **别把它当死索引删** —— 与 Day 33 的 `coupons`（200 行）同类；规模涨起来它就有用 |
 | 订单侧幂等 | **缺** | 「一车多单」实测 1 件商品开出 7 张单；需 `requestId` 唯一索引或 Redis 去重（V1.1） |
 | 缓存 / 异步 | **无** | V1.0 刻意不引 Redis / MQ，「用关系库把该做的事做完」是第一约束 |
 | 连接池 / 限流 | 未做 | V1.2 性能优化 |
@@ -388,3 +391,26 @@ Day 33 的教训（**推翻了自己 Day 30 的结论**）：`idx_user_coupons_u
 
 ⇒ 「有调用方」只能证明「有人查这一列」，**不能证明「计划器会选这个索引」**。
   判断一个索引是否真的在服役，只有一条路：**看 `EXPLAIN`，或者做 DROP 实验。**
+
+### ★★ 「冗余」有两种，判据不一样（Day 34）
+
+DROP 实验的判据**不能只有一条**。Day 31/33 用的「DROP 后计划逐字节不变 ⇒ 可删」
+只覆盖了第一种，套到第二种上会得出**相反**的结论：
+
+| | **A 型**：从来没被用上 | **B 型**：有替代索引 |
+|---|---|---|
+| DROP 后计划 | **完全不变** | **会变**（换到替代索引） |
+| DROP 后是否还走索引 | 是（本来就走的别的） | **是**（替代索引） |
+| 是否退化 | 否 | 否（**耗时不变**） |
+| 判据 | 计划不变 | **仍走索引 + 耗时不变** |
+| 例子 | `idx_cart_items_sku_id` · `idx_user_coupons_user_id` · `idx_coupons_status` | **`idx_cart_items_user_id`** |
+
+★ Day 34 第一版把 B 型也按 A 型判（「DROP 后计划必须不变」），于是它的 FAIL 被打印成
+「该索引其实有用，不该删」—— **那是判据太窄，不是索引不该删。**
+
+### ★ 对照组的挑选也要满足前提
+
+Day 34 原打算用 `idx_admin_roles_role_id` 做对照组（理由：PK 是 `(admin_id, role_id)`，
+`role_id` 不是前缀 ⇒ 理论上必要）。**实测不成立** —— 那张表只有 203 行，计划器直接全表扫。
+⇒ 对照组自己也得满足「**规模够大、索引确实在用**」这个前提，
+否则「对照必须变」这条会失败，而**失败的原因是选错了对照，不是装置坏了**。

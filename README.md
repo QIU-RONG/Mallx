@@ -6,7 +6,7 @@
 V1.0 不引入 Elasticsearch / Redis / 消息队列 —— 「用关系库把该做的事做完」是本项目的第一条约束。
 
 ```text
-状态：V1.0 后端 API 已完成（Day 01–33）
+状态：V1.0 后端 API 已完成（Day 01–34）
 端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   模块 11 个
 Java 185 文件 / 14.5k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 14 份
 回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
@@ -74,7 +74,7 @@ MallX/
 │   └── README.md                  #   部署说明与排错
 ├── docs/
 │   ├── api/                       # ★ API-总览.md（自动生成）+ openapi.json 快照 + users-api.md
-│   ├── daily/                     # Day 01–33 的学习/交付文档（含 Day 28 方案稿）
+│   ├── daily/                     # Day 01–34 的学习/交付文档（含 Day 28 方案稿）
 │   ├── perf-report.md             # 并发压测与全链路回归汇总
 │   └── backlog.md                 # 缺陷与改进清单（当前一览表已归零）
 └── README.md
@@ -285,7 +285,7 @@ python backend/loadtest/day25-api-inventory.py
 
 ## 测试与回归
 
-没有单元测试框架，取而代之的是 **69 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
+没有单元测试框架，取而代之的是 **70 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
 （**不信接口自报**），跑完自动回滚到跑前状态。同一套流程已搬进 GitHub Actions（`.github/workflows/ci.yml`）：
 每次 push 自动执行「构建 → 全新库 → SQL 严格检查 → 夹具 → M1 回归 → 各域验收」，判定全部来自脚本退出码。
 
@@ -327,6 +327,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day31-index-drop-probe.py` | **DROP 实验**：把候选索引删掉再跑，验「删它安全」；**含对照组**证明装置有区分度 | 18 |
 | `day32-pagination-index-probe.py` | **分页 + 排序的索引**：偏斜分布（1 个 power user 2 万单）下对照复合索引；含 **keyset vs OFFSET** 深分页探针 | 19 |
 | `day33-coupon-status-probe.py` | **券侧索引收尾**：DROP 实验定性 `idx_coupons_status`（死）/ `idx_user_coupons_user_id`（冗余）；含**真实规模**对照 | 19 |
+| `day34-cart-index-probe.py` | **购物车索引 + 两种冗余**：区分「从来没被用上（A 型）」与「有替代索引（B 型）」；含对照 | 21 |
 | `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数 | 31 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 
@@ -373,7 +374,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 
 ## 文档导航
 
-- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–33，每天一份，含设计取舍、实测记录、踩坑与判据。
+- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–34，每天一份，含设计取舍、实测记录、踩坑与判据。
 - **想知道还剩什么问题** → [`docs/backlog.md`](docs/backlog.md)：缺陷/改进清单（一览表已归零，遗留项与「刻意不做」的原因都写着）。
 - **想直接调接口** → [`docs/api/API-总览.md`](docs/api/API-总览.md) 或 Swagger UI。
 
@@ -382,7 +383,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 ## 版本规划
 
 ```text
-V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–33，77 端点；界面由 Swagger UI 承担）
+V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–34，77 端点；界面由 Swagger UI 承担）
 V1.1 Redis + RabbitMQ                缓存与异步（订单超时关单、库存预占释放）
 V1.2 性能优化                        读写分离、慢查询治理、索引复盘
 V1.3 Docker 容器化                   ✅ 完成（Day 25：deploy/ 三件套，非 root + healthcheck + 一键全栈）
