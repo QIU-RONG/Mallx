@@ -6,7 +6,7 @@
 V1.0 不引入 Elasticsearch / Redis / 消息队列 —— 「用关系库把该做的事做完」是本项目的第一条约束。
 
 ```text
-状态：V1.0 后端 API 已完成（Day 01–34）
+状态：V1.0 后端 API 已完成（Day 01–35，V1.2 性能优化实质完成）
 端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   模块 11 个
 Java 185 文件 / 14.5k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 14 份
 回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
@@ -112,11 +112,11 @@ cd backend/sql
 psql -h localhost -p 5434 -U mallx -d mallx -f 01-schema.sql   # 22 张表 + 全文检索触发器
 psql -h localhost -p 5434 -U mallx -d mallx -f 02-index.sql    # 索引（含 GIN / trgm / JSONB）
 psql -h localhost -p 5434 -U mallx -d mallx -f 03-data.sql     # 种子数据 + 初始 RBAC
-# 04–15 是后续每天的增量补丁，全部幂等（可重复执行）
+# 04–16 是后续每天的增量补丁，全部幂等（可重复执行）
 for f in 04-review-constraints 05-admin-permissions 07-admin-permissions \
          08-marketing-permissions 09-user-coupons-unique 10-brand-permissions \
          11-order-discount 12-day22-permissions 13-day23-permissions 14-brand-crud-permissions \
-         15-search-trgm-indexes; do
+         15-search-trgm-indexes 16-drop-dead-indexes; do
   psql -h localhost -p 5434 -U mallx -d mallx -f "$f.sql"
 done
 ```
@@ -128,6 +128,7 @@ done
 | `09-user-coupons-unique.sql` | `user_coupons` 的「一人一券」唯一约束（★ 补 `UNIQUE` 必须同时 `SET NOT NULL`） |
 | `11-order-discount.sql` | `orders` 增加 `discount_amount`（优惠额快照） |
 | `15-search-trgm-indexes.sql` | **Day 28 搜索修复**：补 `subtitle` / `description` 两列 trgm，让 `searchProducts` 的 OR 能拼出 BitmapOr（预研 29x，落地验收 15/15） |
+| `16-drop-dead-indexes.sql` | **Day 36 死索引清理**：删 7 个零读收益的死/冗余索引（证据链 Day 30/31/33/34 + Day 35 写入成本探针；带自检 NOTICE） |
 | `06-day17-fixtures.sql` | **可选**，仅开发/验收用：造 `op_order`、`op_product` 两个受限管理员 |
 
 > ★★ **加了新的 `@PreAuthorize("hasAuthority('xxx'))` 就必须补发权限行**，
@@ -322,7 +323,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day20-l1l2-verify.py` | 分页夹紧 + 下架商品可见性分流 | 33 |
 | `day20-l5-brand-verify.py` | 品牌字典（C 端 / 管理端口径成对） | 24 |
 | `day12/13-*` | 并发下单（不超卖）/ 并发支付（不重复扣款） | 见 `docs/perf-report.md` |
-| `day25-sql-strict-check.py` | **SQL 补丁严格模式自检**：15 份补丁 × **全新临时库** × `ON_ERROR_STOP=1` | 16 |
+| `day25-sql-strict-check.py` | **SQL 补丁严格模式自检**：16 份补丁 × **全新临时库** × `ON_ERROR_STOP=1` | 16 |
 | `day27-explain-audit.py` | **索引 EXPLAIN 审计**：临时库 + 3 万行 + `VACUUM (ANALYZE)`，13 条查询验「索引是否真被用上」 | 38 |
 | `day28-search-rewrite-probe.py` | **搜索改法预研**：临时库对照 V0 现状 / V1 补 trgm 索引 / V2 拆 UNION / V3 只留全文（含中文黑洞与 `UNION ALL` 重复） | 24 |
 | `day28-search-index-verify.py` | **搜索修复落地验收**：同库 A/B（DROP 新索引复现 V0 → 重建测 V1），断言 id 序列逐一相等（含 top-10）+ 计划真走新 trgm。★ 计划断言必须用**含 LIMIT 的生产原形**（去 LIMIT 后计划器合法退回 Seq Scan） | 15 |
@@ -391,7 +392,7 @@ Day 27 发现 `searchProducts` 的 `OR` 兜底挡住 `idx_products_search`（同
 ```text
 V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–34，77 端点；界面由 Swagger UI 承担）
 V1.1 Redis + RabbitMQ                缓存与异步（订单超时关单、库存预占释放）
-V1.2 性能优化                        读写分离、慢查询治理、索引复盘
+V1.2 性能优化                        ✅ 核心完成（Day 27–35：EXPLAIN 复盘、搜索修复 29x、15 号 trgm 补丁；读写分离未做）
 V1.3 Docker 容器化                   ✅ 完成（Day 25：deploy/ 三件套，非 root + healthcheck + 一键全栈）
 V1.4 云部署                          生产化：镜像瘦身、配置外置、可观测性
 V2.0 Spring Cloud Alibaba            微服务拆分（按当前模块边界）
