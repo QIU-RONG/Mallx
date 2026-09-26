@@ -25,19 +25,19 @@ ORDER A -- one order, three lines: the review target for the whole run
 ------------------------------------------------------------------------------
 
 [2] place A -> pay -> ship(admin) -> confirm(demo) -> COMPLETED
-  POST /api/orders (skus [3, 4, 5]) -> order=11 code=200
+  POST /api/orders (skus [3, 4, 5]) -> order=25 code=200
   POST /api/payments -> http=200 code=200
-  POST /api/orders/11/ship (admin) -> http=200 code=200
-  POST /api/orders/11/confirm (demo) -> http=200 code=200
-  order_items: [(11, 3, 5), (12, 2, 4), (13, 1, 3)]
-  review targets: item_a=13 (sku3)  item_b=12 (sku4)  item_c=11 (sku5)
+  POST /api/orders/25/ship (admin) -> http=200 code=200
+  POST /api/orders/25/confirm (demo) -> http=200 code=200
+  order_items: [(27, 1, 3), (28, 2, 4), (29, 3, 5)]
+  review targets: item_a=27 (sku3)  item_b=28 (sku4)  item_c=29 (sku5)
 
 ------------------------------------------------------------------------------
 [3] POST /api/reviews -- ★★ the three derived columns must come from the DB
 ------------------------------------------------------------------------------
-  POST /api/reviews {orderItemId:13, rating:5} -> http=200 code=200 {"code":200,"message":"success","data":{"content":"hello from day16","createdAt":"2026-09-25T17:13:49.012755", ...(truncated)
-  db row: {'id': 1, 'user_id': 1, 'order_id': 11, 'product_id': 1, 'rating': 5, 'content': 'hello from day16', 'status': 1}
-  evidence: order_items says order_id=11 product_id=1; orders says user_id=1
+  POST /api/reviews {orderItemId:27, rating:5} -> http=200 code=200 {"code":200,"message":"success","data":{"content":"hello from day16","createdAt":"2026-09-26T15:29:27.286566", ...(truncated)
+  db row: {'id': 12, 'user_id': 1, 'order_id': 25, 'product_id': 1, 'rating': 5, 'content': 'hello from day16', 'status': 1}
+  evidence: order_items says order_id=25 product_id=1; orders says user_id=1
 
 [4] the same order line again -- ON CONFLICT DO NOTHING must answer 0 rows
   POST /api/reviews (same orderItemId) -> http=200 code=400 {"code":400,"message":"该商品已评价过","data":null}
@@ -49,22 +49,22 @@ ORDER A -- one order, three lines: the review target for the whole run
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
-    http=200  code=200   {"code":200,"message":"success","data":{"content":"concurrent-3","crea ...(truncated)
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
+    http=200  code=200   {"code":200,"message":"success","data":{"content":"concurrent-6","crea ...(truncated)
     http=200  code=400   {"code":400,"message":"该商品已评价过","data":null}
 
 ------------------------------------------------------------------------------
 [6] IDOR -- reviewing somebody else's purchase must be invisible
 ------------------------------------------------------------------------------
-  intruder -> demo's item 11 : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
+  intruder -> demo's item 29 : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
   demo -> a non-existent item  : http=200 code=404 {"code":404,"message":"订单明细不存在","data":null}
 
 ------------------------------------------------------------------------------
 [7] eligibility -- only COMPLETED orders may be reviewed
 ------------------------------------------------------------------------------
-  ORDER B placed -> 12
+  ORDER B placed -> 26
   review a PENDING_PAYMENT order's line -> code=400 {"code":400,"message":"只有已完成的订单才能评价","data":null}
   pay order B -> code=200
   review a PAID order's line -> code=400 {"code":400,"message":"只有已完成的订单才能评价","data":null}
@@ -87,14 +87,14 @@ ORDER A -- one order, three lines: the review target for the whole run
 [9] ★★ forged fields -- the client cannot vote on somebody else's product
 ------------------------------------------------------------------------------
   POST with userId/orderId/productId = 999999 -> http=200 code=200
-  db row: {'id': 11, 'user_id': 1, 'order_id': 11, 'product_id': 3, 'rating': 4, 'content': 'forged attempt', 'status': 1}   (evidence: real order=11 product=3 user=1)
+  db row: {'id': 22, 'user_id': 1, 'order_id': 25, 'product_id': 3, 'rating': 4, 'content': 'forged attempt', 'status': 1}   (evidence: real order=25 product=3 user=1)
 
 ------------------------------------------------------------------------------
 [10] reading reviews -- per product (PUBLIC) / mine (logged in) / aggregates
 ------------------------------------------------------------------------------
   GET /api/products/1/reviews  (NO token) -> http=200 code=200
   total=1 current=1 size=10 reviewCount=1 avgRating=5.0
-  GET /api/reviews/my (demo) -> http=200 code=200 count=3 items=[11, 12, 13]
+  GET /api/reviews/my (demo) -> http=200 code=200 count=3 items=[29, 28, 27]
 
   pagination edges (Day 12's three traps)
     page=1&size=0    code=200   records=1   (size=0 -> clamped up to 1)
@@ -121,7 +121,7 @@ ORDER A -- one order, three lines: the review target for the whole run
 ==============================================================================
 [12] CLEANUP -- remove this run's artifacts, restore the baseline
 ==============================================================================
-  orders to delete: [11, 12]
+  orders to delete: [25, 26]
   ledger rows to delete: id > 0
 
 [13] VERIFY -- the database is byte-for-byte back at baseline

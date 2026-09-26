@@ -1,0 +1,48 @@
+==============================================================================
+Day 28 · 搜索修复落地验收（V0 修复前 vs V1 修复后，同库 A/B）
+==============================================================================
+
+[0] 建临时库（★ 只动这一个名字，开发库不碰）
+  [OK]   CREATE DATABASE mallx_search_verify   rc=0 err=NOTICE:  database "mallx_search_verify" does not exist, skipping
+
+[1] 按序灌 01→15（含 15 号补丁：subtitle/description trgm）
+  [OK]   15 份补丁全部 rc == 0   bad=[]
+
+[2] 造数 30000 商品（关键词落点：name/subtitle/description 各有专属命中组）
+  [OK]   PERF 商品行数 == 30000   actual=30000
+
+[3] ★ 阶段 V0 —— DROP 两列新 trgm，复现修复前
+      V0-Q5F: 91 行, 769.8 ms（全量比对用）
+      V0-Q6F: 62 行, 872.1 ms（全量比对用）
+      V0-Q5P: 索引=-（生产形状，计划断言用）
+  [OK]   V0-Q5P 无任何 trgm 索引可走（OR 拼不出 BitmapOr ⇒ 修复前的病灶）   idx=-
+  [OK]   V0-Q6F 行数 > 0（中文兜底必须真的能查到东西）   rows=62
+
+[4] ★ 阶段 V1 —— 重建两列 trgm + ANALYZE
+      V1-Q5F: 91 行, 690.5 ms
+      V1-Q6F: 62 行, 749.0 ms
+      V1-Q5P: 索引=idx_products_description_trgm,idx_products_name_trgm,idx_products_search,idx_products_subtitle_trgm
+      V1-Q6P: 索引=idx_products_description_trgm,idx_products_name_trgm,idx_products_subtitle_trgm
+
+[5] ★★ 等价性：V1 的 id 序列与 V0 逐一相等（含排序 ⇒ 分页内容不变）
+  [OK]   Q5 全量 id 序列逐一相等（91 行）   v0=91 v1=91
+  [OK]   Q6 全量 id 序列逐一相等（62 行）   v0=62 v1=62
+  [OK]   Q5 生产形状 top-10 序列逐一相等   v0=1,1005,2005... v1=1,1005,2005...
+
+[6] ★★ 计划真的走上新索引（生产形状；「建好了」≠「被用上」，Day 27 的教训）
+  [OK]   V1-Q5P 计划含 idx_products_subtitle_trgm   idx=idx_products_description_trgm,idx_products_name_trgm,idx_products_search,idx_products_subtitle_trgm
+  [OK]   V1-Q5P 计划含 idx_products_description_trgm   idx=idx_products_description_trgm,idx_products_name_trgm,idx_products_search,idx_products_subtitle_trgm
+  [OK]   V1-Q6P 计划含 idx_products_name_trgm   idx=idx_products_description_trgm,idx_products_name_trgm,idx_products_subtitle_trgm
+  [OK]   V1-Q6P 计划含 idx_products_subtitle_trgm   idx=idx_products_description_trgm,idx_products_name_trgm,idx_products_subtitle_trgm
+  [OK]   V1-Q6P 计划含 idx_products_description_trgm   idx=idx_products_description_trgm,idx_products_name_trgm,idx_products_subtitle_trgm
+
+[7] 三列 trgm 在 pg_indexes 里齐（对照 day19 的口径）
+  [OK]   pg_indexes 里 trgm 索引 == 3 个   got=idx_products_description_trgm,idx_products_name_trgm,idx_products_subtitle_trgm
+
+[8] 删临时库
+  [OK]   DROP DATABASE mallx_search_verify   rc=0 err=
+
+==============================================================================
+ASSERTIONS: 15 / 15 passed   (EXPECTED=15)
+VERDICT: OK -- 修复后等价性成立且新索引真被用上
+==============================================================================

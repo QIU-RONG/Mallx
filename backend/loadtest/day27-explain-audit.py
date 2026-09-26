@@ -21,7 +21,8 @@
 
 做法（★ 零副作用）
 ------------------
-临时库 `mallx_perf_probe`（与 `day25-sql-strict-check.py` 同一套路）→ 灌 01→14
+临时库 `mallx_perf_probe`（与 `day25-sql-strict-check.py` 同一套路）→ 灌 01→15
+（15 = Day 28 搜索修复：subtitle/description trgm，Q5/Q6 的期望已随之翻转）
 → 造数到有区分度的量级 → `ANALYZE` → 13 条查询逐条 `EXPLAIN (ANALYZE, BUFFERS)`
 → DROP DATABASE。**不碰开发库的任何数据。**
 
@@ -55,7 +56,8 @@ FILES = ["01-schema.sql", "02-index.sql", "03-data.sql", "04-review-constraints.
          "05-admin-permissions.sql", "06-day17-fixtures.sql", "07-admin-permissions.sql",
          "08-marketing-permissions.sql", "09-user-coupons-unique.sql",
          "10-brand-permissions.sql", "11-order-discount.sql", "12-day22-permissions.sql",
-         "13-day23-permissions.sql", "14-brand-crud-permissions.sql"]
+         "13-day23-permissions.sql", "14-brand-crud-permissions.sql",
+         "15-search-trgm-indexes.sql"]
 
 # ---- 规模与【选择性】（★ 不是「越大越好」，是「必须让索引有胜算」）----
 N_CATEGORIES = 300       # 3 万商品 / 300 分类 ≈ 100 行/分类 ⇒ category_id 有选择性
@@ -248,13 +250,13 @@ QUERIES = [
      "AND (p.search_vector @@ plainto_tsquery('simple','iphone') "
      "     OR p.name ILIKE '%iphone%' OR p.subtitle ILIKE '%iphone%' OR p.description ILIKE '%iphone%') "
      "ORDER BY ts_rank(p.search_vector, plainto_tsquery('simple','iphone')) DESC, p.id ASC LIMIT 10",
-     "NOT_INDEX:idx_products_search",
-     "★ 这是【生产真实形状】：OR 让 GIN 无法被选中 —— 索引建了，但这条查询用不上"),
+     "INDEX:idx_products_subtitle_trgm",
+     "★ Day 28 修复后（15 号补丁补齐 subtitle/description trgm）：OR 每支各有索引 ⇒ BitmapOr 拼得起来"),
 
     ("Q6", "搜索：中文兜底（ILIKE 三列 + OR）",
      "SELECT p.id FROM products p WHERE p.is_deleted = 0 AND p.status = 1 "
      "AND (p.name ILIKE '%笔记本%' OR p.subtitle ILIKE '%笔记本%' OR p.description ILIKE '%笔记本%') LIMIT 10",
-     "NOT_INDEX:idx_products_name_trgm", "★ OR + 前导 % ⇒ trgm 索引被挡在门外"),
+     "INDEX:idx_products_name_trgm", "★ Day 28 修复后：OR 每支各有 trgm ⇒ 不再被挡在门外"),
 
     ("Q7", "搜索：**单列** ILIKE（去掉 OR）",
      "SELECT p.id FROM products p WHERE p.is_deleted = 0 AND p.status = 1 "
@@ -451,10 +453,10 @@ def main():
             "hit=%d/%d" % (hit, len(QUERIES)))
 
         d = {f[0]: f for f in FINDINGS}
-        chk("★★ 核心结论：生产真实搜索（Q5）用不上 idx_products_search —— OR 兜底把它挡住了",
-            "idx_products_search" not in d["Q5"][3], "Q5=%s" % d["Q5"][3])
-        chk("★ 反向对照成立：Q7(单列 ILIKE) 用上 trgm，而 Q6(OR) 用不上",
-            "idx_products_name_trgm" in d["Q7"][3] and "idx_products_name_trgm" not in d["Q6"][3],
+        chk("★★ Day 28 修复生效：Q5（生产真实形状的 OR）走上了 trgm —— 修复前它是 Seq Scan",
+            "idx_products_subtitle_trgm" in d["Q5"][3], "Q5=%s" % d["Q5"][3])
+        chk("★ Q6(OR) 与 Q7(单列) 现在都走 trgm —— 「OR 挡索引」在 15 号补丁后已成历史",
+            "idx_products_name_trgm" in d["Q7"][3] and "idx_products_name_trgm" in d["Q6"][3],
             "Q6=%s / Q7=%s" % (d["Q6"][3], d["Q7"][3]))
         chk("★ Q8a/Q8b 都用上 JSONB GIN（EXISTS 被计划器反写成从 SKU 侧驱动）",
             "idx_product_skus_attributes" in d["Q8a"][3]

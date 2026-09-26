@@ -2,8 +2,8 @@
 SQL 补丁严格模式全量自检（全新临时库 mallx_strict_probe，ON_ERROR_STOP=1）
 ==============================================================================
 
-[0] 文件清单：实得 14 份，期望 14 份
-  [OK]   清单份数 == 14   got=14
+[0] 文件清单：实得 15 份，期望 15 份
+  [OK]   清单份数 == 15   got=15
   [OK]   清单里每个文件都存在   missing=[]
   [OK]   磁盘上没有清单外的 .sql   extra=[]
 
@@ -25,7 +25,8 @@ SQL 补丁严格模式全量自检（全新临时库 mallx_strict_probe，ON_ERR
       [OK  ] 12-day22-permissions.sql           rc=0
       [OK  ] 13-day23-permissions.sql           rc=0
       [OK  ] 14-brand-crud-permissions.sql      rc=0
-  [OK]   14 个文件全部 rc == 0（没有任何文件把链掐断）   bad=[]
+      [OK  ] 15-search-trgm-indexes.sql         rc=0
+  [OK]   15 个文件全部 rc == 0（没有任何文件把链掐断）   bad=[]
   [OK]   ★ 没有被跳过的文件（initdb 语义：前面的失败会掐断后面全部）   会被跳过 0 个：[]
 
 [3] ★ 09 号那段「期望抛错」的探针是否被内部消化（NOTICE 而不是 ERROR）
@@ -48,5 +49,5 @@ SQL 补丁严格模式全量自检（全新临时库 mallx_strict_probe，ON_ERR
 
 ==============================================================================
 ASSERTIONS: 16 / 16 passed   (EXPECTED=16)
-VERDICT: OK -- 14 份补丁在全新库上按序跑通，initdb 不会被掐断
+VERDICT: OK -- 15 份补丁在全新库上按序跑通，initdb 不会被掐断
 ==============================================================================

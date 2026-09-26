@@ -112,10 +112,11 @@ cd backend/sql
 psql -h localhost -p 5434 -U mallx -d mallx -f 01-schema.sql   # 22 张表 + 全文检索触发器
 psql -h localhost -p 5434 -U mallx -d mallx -f 02-index.sql    # 索引（含 GIN / trgm / JSONB）
 psql -h localhost -p 5434 -U mallx -d mallx -f 03-data.sql     # 种子数据 + 初始 RBAC
-# 04–14 是后续每天的增量补丁，全部幂等（可重复执行）
+# 04–15 是后续每天的增量补丁，全部幂等（可重复执行）
 for f in 04-review-constraints 05-admin-permissions 07-admin-permissions \
          08-marketing-permissions 09-user-coupons-unique 10-brand-permissions \
-         11-order-discount 12-day22-permissions 13-day23-permissions 14-brand-crud-permissions; do
+         11-order-discount 12-day22-permissions 13-day23-permissions 14-brand-crud-permissions \
+         15-search-trgm-indexes; do
   psql -h localhost -p 5434 -U mallx -d mallx -f "$f.sql"
 done
 ```
@@ -126,6 +127,7 @@ done
 | `05` / `07` / `08` / `10` / `12` / `13` / `14` | **权限补发**：新增权限码 + 授权给角色（Day 17/18/20/20/22/23/24） |
 | `09-user-coupons-unique.sql` | `user_coupons` 的「一人一券」唯一约束（★ 补 `UNIQUE` 必须同时 `SET NOT NULL`） |
 | `11-order-discount.sql` | `orders` 增加 `discount_amount`（优惠额快照） |
+| `15-search-trgm-indexes.sql` | **Day 28 搜索修复**：补 `subtitle` / `description` 两列 trgm，让 `searchProducts` 的 OR 能拼出 BitmapOr（预研 29x，落地验收 15/15） |
 | `06-day17-fixtures.sql` | **可选**，仅开发/验收用：造 `op_order`、`op_product` 两个受限管理员 |
 
 > ★★ **加了新的 `@PreAuthorize("hasAuthority('xxx'))` 就必须补发权限行**，
@@ -320,9 +322,10 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day20-l1l2-verify.py` | 分页夹紧 + 下架商品可见性分流 | 33 |
 | `day20-l5-brand-verify.py` | 品牌字典（C 端 / 管理端口径成对） | 24 |
 | `day12/13-*` | 并发下单（不超卖）/ 并发支付（不重复扣款） | 见 `docs/perf-report.md` |
-| `day25-sql-strict-check.py` | **SQL 补丁严格模式自检**：14 份补丁 × **全新临时库** × `ON_ERROR_STOP=1` | 16 |
+| `day25-sql-strict-check.py` | **SQL 补丁严格模式自检**：15 份补丁 × **全新临时库** × `ON_ERROR_STOP=1` | 16 |
 | `day27-explain-audit.py` | **索引 EXPLAIN 审计**：临时库 + 3 万行 + `VACUUM (ANALYZE)`，13 条查询验「索引是否真被用上」 | 38 |
 | `day28-search-rewrite-probe.py` | **搜索改法预研**：临时库对照 V0 现状 / V1 补 trgm 索引 / V2 拆 UNION / V3 只留全文（含中文黑洞与 `UNION ALL` 重复） | 24 |
+| `day28-search-index-verify.py` | **搜索修复落地验收**：同库 A/B（DROP 新索引复现 V0 → 重建测 V1），断言 id 序列逐一相等（含 top-10）+ 计划真走新 trgm。★ 计划断言必须用**含 LIMIT 的生产原形**（去 LIMIT 后计划器合法退回 Seq Scan） | 15 |
 | `day29-dashboard-explain-audit.py` | **管理端 / Dashboard 聚合审计**：临时库 A/B 对照「给 `payments` 加索引值不值」，含「加索引不能改数」判据 | 20 |
 | `day31-index-drop-probe.py` | **DROP 实验**：把候选索引删掉再跑，验「删它安全」；**含对照组**证明装置有区分度 | 18 |
 | `day32-pagination-index-probe.py` | **分页 + 排序的索引**：偏斜分布（1 个 power user 2 万单）下对照复合索引；含 **keyset vs OFFSET** 深分页探针 | 19 |
@@ -365,10 +368,12 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 
 完整数据、审计日志与复现步骤见 **[`docs/perf-report.md`](docs/perf-report.md)**。
 
-**索引侧同样有实测（Day 27，临时库 + 3 万行 `EXPLAIN ANALYZE`）**：
-12 条真实查询里有 **2 个索引在生产形状下用不上** ——
-`idx_products_search` 被 `searchProducts` 的 `OR` 兜底挡住（同一条 SQL 去掉 `OR` 后
-**1.3 ms vs 68.5 ms**），`idx_products_status` 是低选择性死索引。
+**索引侧同样有实测（Day 27 基线 + Day 28 修复，临时库 + 3 万行 `EXPLAIN ANALYZE`）**：
+Day 27 发现 `searchProducts` 的 `OR` 兜底挡住 `idx_products_search`（同一条 SQL 去掉 `OR` 后
+**1.3 ms vs 68.5 ms**），且 `idx_products_status` 是低选择性死索引；
+**Day 28 已修复**（`15-search-trgm-indexes.sql` 补齐 subtitle/description 两列 trgm，SQL 一字不改）：
+修复后生产原形查询走 **BitmapOr（`search` + 三列 trgm 四索引齐上）**，EN 23.74→0.82 ms（**29x**），
+落地验收 `day28-search-index-verify.py` 15/15（结果集逐行相等）。
 ⇒ **「建了索引」与「查询用得上索引」是两件事**，见 `docs/perf-report.md` §五。
 
 ---

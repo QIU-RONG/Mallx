@@ -53,7 +53,8 @@ FILES = ["01-schema.sql", "02-index.sql", "03-data.sql", "04-review-constraints.
          "05-admin-permissions.sql", "06-day17-fixtures.sql", "07-admin-permissions.sql",
          "08-marketing-permissions.sql", "09-user-coupons-unique.sql",
          "10-brand-permissions.sql", "11-order-discount.sql", "12-day22-permissions.sql",
-         "13-day23-permissions.sql", "14-brand-crud-permissions.sql"]
+         "13-day23-permissions.sql", "14-brand-crud-permissions.sql",
+         "15-search-trgm-indexes.sql"]
 
 N_ROWS = 5000          # 每轮插入行数
 N_USERS = 2000
@@ -191,7 +192,8 @@ CASES = [
      "VALUES ((SELECT min(id) FROM categories), (SELECT min(id) FROM brands), "
      "        'PERF-W-' || i, 'PERF', 'PERF', '/img/x.jpg', 1, 0);",
      ["idx_products_category_id", "idx_products_brand_id", "idx_products_status",
-      "idx_products_is_deleted", "idx_products_search", "idx_products_name_trgm"],
+      "idx_products_is_deleted", "idx_products_search", "idx_products_name_trgm",
+      "idx_products_subtitle_trgm", "idx_products_description_trgm"],
      []),
 ]
 

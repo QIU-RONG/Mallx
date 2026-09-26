@@ -11,8 +11,9 @@
 #  3. 全部判定来自脚本退出码（所有纳管脚本失败即 exit 1），CI 不 grep 人类可读文本。
 #  4. M1 回归按收集器协议执行：--baseline → 五个链路脚本 → 收集器（缺一不可，
 #     收集器靠报告 mtime 戳验证「本轮重新生成」）。
-#  5. 性能审计（day27–34）全部自带临时库（自灌自删），只需 postgres 在跑 ——
-#     排在起应用之前，应用挂了也不影响审计段的判定。day35 未完成，暂不入列。
+#  5. 性能审计（day27–34 + day28 落地验收）全部自带临时库（自灌自删），只需 postgres 在跑 ——
+#     排在起应用之前，应用挂了也不影响审计段的判定。day35 是计时类一次性取证
+#     （本机 5 分钟、runner 上估 15–30 分钟 + 计时断言会抖），不挂 CI。
 
 name: CI
 
@@ -74,14 +75,16 @@ jobs:
         working-directory: backend/loadtest
         run: python day25-sql-strict-check.py
 
-      # Day 27–34 的七个性能审计脚本：全部「临时库自灌自删」（CREATE DATABASE → 灌 01→14 +
-      # 造数 → EXPLAIN/DROP 实验 → DROP DATABASE），与 dev 库零耦合、不需要应用在跑、
+      # Day 27–34 + day28 落地验收的性能审计脚本：全部「临时库自灌自删」（CREATE DATABASE →
+      # 灌补丁（多数 01→14；day27 / day28-search-index-verify 为 01→15，含搜索修复）+ 造数 →
+      # EXPLAIN/DROP 实验 → DROP DATABASE），与 dev 库零耦合、不需要应用在跑、
       # 失败即 exit 1（sys.exit(main())）。放在起应用之前：不依赖 8080，挂了能更早报错。
-      - name: "Perf audits (day27-34 —— EXPLAIN 基线 / 搜索改法 / Dashboard / DROP 实验 / 分页 / 券侧 / 购物车)"
+      - name: "Perf audits (day27-34 + day28 verify —— EXPLAIN 基线 / 搜索改法 / 搜索修复验收 / Dashboard / DROP 实验 / 分页 / 券侧 / 购物车)"
         working-directory: backend/loadtest
         run: |
           python day27-explain-audit.py
           python day28-search-rewrite-probe.py
+          python day28-search-index-verify.py
           python day29-dashboard-explain-audit.py
           python day31-index-drop-probe.py
           python day32-pagination-index-probe.py

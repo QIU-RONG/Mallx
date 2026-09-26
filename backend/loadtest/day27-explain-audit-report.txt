@@ -20,6 +20,7 @@ Day 27 -- 性能基线：索引有没有被用上（临时库 mallx_perf_probe�
       [OK  ] 12-day22-permissions.sql
       [OK  ] 13-day23-permissions.sql
       [OK  ] 14-brand-crud-permissions.sql
+      [OK  ] 15-search-trgm-indexes.sql
   [OK]   14 份补丁全部 rc == 0   bad=[]
 
 [2] 造数（★ 规模 + **选择性**，否则「看不到索引」永远无法被证伪）
@@ -57,26 +58,26 @@ Day 27 -- 性能基线：索引有没有被用上（临时库 mallx_perf_probe�
 
 [5] EXPLAIN (ANALYZE, BUFFERS) —— 逐条查询
 
-  [OK]   Q1 C 端列表：status = 1（低选择性）   idx=['products_pkey'] seq=- 0.269 ms
-  [OK]   Q2 C 端列表：按 category_id（无 LIMIT/ORDER BY）   idx=['categories_pkey', 'idx_products_category_id'] seq=- 1.836 ms
-  [OK]   Q3 countByCategoryId（删除分类的引用校验，含软删）   idx=['categories_pkey', 'idx_products_category_id'] seq=- 0.407 ms
-  [OK]   Q5 ★★ 真实 searchProducts（全文 **+ OR 兜底**）   idx=- seq=['products'] 65.277 ms
-  [OK]   Q6 搜索：中文兜底（ILIKE 三列 + OR）   idx=- seq=['products'] 20.016 ms
-  [OK]   Q7 搜索：**单列** ILIKE（去掉 OR）   idx=['idx_products_name_trgm'] seq=- 0.618 ms
-  [OK]   Q8a 搜索：属性筛选（**从 product 侧驱动**的 EXISTS）   idx=['idx_product_skus_attributes', 'products_pkey'] seq=- 3.682 ms
-  [OK]   Q8b 属性筛选：**直接从 SKU 侧**按属性查（对照）   idx=['idx_product_skus_attributes'] seq=- 2.416 ms
-  [OK]   Q9 订单列表：按 user_id   idx=['idx_orders_user_id', 'users_pkey'] seq=- 0.713 ms
-  [OK]   Q10 ★ 超时关单扫描（每 60 秒自动跑一次）   idx=['idx_orders_status'] seq=- 0.889 ms
-  [OK]   Q11 订单详情：按 order_id 取明细   idx=['idx_order_items_order_id', 'orders_pkey'] seq=- 0.375 ms
-  [OK]   Q12 库存流水：按 sku_id 倒序（管理端流水页）   idx=['idx_inventory_logs_sku_id', 'product_skus_pkey'] seq=- 0.802 ms
-  [OK]   Q13 商品评价：按 product_id   idx=['idx_reviews_product_id', 'products_pkey'] seq=- 0.541 ms
+  [OK]   Q1 C 端列表：status = 1（低选择性）   idx=['products_pkey'] seq=- 0.208 ms
+  [OK]   Q2 C 端列表：按 category_id（无 LIMIT/ORDER BY）   idx=['categories_pkey', 'idx_products_category_id'] seq=- 1.498 ms
+  [OK]   Q3 countByCategoryId（删除分类的引用校验，含软删）   idx=['categories_pkey', 'idx_products_category_id'] seq=- 0.335 ms
+  [OK]   Q5 ★★ 真实 searchProducts（全文 **+ OR 兜底**）   idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm'] seq=- 1.468 ms
+  [OK]   Q6 搜索：中文兜底（ILIKE 三列 + OR）   idx=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_subtitle_trgm'] seq=- 0.915 ms
+  [OK]   Q7 搜索：**单列** ILIKE（去掉 OR）   idx=['idx_products_name_trgm'] seq=- 0.906 ms
+  [OK]   Q8a 搜索：属性筛选（**从 product 侧驱动**的 EXISTS）   idx=['idx_product_skus_attributes', 'products_pkey'] seq=- 2.997 ms
+  [OK]   Q8b 属性筛选：**直接从 SKU 侧**按属性查（对照）   idx=['idx_product_skus_attributes'] seq=- 2.259 ms
+  [OK]   Q9 订单列表：按 user_id   idx=['idx_orders_user_id', 'users_pkey'] seq=- 0.628 ms
+  [OK]   Q10 ★ 超时关单扫描（每 60 秒自动跑一次）   idx=['idx_orders_status'] seq=- 0.619 ms
+  [OK]   Q11 订单详情：按 order_id 取明细   idx=['idx_order_items_order_id', 'orders_pkey'] seq=- 0.305 ms
+  [OK]   Q12 库存流水：按 sku_id 倒序（管理端流水页）   idx=['idx_inventory_logs_sku_id', 'product_skus_pkey'] seq=- 0.480 ms
+  [OK]   Q13 商品评价：按 product_id   idx=['idx_reviews_product_id', 'products_pkey'] seq=- 0.304 ms
 
 [5b] 探针（只记录、不断言：用来解释「为什么某条查询没用索引」）
       [R1] C 端列表：category_id **+ ORDER BY id DESC LIMIT 10**（生产真实形状）
-            idx=['categories_pkey', 'products_pkey'] seq=- 1.330 ms
+            idx=['categories_pkey', 'products_pkey'] seq=- 2.284 ms
             与 Q2 对比：加了 ORDER BY + LIMIT 之后，计划器是否改走 PK 反向扫
       [R2] 搜索：**纯**全文（无 OR 兜底）—— 与 Q5 成对照
-            idx=['idx_products_search'] seq=- 1.094 ms
+            idx=['idx_products_search'] seq=- 0.844 ms
             ★★ 与 Q5 同一条 SQL 去掉 OR 之后：GIN 被用上（1.3ms）⇒ 证明「挡索引的是 OR，不是索引本身」
 
 [6] 汇总（★ 未命中不等于缺陷：要看是「索引没用」还是「查询写法挡住了索引」）
@@ -85,8 +86,8 @@ Day 27 -- 性能基线：索引有没有被用上（临时库 mallx_perf_probe�
       Q1   C 端列表：status = 1（低选择性）                   NOT_INDEX:idx_products_status    OK    ['products_pkey']
       Q2   C 端列表：按 category_id（无 LIMIT/ORDER BY）    INDEX:idx_products_category_id   OK    ['categories_pkey', 'idx_products_category_id']
       Q3   countByCategoryId（删除分类的引用校验，含软删）         INDEX:idx_products_category_id   OK    ['categories_pkey', 'idx_products_category_id']
-      Q5   ★★ 真实 searchProducts（全文 **+ OR 兜底**）     NOT_INDEX:idx_products_search    OK    ['products']
-      Q6   搜索：中文兜底（ILIKE 三列 + OR）                   NOT_INDEX:idx_products_name_trgm OK    ['products']
+      Q5   ★★ 真实 searchProducts（全文 **+ OR 兜底**）     INDEX:idx_products_subtitle_trgm OK    ['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm']
+      Q6   搜索：中文兜底（ILIKE 三列 + OR）                   INDEX:idx_products_name_trgm     OK    ['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_subtitle_trgm']
       Q7   搜索：**单列** ILIKE（去掉 OR）                   INDEX:idx_products_name_trgm     OK    ['idx_products_name_trgm']
       Q8a  搜索：属性筛选（**从 product 侧驱动**的 EXISTS）       INDEX:idx_product_skus_attributes OK    ['idx_product_skus_attributes', 'products_pkey']
       Q8b  属性筛选：**直接从 SKU 侧**按属性查（对照）               INDEX:idx_product_skus_attributes OK    ['idx_product_skus_attributes']
@@ -96,8 +97,8 @@ Day 27 -- 性能基线：索引有没有被用上（临时库 mallx_perf_probe�
       Q12  库存流水：按 sku_id 倒序（管理端流水页）                 INDEX:idx_inventory_logs_sku_id  OK    ['idx_inventory_logs_sku_id', 'product_skus_pkey']
       Q13  商品评价：按 product_id                        INDEX:idx_reviews_product_id     OK    ['idx_reviews_product_id', 'products_pkey']
   [OK]   13 条查询全部符合设计预期（命中 13）   hit=13/13
-  [OK]   ★★ 核心结论：生产真实搜索（Q5）用不上 idx_products_search —— OR 兜底把它挡住了   Q5=[]
-  [OK]   ★ 反向对照成立：Q7(单列 ILIKE) 用上 trgm，而 Q6(OR) 用不上   Q6=[] / Q7=['idx_products_name_trgm']
+  [OK]   ★★ Day 28 修复生效：Q5（生产真实形状的 OR）走上了 trgm —— 修复前它是 Seq Scan   Q5=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_search', 'idx_products_subtitle_trgm']
+  [OK]   ★ Q6(OR) 与 Q7(单列) 现在都走 trgm —— 「OR 挡索引」在 15 号补丁后已成历史   Q6=['idx_products_description_trgm', 'idx_products_name_trgm', 'idx_products_subtitle_trgm'] / Q7=['idx_products_name_trgm']
   [OK]   ★ Q8a/Q8b 都用上 JSONB GIN（EXISTS 被计划器反写成从 SKU 侧驱动）   Q8a=['idx_product_skus_attributes', 'products_pkey'] / Q8b=['idx_product_skus_attributes']
 
 [7] 删临时库

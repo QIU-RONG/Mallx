@@ -3,23 +3,5 @@ Day 26 -- M1 回归夹具（让 245/245 可以从零复现）
 target : http://127.0.0.1:8080   plan: sku1 x1->PAID, sku4 x1->PAID, sku2 x2->PAID, sku3 x1->PAID, sku5 x1->PAID, sku6 x1->PAID
 ==============================================================================
 [0] 应用就绪
-[1] SQL 夹具（显式 id 惯例，插后校准序列）
-  intruder 插入 -> id=2 OK
-  地址插入 -> id=2 user_id=1 OK
-[2] 登录
-    demo token_len=191 (code=200)   admin token_len=1096 (code=200)
-[3] 归零幽灵计数（种子自带 sold/locked 残数且无订单可解释，违反链路守恒前提）
-    locked/sold 全表归零，available=total
-[4] API 建单（真实业务路径：购物车 → 下单 → 支付）
-    创建 6 单: #1 sku1->PAID, #2 sku4->PAID, #3 sku2->PAID, #4 sku3->PAID, #5 sku5->PAID, #6 sku6->PAID
-[5] 清空库存流水（day14 基线要求 ledger 空；dev 库历史形态即「有订单/零流水」）
-[6] 一致性核查
-    sku1 total=100 available=99 locked=0 sold=1 OK
-    sku2 total=80 available=78 locked=0 sold=2 OK
-    sku3 total=60 available=59 locked=0 sold=1 OK
-    sku4 total=150 available=149 locked=0 sold=1 OK
-    sku5 total=120 available=119 locked=0 sold=1 OK
-    sku6 total=40 available=39 locked=0 sold=1 OK
-[5] 状态文件已写: day26-m1-fixture-state.json
-==============================================================================
-FIXTURE: 31 / 31 passed
+[1] 夹具已在位（状态文件 6 单全部存在）→ no-op
+    订单: 1,2,3,4,5,6

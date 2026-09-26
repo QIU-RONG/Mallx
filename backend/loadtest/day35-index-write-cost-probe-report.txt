@@ -18,20 +18,20 @@ Day 35 -- 把「写入成本」量出来（每轮单行 INSERT x 5000）
   [OK]   基线 VACUUM (ANALYZE)   err=
 
 [4] ★★ 阶段 A —— 索引都在，逐表插入 5000 行
-      order_items        2.878s  (0.576 ms/行)  新增 5000 行  订单明细（下单链路的热写点）
-      cart_items        11.950s  (2.390 ms/行)  新增 5000 行  购物车（每次加购都写）
-      user_coupons       3.268s  (0.654 ms/行)  新增 5000 行  领券（唯一约束索引必须留）
-      products(对照)       2.056s  (0.411 ms/行)  新增 5000 行  对照：全部索引 vs 无索引
+      order_items        2.866s  (0.573 ms/行)  新增 5000 行  订单明细（下单链路的热写点）
+      cart_items        11.999s  (2.400 ms/行)  新增 5000 行  购物车（每次加购都写）
+      user_coupons       3.203s  (0.641 ms/行)  新增 5000 行  领券（唯一约束索引必须留）
+      products(对照)       2.450s  (0.490 ms/行)  新增 5000 行  对照：全部索引 vs 无索引
 
 [5] 阶段 B —— DROP 候选索引 + VACUUM (ANALYZE)
-  [OK]   DROP 候选索引（11 个）   rc=0 err=
+  [OK]   DROP 候选索引（13 个）   rc=0 err=
   [OK]   DROP 后 VACUUM (ANALYZE)   err=
 
 [6] 阶段 B —— 同样插入 5000 行
-      order_items        2.861s  (0.572 ms/行)  新增 5000 行
-      cart_items        13.460s  (2.692 ms/行)  新增 5000 行
-      user_coupons       3.498s  (0.700 ms/行)  新增 5000 行
-      products(对照)       1.392s  (0.278 ms/行)  新增 5000 行
+      order_items        2.768s  (0.554 ms/行)  新增 5000 行
+      cart_items        14.475s  (2.895 ms/行)  新增 5000 行
+      user_coupons       3.124s  (0.625 ms/行)  新增 5000 行
+      products(对照)       1.371s  (0.274 ms/行)  新增 5000 行
 
 [7] ★ 数据完整性：两轮都插够了行数（否则计时没有可比性）
   [OK]   order_items 阶段 A 新增 == 5000   actual=5000
@@ -44,8 +44,8 @@ Day 35 -- 把「写入成本」量出来（每轮单行 INSERT x 5000）
   [OK]   products(对照) 阶段 B 新增 == 5000   actual=5000
 
 [8] ★★ 对照组必须成立：products 全部索引 vs 无索引，差异要显著
-      全索引 2.056s → 无索引 1.392s  ⇒ 省 32.3%
-  [OK]   对照组差异 >= 10%%（证明本装置能测出写入成本）   gain=32.3%
+      全索引 2.450s → 无索引 1.371s  ⇒ 省 44.0%
+  [OK]   对照组差异 >= 10%%（证明本装置能测出写入成本）   gain=44.0%
 
 [9] 删临时库
   [OK]   DROP DATABASE mallx_write_probe   rc=0 err=
@@ -54,10 +54,10 @@ Day 35 -- 把「写入成本」量出来（每轮单行 INSERT x 5000）
 写入成本对照表（每轮 5000 行单行 INSERT）
 ==============================================================================
       表                A 全索引      B 去候选      省        DROP 掉的索引
-      order_items      2.878s     2.861s     0.6%     idx_order_items_sku_id
-      cart_items       11.950s    13.460s    -12.6%   idx_cart_items_user_id,idx_cart_items_sku_id
-      user_coupons     3.268s     3.498s     -7.0%    idx_user_coupons_user_id,idx_user_coupons_coupon_id
-      products(对照)     2.056s     1.392s     32.3%    idx_products_category_id,idx_products_brand_id,idx_products_status,idx_products_is_deleted,idx_products_search,idx_products_name_trgm
+      order_items      2.866s     2.768s     3.4%     idx_order_items_sku_id
+      cart_items       11.999s    14.475s    -20.6%   idx_cart_items_user_id,idx_cart_items_sku_id
+      user_coupons     3.203s     3.124s     2.5%     idx_user_coupons_user_id,idx_user_coupons_coupon_id
+      products(对照)     2.450s     1.371s     44.0%    idx_products_category_id,idx_products_brand_id,idx_products_status,idx_products_is_deleted,idx_products_search,idx_products_name_trgm,idx_products_subtitle_trgm,idx_products_description_trgm
 
 ==============================================================================
 ASSERTIONS: 19 / 19 passed   (EXPECTED=19)

@@ -37,15 +37,16 @@ PROBE_DB = "mallx_strict_probe"    # ★ 临时库，跑完就删
 SQL_DIR = lp(r"D:\MallX\backend\sql")
 REPORT = lp(r"D:\MallX\backend\loadtest\day25-sql-strict-check-report.txt")
 
-# 14 份补丁的期望顺序（字典序恰好也是正确的执行序）
+# 15 份补丁的期望顺序（字典序恰好也是正确的执行序；15 = Day 28 搜索修复）
 FILES = ["01-schema.sql", "02-index.sql", "03-data.sql", "04-review-constraints.sql",
          "05-admin-permissions.sql", "06-day17-fixtures.sql", "07-admin-permissions.sql",
          "08-marketing-permissions.sql", "09-user-coupons-unique.sql",
          "10-brand-permissions.sql", "11-order-discount.sql", "12-day22-permissions.sql",
-         "13-day23-permissions.sql", "14-brand-crud-permissions.sql"]
+         "13-day23-permissions.sql", "14-brand-crud-permissions.sql",
+         "15-search-trgm-indexes.sql"]
 
 # 满额护栏：文件清单被改动时立刻炸（防止「少跑一个文件却全绿」）
-EXPECTED_FILES = 14
+EXPECTED_FILES = 15
 # 满额护栏：断言条数（防止「有检查项根本没被执行到」被当成通过）
 EXPECTED_CHECKS = 16
 # 跑完全部补丁后的硬事实（与 day24-perm-apply.py 的 EXPECT_PERM_TOTAL 同源）
@@ -140,7 +141,7 @@ def main():
                 say("             stderr: %s" % err.replace("\n", " | ")[:400])
             if "SELF-CHECK OK" in (err + out):
                 notice_09 = True
-        chk("14 个文件全部 rc == 0（没有任何文件把链掐断）", not bad, "bad=%s" % bad)
+        chk("%d 个文件全部 rc == 0（没有任何文件把链掐断）" % EXPECTED_FILES, not bad, "bad=%s" % bad)
         chk("★ 没有被跳过的文件（initdb 语义：前面的失败会掐断后面全部）", not skipped,
             "会被跳过 %d 个：%s" % (len(skipped), skipped))
 
@@ -213,7 +214,7 @@ def bail(code=None):
         say("★ 满额护栏未过：实得 %d 条断言，期望 %d 条 ⇒ 有检查项根本没被执行到"
             % (total, EXPECTED_CHECKS))
     ok = (n_fail == 0) and full
-    say("VERDICT: %s" % ("OK -- 14 份补丁在全新库上按序跑通，initdb 不会被掐断" if ok
+    say("VERDICT: %s" % ("OK -- 15 份补丁在全新库上按序跑通，initdb 不会被掐断" if ok
                          else "FAIL -- 见上面 FAIL 行"))
     say("=" * 78)
     with open(REPORT, "w", encoding="utf-8", newline="\n") as f:
