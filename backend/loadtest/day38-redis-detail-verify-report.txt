@@ -11,12 +11,12 @@ Day 38 · 商品详情 cache-aside 验收（miss/命中/失效/降级）
   [OK]   建夹具分类
   [OK]   建夹具品牌
   [OK]   建夹具商品（1 SKU + 1 图）
-      夹具：categoryId=33 brandId=12 productId=9
-      当前代次 gen=10
+      夹具：categoryId=37 brandId=16 productId=12
+      当前代次 gen=35
 
 [2] miss → 回源 → 回填
   [OK]   首次 GET 200 + code 200
-  [OK]   首次 GET 后 Redis 出现 v10:9 的 key（miss→回填）
+  [OK]   首次 GET 后 Redis 出现 v35:12 的 key（miss→回填）
   [OK]   缓存内容可反序列化且 name 一致
 
 [3] 命中路径：二次 GET 与首次逐字节一致
@@ -25,17 +25,17 @@ Day 38 · 商品详情 cache-aside 验收（miss/命中/失效/降级）
 
 [4] ★ 对照组：毒性注入 —— 证明读路径真的走缓存（而不是装样子读库）
   [OK]   毒性注入：覆写缓存成功
-  [OK]   ★ GET 读到毒值 ⇒ 命中路径真实生效   name=C38-商品-1790415398
+  [OK]   ★ GET 读到毒值 ⇒ 命中路径真实生效   name=C38-商品-1790417415
 
 [5] 失效：商品改名 ⇒ 代次 +1 ⇒ 读到新名字
   [OK]   管理端 PUT 改名
-  [OK]   代次号已 +1（10 -> 11）
-  [OK]   ★ GET 读到新名字（旧 key 整批失活）   name=C38-改名-1790415398
-  [OK]   新代次 key 出现（v11:9）
+  [OK]   代次号已 +1（35 -> 36）
+  [OK]   ★ GET 读到新名字（旧 key 整批失活）   name=C38-改名-1790417415
+  [OK]   新代次 key 出现（v36:12）
 
 [6] 非商品写也失效：分类改名 ⇒ detail 内嵌 categoryName 更新
   [OK]   管理端 PUT 分类改名
-  [OK]   ★ GET 的 categoryName = 新分类名（B 型脏点被覆盖）   categoryName=C38-分类改名-1790415398
+  [OK]   ★ GET 的 categoryName = 新分类名（B 型脏点被覆盖）   categoryName=C38-分类改名-1790417415
 
 [7] 降级：Redis 停机 ⇒ 接口照常（回源）
   [OK]   ★ Redis 停机后 GET 仍 200 + 数据正确（回源降级）

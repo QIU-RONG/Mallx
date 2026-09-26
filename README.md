@@ -92,16 +92,21 @@ MallX/
 | Maven 3.9+ | 首次构建需要公网拉依赖；已缓存后可 `-o` 离线构建 |
 | Docker Desktop | 用来跑 PostgreSQL 16（本机引擎需处于运行状态） |
 
-### 1. 启动数据库
+### 1. 启动数据库 / Redis / RabbitMQ
 
 ```bash
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-连接参数：库 `mallx`，用户 / 密码 `mallx / mallx123`，宿主端口 **5434**（映射容器 5432）。
+| 服务 | 容器 | 宿主端口 | 用途 |
+|---|---|---|---|
+| PostgreSQL 16 | mallx-postgres | **5434** | 主库（库 `mallx`，`mallx / mallx123`） |
+| Redis 7 | mallx-redis | **6380** | V1.1 缓存（`6380` 避开本机常见的 6379 占用） |
+| RabbitMQ 3.13 | mallx-rabbitmq | 5672 / 管理台 15672 | V1.1 延迟关单（DLX+TTL，guest/guest） |
 
 > ⚠️ 端口是 **5434** 不是默认的 5432 —— 本机可能已有别的 PostgreSQL 占着 5432。
 > 只验证「通不通」用端口探测即可，不必先装 psql 客户端。
+> 连通性冒烟：`GET /api/hello`（应用）、`GET /api/redis-check`（缓存）。
 
 ### 2. 初始化数据库
 
@@ -333,6 +338,10 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day33-coupon-status-probe.py` | **券侧索引收尾**：DROP 实验定性 `idx_coupons_status`（死）/ `idx_user_coupons_user_id`（冗余）；含**真实规模**对照 | 19 |
 | `day34-cart-index-probe.py` | **购物车索引 + 两种冗余**：区分「从来没被用上（A 型）」与「有替代索引（B 型）」；含对照 | 21 |
 | `day35-index-write-cost-probe.py` | **写入成本取证**：4 表 × 两阶段 × 5000 行单行 INSERT，量「删一个索引到底省多少写入」；含全删对照组（32.3%）证明装置可信。★ 结论：单个二线索引的写入成本 ≤ 噪声；**不挂 CI**（计时类一次性取证，非回归护栏） | 19 |
+| `day38-redis-detail-verify.py` | **详情缓存验收**：miss回填 / 命中逐字节一致 / ★毒性注入对照组（改写缓存毒值必须被读到）/ 改名失效 / Redis 停机降级 / 软删 404 | 25 |
+| `day39-tree-brand-verify.py` | **树/品牌缓存验收**：同一代次键域的三层缓存，各做回填/毒性注入/失效 | 22 |
+| `day40-redis-guard-verify.py` | **负缓存护栏**：下架→404→NEG→短路；★重新上架→代次翻转→200（没误伤恢复）；幽灵 id 穿透被挡 | 19 |
+| `day41-rabbitmq-close-verify.py` | **延迟关单验收**：下单→TTL→DLX→cancelOne，★秒级关闭（6.1s，扫描兜底 60s+2min）；高水位自清 | 12 |
 | `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数 | 31 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 
@@ -391,7 +400,7 @@ Day 27 发现 `searchProducts` 的 `OR` 兜底挡住 `idx_products_search`（同
 
 ```text
 V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–34，77 端点；界面由 Swagger UI 承担）
-V1.1 Redis + RabbitMQ                缓存与异步（订单超时关单、库存预占释放）
+V1.1 Redis + RabbitMQ                ✅ 完成（Day 37–41：商品/分类/品牌缓存 + 负缓存护栏；RabbitMQ 延迟关单（DLX+TTL），60s 扫描保留兜底）
 V1.2 性能优化                        ✅ 核心完成（Day 27–35：EXPLAIN 复盘、搜索修复 29x、15 号 trgm 补丁；读写分离未做）
 V1.3 Docker 容器化                   ✅ 完成（Day 25：deploy/ 三件套，非 root + healthcheck + 一键全栈）
 V1.4 云部署                          生产化：镜像瘦身、配置外置、可观测性
