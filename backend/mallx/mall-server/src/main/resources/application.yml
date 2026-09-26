@@ -12,10 +12,19 @@ spring:
   # Redis（V1.1 · D37：默认值对应 compose 的 mallx-redis，宿主 6380 -> 容器 6379；
   # ★ 6380 是为了避开本机已占用的 6379（用户其它项目的 redis7），本地/CI 同一默认值）
   # ★ 连接是懒建立：Redis 挂了不影响应用启动，只会让走缓存的读路径报错（D40 做降级）
+  # ★ timeout 2s（D41 实证）：不设的话 lettuce 默认 60s 命令超时 —— Redis 停机后
+  #   降级路径要挂 60s 才回源（CI runner 上 30s 的 HTTP 超时先到 ⇒ 降级断言失败）。
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6380}
+      timeout: 2s
+      connect-timeout: 2s
+
+  # RabbitMQ（V1.1 · D41：默认值对应 compose 的 mallx-rabbitmq；懒连接，MQ 挂了不影响启动）
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
 
 mybatis-plus:
   configuration:
@@ -40,3 +49,7 @@ mallx:
   jwt:
     secret: ${JWT_SECRET:mallx-dev-secret-key-please-change-me-2026}
     expire-minutes: 120
+  order:
+    # D41：延迟关单消息的 TTL（毫秒）。与 OrderTimeoutTask 的 2 分钟扫描兜底对齐；
+    # 验收时用 ORDER_CLOSE_DELAY_MS 环境变量压短（如 5000）来证明 MQ 路径快于扫描。
+    close-delay-ms: ${ORDER_CLOSE_DELAY_MS:120000}

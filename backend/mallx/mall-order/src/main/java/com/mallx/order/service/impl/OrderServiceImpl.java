@@ -16,6 +16,7 @@ import com.mallx.order.entity.Order;
 import com.mallx.order.entity.OrderItem;
 import com.mallx.order.mapper.OrderItemMapper;
 import com.mallx.order.mapper.OrderMapper;
+import com.mallx.order.mq.OrderDelayMqConfig;
 import com.mallx.order.service.OrderService;
 import com.mallx.order.vo.AddressForOrderVO;
 import com.mallx.order.vo.AdminOrderVO;
@@ -24,8 +25,12 @@ import com.mallx.order.vo.OrderItemSourceVO;
 import com.mallx.order.vo.OrderItemVO;
 import com.mallx.order.vo.OrderVO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -60,18 +65,25 @@ public class OrderServiceImpl implements OrderService {
      * 反过来让 Executor 依赖 OrderService 会形成循环依赖（Spring Boot 默认禁止，启动失败）。
      */
     private final OrderCancelExecutor cancelExecutor;
+    private final RabbitTemplate rabbitTemplate;
+
+    /** 延迟关单消息 TTL（毫秒）：与 OrderTimeoutTask 的 2 分钟扫描兜底对齐；验收时压短 */
+    @Value("${mallx.order.close-delay-ms:120000}")
+    private long closeDelayMs;
 
     public OrderServiceImpl(OrderMapper orderMapper,
                             OrderItemMapper orderItemMapper,
                             InventoryService inventoryService,
                             OrderCancelExecutor cancelExecutor,
-                            CouponService couponService
+                            CouponService couponService,
+                            RabbitTemplate rabbitTemplate
     ) {
         this.orderMapper = orderMapper;
         this.orderItemMapper = orderItemMapper;
         this.inventoryService = inventoryService;
         this.cancelExecutor = cancelExecutor;
         this.couponService = couponService;
+        this.rabbitTemplate = rabbitTemplate;
 
     }
 
@@ -212,6 +224,29 @@ public class OrderServiceImpl implements OrderService {
 
         // ⑦ 清掉已勾选的购物车项（未勾选的必须留在车里）
         orderMapper.deleteSelectedCartItems(userId);
+
+        // ⑧ 延迟关单消息（V1.1 · D41）—— ★ 必须 afterCommit 发布，不能在事务内发：
+        //    事务内发出去、事务却回滚 ⇒ 消费者会去关一张不存在的单（无害但要靠日志对账）；
+        //    afterCommit 保证「消息一定对应一张已落库的单」。
+        //    ★ 发布失败（MQ 宕机）只打 warn 不抛：订单照常存在，@Scheduled 扫描兜底关单
+        //      —— MQ 是加速，不是正确性的前提。
+        final Long placedOrderId = order.getId();
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                try {
+                    rabbitTemplate.convertAndSend(OrderDelayMqConfig.EXCHANGE, OrderDelayMqConfig.RK_TTL,
+                            String.valueOf(placedOrderId),
+                            m -> {
+                                m.getMessageProperties().setExpiration(String.valueOf(closeDelayMs));
+                                return m;
+                            });
+                    log.info("延迟关单消息已发布 orderId={} ttl={}ms", placedOrderId, closeDelayMs);
+                } catch (Exception e) {
+                    log.warn("延迟关单消息发布失败（扫描任务将兜底）orderId={}", placedOrderId, e);
+                }
+            }
+        });
 
         return order.getId();
     }

@@ -41,5 +41,13 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-marketing</artifactId>
         </dependency>
+
+        <!-- V1.1 · D41：延迟关单（DLX + per-message TTL）。编译期直接用
+             RabbitTemplate / @RabbitListener；RabbitAutoConfiguration 由
+             mall-server 聚合的 classpath 在应用层统一开启。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
     </dependencies>
 </project>

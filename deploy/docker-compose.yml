@@ -54,5 +54,22 @@ services:
       timeout: 3s
       retries: 10
 
+  # V1.1 · D41：延迟关单（mallx-rabbitmq）。
+  #  - 拓扑用 DLX + per-message TTL（不依赖延迟插件，官方镜像开箱即用）；
+  #  - 15672 是管理台（guest/guest，仅开发）；host 5672 无冲突；
+  #  - 消息发不出去不影响业务：@Scheduled 扫描关单保留为兜底（双保险）。
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: mallx-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
 volumes:
   mallx_pgdata:
