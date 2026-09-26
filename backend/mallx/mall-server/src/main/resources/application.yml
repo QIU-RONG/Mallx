@@ -9,6 +9,14 @@ spring:
     username: ${DB_USERNAME:mallx}
     password: ${DB_PASSWORD:mallx123}
 
+  # Redis（V1.1 · D37：默认值对应 compose 的 mallx-redis，宿主 6380 -> 容器 6379；
+  # ★ 6380 是为了避开本机已占用的 6379（用户其它项目的 redis7），本地/CI 同一默认值）
+  # ★ 连接是懒建立：Redis 挂了不影响应用启动，只会让走缓存的读路径报错（D40 做降级）
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6380}
+
 mybatis-plus:
   configuration:
     # 数据库下划线字段 自动映射为 Java 驼峰属性

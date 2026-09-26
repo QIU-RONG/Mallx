@@ -37,5 +37,22 @@ services:
       timeout: 3s
       retries: 10
 
+  # V1.1 · D37：缓存基建（mallx-redis）。
+  #  - 纯缓存用途，开发环境不挂持久卷（重启丢缓存 = 天然的全量失效，反而省心）；
+  #  - ★ 宿主端口用 6380 而不是 6379：本机已有一个带密码的 redis7 容器占着 6379
+  #    （用户其它项目的），避开它 ⇒ 本地 compose up 与 CI 拓扑完全一致；
+  #  - healthcheck 与 postgres 同款节奏。
+  redis:
+    image: redis:7-alpine
+    container_name: mallx-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   mallx_pgdata:

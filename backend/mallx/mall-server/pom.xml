@@ -55,6 +55,12 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-admin</artifactId>
         </dependency>
+        <!-- V1.1 · D37：Redis 缓存基建。★ 只声明在启动模块 —— RedisAutoConfiguration
+             在应用层生效，各业务模块（mall-product 等）编译期需要时再各自声明依赖。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

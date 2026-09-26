@@ -46,7 +46,7 @@ public class SecurityConfig {
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             // ④ 白名单 + 其余全部要登录（顺序重要：anyRequest 必须放最后）
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/login", "/api/auth/admin/login","/api/hello","/error").permitAll()
+                .requestMatchers("/api/auth/login", "/api/auth/admin/login","/api/hello","/api/redis-check","/error").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
                 // ★ Day 20：优惠券「可领列表」公开。注意这里是【精确路径】，不是 "/api/coupons/**" ——
