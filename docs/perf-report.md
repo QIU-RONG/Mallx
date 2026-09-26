@@ -196,7 +196,7 @@ python day17-m1-regression.py
 > | 口径 | 条数 |
 > |---|---|
 > | **应用级验收**（打真实 HTTP + 直查库，本表所列） | **1224** |
-> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条 + `day31-index-drop-probe.py` 18 条 + `day32-pagination-index-probe.py` 19 条） | **1359** |
+> | **含 SQL / 工具类护栏**（+ `day25-sql-strict-check.py` 16 条 + `day27-explain-audit.py` 38 条 + `day28-search-rewrite-probe.py` 24 条 + `day29-dashboard-explain-audit.py` 20 条 + `day31-index-drop-probe.py` 18 条 + `day32-pagination-index-probe.py` 19 条 + `day33-coupon-status-probe.py` 19 条） | **1378** |
 >
 > （实测：全仓 55 份 `*-report.txt` 中，当前仅 **9** 份以 `ASSERTIONS: n / m passed` 结尾、
 > **6** 份用 `TOTAL:` / `FIXTURE:`，其余是逐次运行留下的一次性产物
@@ -333,6 +333,8 @@ python backend/loadtest/day27-explain-audit.py    # 索引是否真被用上
 | **`payments` 索引** | **不建议加** | Day 29 A/B 对照：`payments(status)` 单列**完全不被用上**（`SUCCESS` 命中 95%，低选择性）；复合 `(status, paid_at)` 被用上但只快 **1.3x**（32.5 → 24.9 ms）⇒ 不值一份写入成本。见 Day 29 |
 | **深分页** | `OFFSET n` 的成本是 **O(n)** | ★ Day 32 实测：`OFFSET 5000` = **2.41 ms**，同一位置改用**游标式（keyset）分页** = **0.27 ms**（**9 倍**）。**加索引只改常数因子，改不了量级** ⇒ 真要治得换分页方式（**产品决策**：不能跳页，只能「下一页」）。当前业务页深未出现，**暂不处理** |
 | **分页复合索引** | **不建议加** | Day 32：`(user_id, created_at DESC, id DESC)` / `(status, created_at DESC, id DESC)` 都**被用上**，但绝对值只省 **≤1.4 ms** ⇒ 不值一份写入成本。（阶段 A 里计划器会自动选「时间索引逆序扫 + 过滤 + 提前停」，第 1 页本来就快） |
+| **`idx_coupons_status`** | **死索引** | Day 33 DROP 实验：删掉它，C 端可领券列表计划**逐字节不变**（`status=1` 命中 95%，计划器改用 PK 反向扫）。★ 但 `coupons` 是**小表**（真实几十~几百行）：200 行时直接全表扫、**0.42 ms** ⇒ **索引有无都不重要** |
+| **`idx_user_coupons_user_id`** | **冗余** | 被 09 号补丁的 `UNIQUE(user_id, coupon_id)` 索引 `uk_user_coupons_user_coupon` **完全覆盖** —— 实测「按 user_id 查」用的是**唯一索引**，单列那个从未被用上。★ 一般化：**建单列索引前先看有没有以它为前缀的复合 / 唯一索引** |
 | 订单侧幂等 | **缺** | 「一车多单」实测 1 件商品开出 7 张单；需 `requestId` 唯一索引或 Redis 去重（V1.1） |
 | 缓存 / 异步 | **无** | V1.0 刻意不引 Redis / MQ，「用关系库把该做的事做完」是第一约束 |
 | 连接池 / 限流 | 未做 | V1.2 性能优化 |
@@ -376,3 +378,13 @@ WHERE user_id = (SELECT id FROM users ORDER BY id LIMIT 1)   -- ❌ 估算会失
 
 ⇒ **估算失真会让计划比较彻底失效，而且它不会报错 —— 只会安静地给你一个相反的结论。**
   凡是依赖「行数估算」才能得出结论的对照，参数一律用字面量。
+
+### ★★ 判「索引有效」必须用 `EXPLAIN` 实测，不能只看「有没有调用方」
+
+Day 33 的教训（**推翻了自己 Day 30 的结论**）：`idx_user_coupons_user_id` 有 5 处调用方，
+看起来当然「有效」；实测发现那些调用方**由另一个索引服务** ——
+09 号补丁的 `UNIQUE(user_id, coupon_id)` 建的 `uk_user_coupons_user_coupon`
+**第一列就是 `user_id`**，完全覆盖了它 ⇒ 单列那个**从未被用上**，是**冗余**。
+
+⇒ 「有调用方」只能证明「有人查这一列」，**不能证明「计划器会选这个索引」**。
+  判断一个索引是否真的在服役，只有一条路：**看 `EXPLAIN`，或者做 DROP 实验。**

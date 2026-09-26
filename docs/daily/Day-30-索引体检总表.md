@@ -70,15 +70,23 @@
 
 | 索引 | 服务于哪条查询 | 等级 | 结论 |
 |---|---|---|---|
-| `idx_user_coupons_user_id` | `UserCouponMapper` ×5（我的券 / 核销 / 退券） | B | ✅ 有效 |
-| `idx_user_coupons_coupon_id` | `CouponServiceImpl:250` 券删除前的引用校验 | B | ✅ 有效 |
-| `idx_coupons_status` | `CouponMapper:43/62/73` `status = 1` + `CouponServiceImpl:113` | B | ⚠️ **有调用方，但可能不被用上** —— 见 §三.3 |
+| `idx_user_coupons_user_id` | `UserCouponMapper` ×5（我的券 / 核销 / 退券） | **A**（Day 33 实测） | ❌ **冗余** —— 被 `uk_user_coupons_user_coupon`（09 号补丁的 `UNIQUE(user_id, coupon_id)`）**完全覆盖**，实测**从未被用上** |
+| `idx_user_coupons_coupon_id` | `CouponServiceImpl:250` 券删除前的引用校验 | **A**（Day 33 对照实测） | ✅ 有效（DROP 后退化成全表扫：1.60 → 7.80 ms） |
+| `idx_coupons_status` | `CouponMapper:43/62/73` `status = 1` + `CouponServiceImpl:113` | **A**（Day 33 实测） | ❌ **死索引** —— `status=1` 命中 95%，计划器改用 PK 反向扫（与 `idx_products_status` 同类） |
 | `idx_admin_roles_role_id` | `AdminRbacMapper:43/60/67 WHERE role_id = ?` | B | ✅ 有效 |
 | `idx_role_permissions_permission_id` | — 唯一查询按 `role_id` 过滤 | **C** | ❌ **冗余** —— 见 §三.2 |
 | `idx_after_sales_order_id` | — `after_sales` 表**零 Java/XML 引用** | **C** | ❌ 无调用方（V2.0 才会用） |
 | `idx_after_sales_user_id` | 同上 | **C** | ❌ 无调用方 |
 
-**合计 30 个：实测确认有效 14 · 代码取证有效 11 · 无调用方 4 · 冗余 1。**
+**合计 30 个**（★ 下表已按 Day 31 / Day 33 的实测订正）：
+
+| 结论 | 数量 | 说明 |
+|---|---|---|
+| ✅ **实测确认有效**（A 级） | **11** | 含 Day 33 对照实测的 `idx_user_coupons_coupon_id` |
+| ⚠️ 有效但有条件（A 级） | 2 | `idx_products_category_id`（仅无 LIMIT 时）、`idx_products_search`（生产形状被 OR 挡住） |
+| ✅ 代码取证有效（**B 级**，未经实测） | 8 | ★ Day 33 已证明 **B 级不足以判「有效」**，见 §三.4 |
+| ❌ 死 / 无调用方 / 冗余 | **8** | `idx_products_status` · `idx_product_skus_is_deleted` · `idx_order_items_sku_id` · `idx_user_coupons_user_id` · `idx_coupons_status` · `idx_role_permissions_permission_id` · `idx_after_sales_order_id` · `idx_after_sales_user_id` |
+| ✅ 业务约束（非性能索引） | 1 | `uk_user_addresses_default` |
 
 ---
 
@@ -113,14 +121,24 @@ PG 为此已经自动建了 `role_permissions_pkey`。而额外这个**单列** 
 ⇒ 它被主键索引**完全覆盖**，属于**冗余索引**（多一份写入成本、多一份优化器候选）。
 ★ 一般化：**建索引前先看主键**。`(a, b)` 的 PK 已经能服务「按 a 查」和「按 a 查并按 b 排」。
 
-### 3.3 `idx_coupons_status` 是**待测**，不能按「有调用方」就判有效
+### 3.3 `idx_coupons_status` —— ✅ **已由 Day 33 实测定性：死索引**
 
-有 3 条查询按 `status = 1` 过滤（`CouponMapper:43/62/73`）—— 看起来有效。
-但 **Day 29 刚刚证明过**：`payments(status='SUCCESS')` 有调用方、索引也在，
-**计划器照样全表扫**（命中 95%，低选择性）。
+（原文写的是「不能按『有调用方』就判有效，必须实测」。**这个怀疑是对的。**）
 
-⇒ 本日**不给结论**。它要么像 `idx_products_is_deleted` 那样被 count 类查询用上，
-要么像 `payments(status)` 那样永远不被选中 —— **必须实测**（§五 列为下一步）。
+Day 33 的 DROP 实验：把它删掉，C 端可领券列表的计划**逐字节不变** ——
+`status = 1` 命中 95%，计划器改用 **PK 反向扫 + 过滤**（凑够 10 条就停）。
+⇒ 与 `idx_products_status` **完全同类**。
+
+### 3.4 ★★ Day 33 订正：**B 级证据不足以判「有效」**
+
+本节原本判 `idx_user_coupons_user_id` = ✅ 有效，理由是「`UserCouponMapper` 有 5 处按 `user_id` 查」。
+**Day 33 证明这个判断是错的**：那些查询实际由 `uk_user_coupons_user_coupon`
+（09 号补丁的 `UNIQUE(user_id, coupon_id)`，**第一列就是 `user_id`**）服务，
+单列索引**从头到尾没被用上过** ⇒ 它是**冗余**，不是有效。
+
+⇒ **B 级（代码取证）只能得出「有调用方」，要判「有效」必须升到 A 级（EXPLAIN 实测）。**
+   ★ 上表还剩 **8 个 B 级**条目，它们**都可能藏着同类问题** ——
+   尤其是「可能被某个复合 / 唯一索引以它为前缀覆盖」的那几个。
 
 ---
 
@@ -145,6 +163,11 @@ PG 为此已经自动建了 `role_permissions_pkey`。而额外这个**单列** 
    两个候选索引 **DROP 前后计划逐字节相同**，且**对照组**（DROP 两个确实在用的索引）计划都变了，
    证明装置有区分度 ⇒ **删除安全，证据已备齐**。
 2. **实测 `idx_coupons_status`**（等级 B → A），判据同 Day 29 的 A/B 对照。
+   → ✅ **已由 Day 33 完成**：`docs/daily/Day-33-券侧索引收尾.md` ——
+   它是**死索引**；同批还测出 `idx_user_coupons_user_id` 是**冗余**
+   （被 `UNIQUE(user_id, coupon_id)` 覆盖），并**订正了本表原本的「✅ 有效」判断**。
+   ★ 删除候选因此从 3 个变成 **5 个**。
+3. ★ **按 §3.4 补测剩余 8 个 B 级条目**（优先测「疑似被复合索引覆盖」的那几个）。
 3. **把 `day27` / `day28` / `day29` 挂进 CI**（三个都是幂等 + 零副作用的临时库脚本）。
 4. 实现 Day 28 的搜索修复（唯一有量级收益的一条，**29x**）。
 

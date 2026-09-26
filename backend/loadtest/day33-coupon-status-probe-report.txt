@@ -1,0 +1,69 @@
+==============================================================================
+Day 33 -- 券侧索引收尾：idx_coupons_status 有没有用 / user_id 那个是不是冗余
+==============================================================================
+
+[0] 建临时库（★ 只动这一个名字，开发库不碰）
+  [OK]   CREATE DATABASE mallx_coupon_probe   rc=0 err=NOTICE:  database "mallx_coupon_probe" does not exist, skipping
+
+[1] 按序灌 01→14（★ 09 号补丁会建 UNIQUE(user_id, coupon_id)）
+  [OK]   14 份补丁全部 rc == 0   bad=[]
+
+[2] 造数
+  [OK]   造数 维表 5000 用户   rc=0 err=
+  [OK]   造数 券 20000 张（status=1 占 95%）   rc=0 err=
+  [OK]   造数 用户券 60000 条（组合唯一）   rc=0 err=
+
+[3] VACUUM (ANALYZE)
+  [OK]   基线 VACUUM (ANALYZE)   err=
+
+[4] 规模核对 + ★ 确认 09 号补丁的唯一索引存在（候选 2 的判据前提）
+  [OK]   coupons 行数 >= 20000   actual=20000
+  [OK]   user_coupons 行数 >= 60000   actual=60000
+  [OK]   uk_user_coupons_user_coupon 存在（(user_id, coupon_id) 唯一索引）   got=1
+
+[5] 阶段 A —— 索引都在
+      S1  0.28ms    idx=coupons_pkey                       seq=-          C 端可领券列表（status=1 + 时间窗 + 有余量，
+      S2  0.75ms    idx=uk_user_coupons_user_coupon,user   seq=-          我的券列表（按 user_id，ORDER BY id DE
+      S3  1.60ms    idx=coupons_pkey,idx_user_coupons_co   seq=-          券删除前的引用校验（按 coupon_id count）
+
+[6] 阶段 B —— DROP 3 个索引（2 候选 + 1 对照）+ VACUUM (ANALYZE)
+  [OK]   DROP 3 个索引   rc=0 err=
+  [OK]   DROP 后 VACUUM (ANALYZE)   err=
+
+[7] 阶段 B —— 重测
+      S1  0.26ms    idx=coupons_pkey                       seq=-          C 端可领券列表（status=1 + 时间窗 + 有余量，
+      S2  0.91ms    idx=uk_user_coupons_user_coupon,user   seq=-          我的券列表（按 user_id，ORDER BY id DE
+      S3  7.80ms    idx=coupons_pkey                       seq=user_coupons 券删除前的引用校验（按 coupon_id count）
+
+[8] ★ 候选：DROP 前后计划必须【不变】
+  [OK]   S1 DROP idx_coupons_status 后计划不变   A_used=['coupons_pkey'] B_used=['coupons_pkey']
+  [OK]   S2 DROP idx_user_coupons_user_id 后计划不变   A_used=['uk_user_coupons_user_coupon', 'users_pkey'] B_used=['uk_user_coupons_user_coupon', 'users_pkey']
+
+[9] ★★ 对照：DROP 前后计划必须【发生变化】（证明装置有区分度）
+  [OK]   S3 DROP idx_user_coupons_coupon_id 后计划确实变了   A_used=['coupons_pkey', 'idx_user_coupons_coupon_id'] B_used=['coupons_pkey']
+
+[10] ★★ 真实规模复测：coupons 缩到 200 行（真实业务里就是几十~几百行）
+      ★ 只测压力规模会得出「技术上正确、业务上无意义」的结论 —— 两个规模都要报。
+  [OK]   重建 idx_coupons_status + 把 coupons 缩到 200 行   rc=0 err=
+  [OK]   缩规模后 VACUUM (ANALYZE)   err=
+  [OK]   coupons 缩到 200 行   actual=200
+      S1 真实规模：0.420ms  idx=- seq=coupons
+  [OK]   真实规模下 S1 耗时 < 5ms（规模小到无所谓）   0.420ms
+
+[11] 删临时库
+  [OK]   DROP DATABASE mallx_coupon_probe   rc=0 err=
+
+==============================================================================
+对照表（A = 索引都在 / B = 已 DROP）
+==============================================================================
+      ID   类型     被 DROP 的索引                       计划变化       A 耗时       A 用上的索引
+      S1   候选     idx_coupons_status               没变         0.28ms     coupons_pkey
+      S2   候选     idx_user_coupons_user_id         没变         0.75ms     uk_user_coupons_user_coupon,users_
+      S3   对照     idx_user_coupons_coupon_id       变了         1.60ms     coupons_pkey,idx_user_coupons_coup
+
+      真实规模（coupons 200 行）：S1 = 0.420ms  idx=-
+
+==============================================================================
+ASSERTIONS: 19 / 19 passed   (EXPECTED=19)
+VERDICT: OK -- 两个候选索引的定性已完成（含真实规模对照）
+==============================================================================
