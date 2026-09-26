@@ -12,15 +12,15 @@ Day 28 · 搜索修复落地验收（V0 修复前 vs V1 修复后，同库 A/B�
   [OK]   PERF 商品行数 == 30000   actual=30000
 
 [3] ★ 阶段 V0 —— DROP 两列新 trgm，复现修复前
-      V0-Q5F: 91 行, 769.8 ms（全量比对用）
-      V0-Q6F: 62 行, 872.1 ms（全量比对用）
+      V0-Q5F: 91 行, 745.1 ms（全量比对用）
+      V0-Q6F: 62 行, 794.4 ms（全量比对用）
       V0-Q5P: 索引=-（生产形状，计划断言用）
   [OK]   V0-Q5P 无任何 trgm 索引可走（OR 拼不出 BitmapOr ⇒ 修复前的病灶）   idx=-
   [OK]   V0-Q6F 行数 > 0（中文兜底必须真的能查到东西）   rows=62
 
 [4] ★ 阶段 V1 —— 重建两列 trgm + ANALYZE
-      V1-Q5F: 91 行, 690.5 ms
-      V1-Q6F: 62 行, 749.0 ms
+      V1-Q5F: 91 行, 738.3 ms
+      V1-Q6F: 62 行, 750.2 ms
       V1-Q5P: 索引=idx_products_description_trgm,idx_products_name_trgm,idx_products_search,idx_products_subtitle_trgm
       V1-Q6P: 索引=idx_products_description_trgm,idx_products_name_trgm,idx_products_subtitle_trgm
 

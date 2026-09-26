@@ -25,8 +25,14 @@ SQL 不动」最快（EN 23.74→0.82 ms）且**结果集与 V0 逐行相等**�
 description 的商品必须存在，否则新索引没有可证明的价值）：
 
     阶段 V0：DROP 两列新 trgm ⇒ 复现修复前（OR 拼不出 BitmapOr ⇒ Seq Scan）
-    阶段 V1：重建 + ANALYZE ⇒ 断言 id 序列与 V0 逐一相等 + 计划含新 trgm
+    阶段 V1：重建 + VACUUM (ANALYZE) ⇒ 断言 id 序列与 V0 逐一相等 + 计划含新 trgm
     （耗时只记录不断言 —— 计时断言在共享硬件上会抖，等价性/计划才是护栏）
+
+★★ 三处统计信息必须用 VACUUM (ANALYZE)，**裸 ANALYZE 不行**（CI 红本地绿的实锤）：
+  批量 INSERT 后 30k 行全在 GIN pending list 里，ANALYZE **不清 pending**，
+  planner 给含 GIN 的 BitmapOr 估出天价 ⇒ 整个 OR 翻成 Seq Scan（idx=-，5 条计划断言
+  全挂，而等价性/pg_indexes 全过）。本地跑得慢、autovacuum 时机不同 ⇒ 偶发分叉。
+  与 rewrite-probe「Day 27 教训」同一招。
 
 运行：python day28-search-index-verify.py
 前置：容器 mallx-postgres 在运行（**不需要**应用在跑）。
@@ -138,7 +144,7 @@ SELECT (SELECT min(id) FROM categories), (SELECT min(id) FROM brands),
             ELSE '描述' END,
        '/img/p-' || g || '.jpg', 1, 0
 FROM generate_series(1, %d) g;
-ANALYZE products;
+VACUUM (ANALYZE) products;
 """ % N_PRODUCTS
 
 
@@ -175,7 +181,7 @@ def main():
 
         say("")
         say("[3] ★ 阶段 V0 —— DROP 两列新 trgm，复现修复前")
-        one("DROP INDEX %s;\nDROP INDEX %s;\nANALYZE products;" % (NEW_TRGM[0], NEW_TRGM[1]))
+        one("DROP INDEX %s;\nDROP INDEX %s;\nVACUUM (ANALYZE) products;" % (NEW_TRGM[0], NEW_TRGM[1]))
         idx5p_v0, _p = explain_idx(Q5P)
         t0 = time.time(); ids5f_v0 = ids_of(Q5F); ms5f_v0 = (time.time() - t0) * 1000
         t0 = time.time(); ids6f_v0 = ids_of(Q6F); ms6f_v0 = (time.time() - t0) * 1000
@@ -191,7 +197,7 @@ def main():
         say("[4] ★ 阶段 V1 —— 重建两列 trgm + ANALYZE")
         one("CREATE INDEX IF NOT EXISTS %s ON products USING GIN (subtitle gin_trgm_ops);\n"
             "CREATE INDEX IF NOT EXISTS %s ON products USING GIN (description gin_trgm_ops);\n"
-            "ANALYZE products;" % (NEW_TRGM[0], NEW_TRGM[1]))
+            "VACUUM (ANALYZE) products;" % (NEW_TRGM[0], NEW_TRGM[1]))
 
         idx5p_v1, p5 = explain_idx(Q5P)
         idx6p_v1, p6 = explain_idx(Q6P)
