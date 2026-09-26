@@ -261,27 +261,39 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
      */
     @Override
     public ProductDetailVO getDetail(Long id) {
-        // ==== V1.1 · D38：cache-aside ====
+        // ==== V1.1 · D38/D40：cache-aside + 负缓存 ====
         // ★ 先取代次号再查缓存：代次在【读路径开始时】定格，装配期间管理端即使 bump
         //   也只影响下一轮（写的是新代次 key，与本读互不干扰）。
         // ★ 缓存内容 = 目录数据（商品/分类名/品牌名/SKU 价格属性/图集），不含库存
         //   —— SkuVO 从设计上就不带 stock，所以这里不存在「库存脏读」窗口。
-        // ★ readDetail 内部吞掉一切 Redis 异常返回 null ⇒ Redis 挂了 = 全量回源，接口照常。
+        // ★ readDetailRaw/parseDetail 内部吞掉一切 Redis 异常 ⇒ Redis 挂了 = 全量回源。
         String gen = catalogCache.generation();
-        ProductDetailVO cached = catalogCache.readDetail(gen, id);
-        if (cached != null) {
-            return cached;
+        String raw = catalogCache.readDetailRaw(gen, id);
+        if (CatalogCache.NEG.equals(raw)) {
+            // 负缓存命中（D40 防穿透）：确认过 404 的 id 在 60s 内不再打库。
+            // 代次键保证「重新上架/新建」必然 bump ⇒ NEG 随旧代次失活，不会误伤。
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        if (raw != null) {
+            ProductDetailVO cached = catalogCache.parseDetail(raw);
+            if (cached != null) {
+                return cached;
+            }
+            // parse 失败（坏 JSON）视同 miss，走回源并在回填时覆写
         }
 
         Product product = this.getById(id);
         if (product == null) {
+            catalogCache.writeNegative(gen, id);
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
         if (product.getStatus() == null || product.getStatus() != 1) {
+            // 下架也写负缓存：下架商品是穿透扫描的常见目标（伪装 404 口径不变）
+            catalogCache.writeNegative(gen, id);
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
         ProductDetailVO vo = assembleDetail(product);
-        // ★ 只缓存「确定有效」的装配结果；404（不存在/下架）不缓存（负缓存是 D40 的课题）
+        // ★ 只缓存「确定有效」的装配结果
         catalogCache.writeDetail(gen, id, vo);
         return vo;
     }

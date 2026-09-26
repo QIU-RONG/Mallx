@@ -135,6 +135,16 @@ jobs:
           python day23-rbac-verify.py
           python day24-brand-crud-verify.py
 
+      # V1.1 · D38-40：缓存验收（需要应用 + redis，都已在上面步骤就绪）。
+      # day38 详情 cache-aside（含毒性注入对照组 + 停机降级）；
+      # day39 tree/brands；day40 负缓存护栏（下架→NEG→上架翻转）。
+      - name: Cache verify (day38-40 —— 详情/树/品牌 cache-aside + 负缓存护栏)
+        working-directory: backend/loadtest
+        run: |
+          python day38-redis-detail-verify.py
+          python day39-tree-brand-verify.py
+          python day40-redis-guard-verify.py
+
       - name: Dump app log on failure
         if: failure()
         run: tail -100 /tmp/app.log || true

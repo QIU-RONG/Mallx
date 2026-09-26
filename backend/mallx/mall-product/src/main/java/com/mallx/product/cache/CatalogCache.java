@@ -44,6 +44,10 @@ public class CatalogCache {
     private static final long TTL_BASE_SECONDS = 1800;
     private static final long TTL_JITTER_SECONDS = 300;
 
+    /** 负缓存标记（D40 防穿透）：key 存在且值为 NEG ⇒ 「确认不存在/下架」，短 TTL */
+    public static final String NEG = "NEG";
+    private static final long NEG_TTL_SECONDS = 60;
+
     private final StringRedisTemplate redis;
     /**
      * ★ 自建 Jackson 2 的 ObjectMapper，不注入：Boot 4.1 的自动配置给的是 Jackson 3
@@ -85,21 +89,6 @@ public class CatalogCache {
         }
     }
 
-    /** 读缓存（miss / Redis 不可用 / 反序列化失败 都返回 null ⇒ 调用方回源） */
-    public ProductDetailVO readDetail(String generation, long id) {
-        try {
-            String json = redis.opsForValue().get(detailKey(generation, id));
-            if (json == null) {
-                return null;
-            }
-            return objectMapper.readValue(json, ProductDetailVO.class);
-        } catch (Exception e) {
-            // 反序列化失败视同 miss：宁可回源，不可把坏数据吐给用户
-            log.warn("catalog cache: 详情读缓存失败/反序列化失败，降级回源 id={}: {}", id, e.getMessage());
-            return null;
-        }
-    }
-
     /** 回填缓存（失败静默——下一次请求重新回源而已） */
     public void writeDetail(String generation, long id, ProductDetailVO vo) {
         try {
@@ -113,6 +102,40 @@ public class CatalogCache {
 
     private String detailKey(String generation, long id) {
         return "mallx:cache:product:detail:v" + generation + ":" + id;
+    }
+
+    // ==================== D40：负缓存（防穿透） ====================
+    // 恶意/失效链接会反复 GET 不存在的 id —— 每次都打库。NEG 标记让「确认过不存在」
+    // 的 id 在 60 秒内不再回源。★ 代次键让负缓存天然安全：商品新建/重新上架必然 bump，
+    // 旧代次的 NEG 一起失活 ⇒ 不存在「上架了还 404」的窗口超过一个代次。
+
+    /** 原始读（NEG 标记也原样返回；miss/Redis 失败 ⇒ null）。调用方先判 NEG 再 parse。 */
+    public String readDetailRaw(String generation, long id) {
+        try {
+            return redis.opsForValue().get(detailKey(generation, id));
+        } catch (Exception e) {
+            log.warn("catalog cache: 详情原始读失败 id={}: {}", id, e.getMessage());
+            return null;
+        }
+    }
+
+    /** JSON → VO（失败 ⇒ null 回源；调用方对 parse 失败要按 miss 处理） */
+    public ProductDetailVO parseDetail(String json) {
+        try {
+            return objectMapper.readValue(json, ProductDetailVO.class);
+        } catch (Exception e) {
+            log.warn("catalog cache: 详情反序列化失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** 写负缓存（确认 404 后调用；失败静默 —— 顶多这次穿透打一次库） */
+    public void writeNegative(String generation, long id) {
+        try {
+            redis.opsForValue().set(detailKey(generation, id), NEG, Duration.ofSeconds(NEG_TTL_SECONDS));
+        } catch (Exception e) {
+            log.warn("catalog cache: 负缓存写入失败 id={}: {}", id, e.getMessage());
+        }
     }
 
     // ==================== D39：分类树 / 品牌列表（同一代次键域） ====================
