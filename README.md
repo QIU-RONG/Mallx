@@ -328,6 +328,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day32-pagination-index-probe.py` | **分页 + 排序的索引**：偏斜分布（1 个 power user 2 万单）下对照复合索引；含 **keyset vs OFFSET** 深分页探针 | 19 |
 | `day33-coupon-status-probe.py` | **券侧索引收尾**：DROP 实验定性 `idx_coupons_status`（死）/ `idx_user_coupons_user_id`（冗余）；含**真实规模**对照 | 19 |
 | `day34-cart-index-probe.py` | **购物车索引 + 两种冗余**：区分「从来没被用上（A 型）」与「有替代索引（B 型）」；含对照 | 21 |
+| `day35-index-write-cost-probe.py` | **写入成本取证**：4 表 × 两阶段 × 5000 行单行 INSERT，量「删一个索引到底省多少写入」；含全删对照组（32.3%）证明装置可信。★ 结论：单个二线索引的写入成本 ≤ 噪声；**不挂 CI**（计时类一次性取证，非回归护栏） | 19 |
 | `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数 | 31 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 
