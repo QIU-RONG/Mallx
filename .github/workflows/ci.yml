@@ -81,15 +81,20 @@ jobs:
       # 失败即 exit 1（sys.exit(main())）。放在起应用之前：不依赖 8080，挂了能更早报错。
       - name: "Perf audits (day27-34 + day28 verify —— EXPLAIN 基线 / 搜索改法 / 搜索修复验收 / Dashboard / DROP 实验 / 分页 / 券侧 / 购物车)"
         working-directory: backend/loadtest
+        # 脚本的判定输出只写 report 文件（stdout 仅一行 report ->），
+        # 失败时必须把 report cat 出来，否则 CI 日志看不出挂的是哪条断言。
         run: |
-          python day27-explain-audit.py
-          python day28-search-rewrite-probe.py
-          python day28-search-index-verify.py
-          python day29-dashboard-explain-audit.py
-          python day31-index-drop-probe.py
-          python day32-pagination-index-probe.py
-          python day33-coupon-status-probe.py
-          python day34-cart-index-probe.py
+          for s in day27-explain-audit day28-search-rewrite-probe day28-search-index-verify \
+                   day29-dashboard-explain-audit day31-index-drop-probe day32-pagination-index-probe \
+                   day33-coupon-status-probe day34-cart-index-probe; do
+            echo "::group::$s"
+            if ! python "$s.py"; then
+              echo "::error::$s failed, report:"
+              cat "$s-report.txt" || true
+              exit 1
+            fi
+            echo "::endgroup::"
+          done
 
       - name: Start app (jar 由上一步 mvn install 产出)
         run: |
