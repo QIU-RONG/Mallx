@@ -9,6 +9,7 @@ import com.mallx.product.dto.CategoryUpdateDTO;
 import com.mallx.product.entity.Category;
 import com.mallx.product.mapper.CategoryMapper;
 import com.mallx.product.mapper.ProductMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.mallx.product.cache.CatalogCache;
 import com.mallx.product.service.CategoryService;
 import com.mallx.product.vo.CategoryVO;
@@ -23,6 +24,10 @@ import java.util.stream.Collectors;
 
 @Service
 public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements CategoryService {
+
+    /** 树缓存的反序列化目标（泛型擦除 ⇒ 必须用 TypeReference，readValue(json, Class) 会丢 children） */
+    private static final TypeReference<List<CategoryVO>> TREE_TYPE = new TypeReference<>() {
+    };
 
     /**
      * ★ 删分类前要问「还有商品挂在这儿吗」。
@@ -42,6 +47,16 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
 
     @Override
     public List<CategoryVO> tree() {
+        // ==== V1.1 · D39：cache-aside（代次键与详情同域 —— 目录写 bump 一次两层受益） ====
+        // ★ 读路径开始时定格代次：装配期间的管理端写只影响下一轮。
+        // ★ C 端与管理端共用本方法（AdminCategoryController /tree 同源），缓存一并服务。
+        String gen = catalogCache.generation();
+        String key = catalogCache.treeKey(gen);
+        List<CategoryVO> cached = catalogCache.readJson(key, TREE_TYPE);
+        if (cached != null) {
+            return cached;
+        }
+
         //查询
         List<Category> all = this.list(new LambdaQueryWrapper<Category>()
                 .orderByAsc(Category::getSortOrder)
@@ -62,7 +77,8 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         for (CategoryVO vo : vos)
             vo.setChildren(groupByParentId.getOrDefault(vo.getId(),List.of()));
 
-        return groupByParentId.getOrDefault(-1L,List.of());
+        catalogCache.writeJson(key, vos);
+        return vos;
     }
 
     // ==========================================================================

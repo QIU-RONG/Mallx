@@ -9,6 +9,7 @@ import com.mallx.product.dto.BrandUpdateDTO;
 import com.mallx.product.entity.Brand;
 import com.mallx.product.mapper.BrandMapper;
 import com.mallx.product.mapper.ProductMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.mallx.product.cache.CatalogCache;
 import com.mallx.product.service.BrandService;
 import com.mallx.product.vo.BrandVO;
@@ -35,6 +36,10 @@ import java.util.List;
 @Service
 public class BrandServiceImpl extends ServiceImpl<BrandMapper, Brand> implements BrandService {
 
+    /** 品牌列表缓存的反序列化目标（泛型擦除 ⇒ TypeReference） */
+    private static final TypeReference<List<BrandVO>> BRAND_LIST_TYPE = new TypeReference<>() {
+    };
+
     /**
      * 删品牌前要问「还有商品挂在这个品牌下吗」。
      * <p>
@@ -54,7 +59,17 @@ public class BrandServiceImpl extends ServiceImpl<BrandMapper, Brand> implements
 
     @Override
     public List<BrandVO> listEnabled() {
-        return listByStatus(1);
+        // ==== V1.1 · D39：cache-aside（仅 C 端口径；管理端 listAll 保持直查 —— 写少读多的
+        //      是 C 端，管理端低频且要求绝对新鲜）。写点（品牌 3 写 + 商品写）已全部 bump。
+        String gen = catalogCache.generation();
+        String key = catalogCache.brandListKey(gen, 1);
+        List<BrandVO> cached = catalogCache.readJson(key, BRAND_LIST_TYPE);
+        if (cached != null) {
+            return cached;
+        }
+        List<BrandVO> vos = listByStatus(1);
+        catalogCache.writeJson(key, vos);
+        return vos;
     }
 
     @Override

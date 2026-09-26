@@ -1,5 +1,6 @@
 package com.mallx.product.cache;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mallx.product.vo.ProductDetailVO;
 import org.slf4j.Logger;
@@ -112,5 +113,42 @@ public class CatalogCache {
 
     private String detailKey(String generation, long id) {
         return "mallx:cache:product:detail:v" + generation + ":" + id;
+    }
+
+    // ==================== D39：分类树 / 品牌列表（同一代次键域） ====================
+    // 它们的写点就是 detail 的失效点（目录写一族）⇒ bump 一次三层（detail/tree/brands）受益。
+
+    /** 分类树缓存 key（整棵树一个 key：分类总量小，整存整取最简单） */
+    public String treeKey(String generation) {
+        return "mallx:cache:category:tree:v" + generation;
+    }
+
+    /** 品牌列表缓存 key（按 status 分桶：C 端 1 / 管理端 null） */
+    public String brandListKey(String generation, Integer status) {
+        return "mallx:cache:brand:list:v" + generation + ":" + (status == null ? "all" : status);
+    }
+
+    /** 通用读（miss / Redis 不可用 / 反序列化失败 ⇒ null，调用方回源） */
+    public <T> T readJson(String key, TypeReference<T> type) {
+        try {
+            String json = redis.opsForValue().get(key);
+            if (json == null) {
+                return null;
+            }
+            return objectMapper.readValue(json, type);
+        } catch (Exception e) {
+            log.warn("catalog cache: 读缓存失败 {}，降级回源: {}", key, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 通用写（失败静默；TTL 与 detail 同款基准+抖动） */
+    public void writeJson(String key, Object value) {
+        try {
+            long ttl = TTL_BASE_SECONDS + jitter.nextInt((int) TTL_JITTER_SECONDS);
+            redis.opsForValue().set(key, objectMapper.writeValueAsString(value), Duration.ofSeconds(ttl));
+        } catch (Exception e) {
+            log.warn("catalog cache: 回填失败 {}: {}", key, e.getMessage());
+        }
     }
 }
