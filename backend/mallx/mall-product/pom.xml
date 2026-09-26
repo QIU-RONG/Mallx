@@ -19,5 +19,12 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
+        <!-- V1.1 · D38：详情缓存。★ 与 mall-server 的声明分工：这里是【编译期】需要
+             （CatalogCache 直接引用 StringRedisTemplate / Jackson），
+             RedisAutoConfiguration 仍由 mall-server 在应用层统一开启。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies>
 </project>

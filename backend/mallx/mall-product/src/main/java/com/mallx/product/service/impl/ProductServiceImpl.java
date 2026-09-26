@@ -20,6 +20,7 @@ import com.mallx.product.mapper.CategoryMapper;
 import com.mallx.product.mapper.ProductImageMapper;
 import com.mallx.product.mapper.ProductMapper;
 import com.mallx.product.mapper.ProductSkuMapper;
+import com.mallx.product.cache.CatalogCache;
 import com.mallx.product.service.ProductService;
 import com.mallx.product.vo.ProductDetailVO;
 import com.mallx.product.vo.ProductSearchVO;
@@ -59,13 +60,16 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     private final BrandMapper brandMapper;
     private final ProductSkuMapper productSkuMapper;
     private final ProductImageMapper productImageMapper;
+    private final CatalogCache catalogCache;
 
     public ProductServiceImpl(CategoryMapper categoryMapper, BrandMapper brandMapper,
-                              ProductSkuMapper productSkuMapper, ProductImageMapper productImageMapper) {
+                              ProductSkuMapper productSkuMapper, ProductImageMapper productImageMapper,
+                              CatalogCache catalogCache) {
         this.categoryMapper = categoryMapper;
         this.brandMapper = brandMapper;
         this.productSkuMapper = productSkuMapper;
         this.productImageMapper = productImageMapper;
+        this.catalogCache = catalogCache;
     }
 
     @Override
@@ -257,6 +261,18 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
      */
     @Override
     public ProductDetailVO getDetail(Long id) {
+        // ==== V1.1 · D38：cache-aside ====
+        // ★ 先取代次号再查缓存：代次在【读路径开始时】定格，装配期间管理端即使 bump
+        //   也只影响下一轮（写的是新代次 key，与本读互不干扰）。
+        // ★ 缓存内容 = 目录数据（商品/分类名/品牌名/SKU 价格属性/图集），不含库存
+        //   —— SkuVO 从设计上就不带 stock，所以这里不存在「库存脏读」窗口。
+        // ★ readDetail 内部吞掉一切 Redis 异常返回 null ⇒ Redis 挂了 = 全量回源，接口照常。
+        String gen = catalogCache.generation();
+        ProductDetailVO cached = catalogCache.readDetail(gen, id);
+        if (cached != null) {
+            return cached;
+        }
+
         Product product = this.getById(id);
         if (product == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
@@ -264,7 +280,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         if (product.getStatus() == null || product.getStatus() != 1) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
-        return assembleDetail(product);
+        ProductDetailVO vo = assembleDetail(product);
+        // ★ 只缓存「确定有效」的装配结果；404（不存在/下架）不缓存（负缓存是 D40 的课题）
+        catalogCache.writeDetail(gen, id, vo);
+        return vo;
     }
 
     /**
@@ -385,6 +404,9 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             }
         }
 
+        // ⑤ 目录缓存失效（V1.1 · D38）：新建不影响任何旧 key 的正确性（新 id 没有旧缓存），
+        //    但 bump 一次无害且省心 —— 万一将来有「按分类聚合」的缓存也一并覆盖。
+        catalogCache.bump();
         return productId;
     }
 
@@ -491,6 +513,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
                 productImageMapper.insert(img);
             }
         }
+
+        // ④ 目录缓存失效（V1.1 · D38）：改价/改图/上下架都会让已缓存详情变脏。
+        //    放在方法末尾（commit 前一瞬间）——回滚后多 bump 一次只是多一轮 miss，方向安全。
+        catalogCache.bump();
     }
 
     /**
@@ -516,5 +542,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
         this.removeById(id);
+        // 目录缓存失效（V1.1 · D38）：软删后 C 端详情必须 404（伪装）——
+        // 旧缓存若不失效，已删商品还能被读到（D38 验收的对照场景之一）。
+        catalogCache.bump();
     }
 }

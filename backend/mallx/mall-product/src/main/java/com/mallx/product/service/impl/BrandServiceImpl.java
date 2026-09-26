@@ -9,6 +9,7 @@ import com.mallx.product.dto.BrandUpdateDTO;
 import com.mallx.product.entity.Brand;
 import com.mallx.product.mapper.BrandMapper;
 import com.mallx.product.mapper.ProductMapper;
+import com.mallx.product.cache.CatalogCache;
 import com.mallx.product.service.BrandService;
 import com.mallx.product.vo.BrandVO;
 import org.springframework.beans.BeanUtils;
@@ -44,9 +45,11 @@ public class BrandServiceImpl extends ServiceImpl<BrandMapper, Brand> implements
      * 以及 {@code CategoryServiceImpl} 里那张「同一个缺陷两个出口」的对照。
      */
     private final ProductMapper productMapper;
+    private final CatalogCache catalogCache;
 
-    public BrandServiceImpl(ProductMapper productMapper) {
+    public BrandServiceImpl(ProductMapper productMapper, CatalogCache catalogCache) {
         this.productMapper = productMapper;
+        this.catalogCache = catalogCache;
     }
 
     @Override
@@ -98,6 +101,8 @@ public class BrandServiceImpl extends ServiceImpl<BrandMapper, Brand> implements
         }
 
         // ★ 自增 id 在 save 之后才回填到 b.getId()
+        // 目录缓存失效（V1.1 · D38）
+        catalogCache.bump();
         return b.getId();
     }
 
@@ -136,6 +141,8 @@ public class BrandServiceImpl extends ServiceImpl<BrandMapper, Brand> implements
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
                     "品牌名称已存在：" + name);
         }
+        // 目录缓存失效（V1.1 · D38）：改名会脏掉详情内嵌的 brandName
+        catalogCache.bump();
     }
 
     @Override
@@ -155,6 +162,8 @@ public class BrandServiceImpl extends ServiceImpl<BrandMapper, Brand> implements
 
         // ③ 真删（本表没有 @TableLogic，removeById 不会被改写成 UPDATE）
         this.removeById(id);
+        // 目录缓存失效（V1.1 · D38）
+        catalogCache.bump();
     }
 
     /**

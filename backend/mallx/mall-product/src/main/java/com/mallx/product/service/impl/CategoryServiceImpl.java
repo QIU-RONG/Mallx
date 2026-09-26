@@ -9,6 +9,7 @@ import com.mallx.product.dto.CategoryUpdateDTO;
 import com.mallx.product.entity.Category;
 import com.mallx.product.mapper.CategoryMapper;
 import com.mallx.product.mapper.ProductMapper;
+import com.mallx.product.cache.CatalogCache;
 import com.mallx.product.service.CategoryService;
 import com.mallx.product.vo.CategoryVO;
 import org.springframework.beans.BeanUtils;
@@ -32,9 +33,11 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
      * 详见 {@code resources/mapper/ProductMapper.xml} 里的说明。
      */
     private final ProductMapper productMapper;
+    private final CatalogCache catalogCache;
 
-    public CategoryServiceImpl(ProductMapper productMapper) {
+    public CategoryServiceImpl(ProductMapper productMapper, CatalogCache catalogCache) {
         this.productMapper = productMapper;
+        this.catalogCache = catalogCache;
     }
 
     @Override
@@ -92,6 +95,8 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         Category c = new Category();
         BeanUtils.copyProperties(dto, c);
         this.save(c);
+        // 目录缓存失效（V1.1 · D38）：分类树与详情内嵌的 categoryName 都会变
+        catalogCache.bump();
         return c.getId();
     }
 
@@ -136,6 +141,8 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
         BeanUtils.copyProperties(dto, u);
         u.setId(id);
         this.updateById(u);
+        // 目录缓存失效（V1.1 · D38）：改名会脏掉详情内嵌的 categoryName
+        catalogCache.bump();
     }
 
     @Override
@@ -160,5 +167,7 @@ public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> i
 
         // ④ 真删（本表没有 @TableLogic，removeById 不会被改写成 UPDATE）
         this.removeById(id);
+        // 目录缓存失效（V1.1 · D38）
+        catalogCache.bump();
     }
 }
