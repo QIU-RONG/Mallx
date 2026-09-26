@@ -138,12 +138,19 @@ jobs:
       # V1.1 · D38-40：缓存验收（需要应用 + redis，都已在上面步骤就绪）。
       # day38 详情 cache-aside（含毒性注入对照组 + 停机降级）；
       # day39 tree/brands；day40 负缓存护栏（下架→NEG→上架翻转）。
+      # ★ 判定输出只写 report 文件 ⇒ 失败必须 cat 出来（Perf 步骤同款教训）。
       - name: Cache verify (day38-40 —— 详情/树/品牌 cache-aside + 负缓存护栏)
         working-directory: backend/loadtest
         run: |
-          python day38-redis-detail-verify.py
-          python day39-tree-brand-verify.py
-          python day40-redis-guard-verify.py
+          for s in day38-redis-detail-verify day39-tree-brand-verify day40-redis-guard-verify; do
+            echo "::group::$s"
+            if ! python "$s.py"; then
+              echo "::error::$s failed, report:"
+              cat "$s-report.txt" || true
+              exit 1
+            fi
+            echo "::endgroup::"
+          done
 
       - name: Dump app log on failure
         if: failure()
