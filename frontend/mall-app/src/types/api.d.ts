@@ -63,3 +63,129 @@ export interface LoginData {
   username?: string
   nickname?: string
 }
+
+// ===================== FE2：交易链路 =====================
+
+/** 购物车行（★ invalid 的行服务端仍返回，前端置灰且不计入结算） */
+export interface CartItemVO {
+  id: number
+  skuId: number
+  productId: number
+  productName: string
+  skuName?: string
+  image?: string
+  price: number
+  quantity: number
+  selected: boolean
+  availableStock: number
+  subtotal: number
+  invalid: boolean
+  invalidReason?: string
+}
+
+export interface CartVO {
+  items: CartItemVO[]
+  /** 所有行（含失效）数量之和 */
+  totalQuantity: number
+  /** ★ 有效且已勾选 的数量之和 */
+  selectedQuantity: number
+  /** ★ 有效且已勾选 的金额小计 */
+  selectedAmount: number
+}
+
+export interface AddressVO {
+  id: number
+  receiverName: string
+  receiverPhone: string
+  province: string
+  city: string
+  district: string
+  detailAddress: string
+  isDefault?: boolean
+}
+
+export interface OrderItemVO {
+  id: number
+  orderId: number
+  productId: number
+  skuId: number
+  productName: string
+  skuName?: string
+  price: number
+  image?: string
+  quantity: number
+  totalAmount: number
+}
+
+/** 订单列表行 */
+export interface OrderVO {
+  id: number
+  orderNo: string
+  totalAmount: number
+  payAmount: number
+  /** ★ 优惠额快照：不用券是 0.00（不是 null）；pay = total - discount */
+  discountAmount: number
+  status: OrderStatus
+  receiverName: string
+  receiverPhone: string
+  receiverAddress: string
+  createdAt: string
+}
+
+export interface OrderDetailVO extends OrderVO {
+  paidAt?: string
+  shippedAt?: string
+  completedAt?: string
+  cancelledAt?: string
+  items: OrderItemVO[]
+}
+
+export type OrderStatus =
+  | 'PENDING_PAYMENT'
+  | 'PAID'
+  | 'SHIPPED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+
+/** 券面（可领列表） */
+export interface CouponVO {
+  id: number
+  name: string
+  type: string
+  discountAmount?: number
+  discountRate?: number
+  minAmount?: number
+  totalCount?: number
+  receivedCount?: number
+  startTime?: string
+  endTime?: string
+  status?: number
+}
+
+/** 我的券（领取记录 + 券面快照；id 就是下单要用的 userCouponId） */
+export interface UserCouponVO {
+  id: number
+  couponId: number
+  couponName: string
+  type: string
+  discountAmount?: number
+  discountRate?: number
+  minAmount?: number
+  status: 'UNUSED' | 'USED' | 'EXPIRED'
+  receivedAt?: string
+  usedAt?: string
+  orderId?: number
+  endTime?: string
+  expired?: boolean
+}
+
+export interface PaymentVO {
+  id: number
+  orderId: number
+  payNo?: string
+  amount: number
+  method: string
+  status?: string
+  paidAt?: string
+  createdAt?: string
+}

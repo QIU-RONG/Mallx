@@ -1,7 +1,7 @@
 ==============================================================================
 MallX  M1 milestone regression   (place -> pay -> ship -> confirm -> review)
 ==============================================================================
-run at : 2026-09-26 18:44:36
+run at : 2026-09-28 12:16:42
 
 [1] CHAIN -- each link's own end-to-end report, regenerated in this run
     (produce side: place -> pay -> ship -> confirm -> review)

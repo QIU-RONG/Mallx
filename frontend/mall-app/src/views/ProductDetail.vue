@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { productDetail } from '../api'
+import { cartAdd, productDetail } from '../api'
 import type { ProductDetailVO } from '../types/api'
+import { useCartStore } from '../stores/cart'
 
 const route = useRoute()
+const router = useRouter()
+const cartStore = useCartStore()
 const vo = ref<ProductDetailVO | null>(null)
 const mainPic = ref('')
 const loading = ref(false)
 const chosenSkuId = ref<number | null>(null)
+const quantity = ref(1)
+const adding = ref(false)
 
 /** 主图 + 图集合并为可迭代字符串数组（模板里不再碰 undefined） */
 const pics = ref<string[]>([])
@@ -31,13 +36,19 @@ function pickMain(url: string) {
   mainPic.value = url
 }
 
-// FE2 预留：加购 / 立即购买
-function addToCart() {
+async function addToCart() {
   if (chosenSkuId.value == null) {
     ElMessage.warning('请选择规格')
     return
   }
-  ElMessage.info('购物车功能将在 FE2 上线')
+  adding.value = true
+  try {
+    await cartAdd(chosenSkuId.value, quantity.value)
+    cartStore.refresh()
+    ElMessage.success('已加入购物车')
+  } finally {
+    adding.value = false
+  }
 }
 </script>
 
@@ -89,8 +100,13 @@ function addToCart() {
             </div>
           </div>
 
-          <div style="margin-top: 20px">
-            <el-button type="primary" size="large" @click="addToCart">加入购物车</el-button>
+          <div style="margin-top: 20px; display: flex; align-items: center; gap: 12px">
+            <span>数量</span>
+            <el-input-number v-model="quantity" :min="1" :max="99" size="small" />
+            <el-button type="primary" size="large" :loading="adding" @click="addToCart">
+              加入购物车
+            </el-button>
+            <el-button size="large" @click="router.push('/cart')">去购物车结算</el-button>
           </div>
         </div>
       </div>

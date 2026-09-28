@@ -7,11 +7,40 @@ const router = createRouter({
     { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
     { path: '/', name: 'home', component: () => import('../views/ProductList.vue') },
     { path: '/product/:id', name: 'product-detail', component: () => import('../views/ProductDetail.vue') },
-    // FE2 预留：购物车 / 我的订单 / 我的优惠券（届时统一加登录守卫）
+    // FE2：交易链路（全部需要登录）
+    {
+      path: '/cart',
+      name: 'cart',
+      component: () => import('../views/Cart.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/checkout',
+      name: 'checkout',
+      component: () => import('../views/Checkout.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/orders',
+      name: 'orders',
+      component: () => import('../views/OrderList.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/orders/:id',
+      name: 'order-detail',
+      component: () => import('../views/OrderDetail.vue'),
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/coupons',
+      name: 'coupons',
+      component: () => import('../views/Coupons.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 
-// 路由守卫骨架（FE1 无强制登录页；FE2 的 cart/order 路由在此加 auth 校验）
 router.beforeEach((to) => {
   const auth = useAuthStore()
   if (to.meta.requiresAuth && !auth.token) {
