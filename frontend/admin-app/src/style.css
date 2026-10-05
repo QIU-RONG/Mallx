@@ -1,0 +1,22 @@
+/* 管理端全局样式（覆盖掉 vue-ts 模板那套紫色调） */
+:root {
+  font-family: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: #303133;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #f5f7fa;
+}
+
+a {
+  color: inherit;
+}
