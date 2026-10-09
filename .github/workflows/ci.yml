@@ -14,6 +14,11 @@
 #  5. 性能审计（day27–34 + day28 落地验收）全部自带临时库（自灌自删），只需 postgres 在跑 ——
 #     排在起应用之前，应用挂了也不影响审计段的判定。day35 是计时类一次性取证
 #     （本机 5 分钟、runner 上估 15–30 分钟 + 计时断言会抖），不挂 CI。
+#  6. 前端（FE4 新增）单独成 job：它**不需要** postgres / redis / 应用，塞进 ci job 只会
+#     白等 ~8 分钟基础设施；独立 job 与后端并行，~1 分钟出结论。
+#     ★ 两件事必须做：① 用 `npm ci`（锁文件）而不是 `npm install`，否则 CI 装的依赖与
+#     本地提交的 lockfile 无关，「本地过 CI 挂」不可复现；② **额外断言 dist/index.html 存在** ——
+#     `vite build` 退出码为 0 也可能是空产物，只看退出码等于什么都没测。
 
 name: CI
 
@@ -155,3 +160,49 @@ jobs:
       - name: Dump app log on failure
         if: failure()
         run: tail -100 /tmp/app.log || true
+
+  # ==================================================================================
+  # 前端构建门禁（FE4）。两个 Vue 3 + TS 应用各自独立构建，互不阻塞（fail-fast: false）。
+  #
+  # 判据只有两条，都来自退出码/文件系统，不看人类可读文本：
+  #   ① `npm run build`（= vue-tsc -b && vite build）退出码为 0 —— 这一步同时覆盖
+  #      **类型检查**：vue-tsc 是 build 的前半段，TS 报错会让整步失败。
+  #   ② dist/index.html 真实存在 —— 防止「构建成功但没产物」这种假绿。
+  #
+  # ⚠️ 刻意不挂 dev server / E2E：前端 e2e（Playwright 之类）需要后端 + 数据库 + 种子数据，
+  #    那等于把 ci job 整套依赖复制一遍；FE3 的 27 条断言是本机联调时跑的，先不搬到 runner。
+  #    什么时候搬：等前端有过一次真实回归（改了接口契约而前端没跟上）之后再上，别提前建。
+  # ==================================================================================
+  frontend:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [mall-app, admin-app]
+    defaults:
+      run:
+        working-directory: frontend/${{ matrix.app }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/${{ matrix.app }}/package-lock.json
+
+      # npm ci 而不是 npm install：锁文件是提交进仓库的，CI 必须装出和本地一模一样的那棵树
+      - name: Install (npm ci)
+        run: npm ci --no-audit --no-fund
+
+      - name: Type check + Build (vue-tsc -b && vite build)
+        run: npm run build
+
+      - name: Assert build artifact exists
+        run: |
+          if [ ! -f dist/index.html ]; then
+            echo "::error::dist/index.html 不存在 —— 构建退出码为 0 但没有产物"
+            ls -la dist 2>/dev/null || echo "(dist 目录都不存在)"
+            exit 1
+          fi
+          echo "dist ok: $(du -sh dist | cut -f1)"

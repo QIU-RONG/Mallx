@@ -2,13 +2,14 @@
 
 [![CI](https://github.com/QIU-RONG/Mallx/actions/workflows/ci.yml/badge.svg)](https://github.com/QIU-RONG/Mallx/actions/workflows/ci.yml)
 
-模块化单体的 B2C 电商**后端**。存储与商品搜索全部落在 **PostgreSQL**，
-V1.0 不引入 Elasticsearch / Redis / 消息队列 —— 「用关系库把该做的事做完」是本项目的第一条约束。
+模块化单体的 B2C 电商系统：**后端**（Spring Boot 多模块）+ **两个 Vue 3 前端**（C 端 / 管理端）。
+存储与商品搜索落在 **PostgreSQL**；「先能不用就不用，用了必须有理由」是本项目的第一条约束 ——
+所以 V1.0 只有关系库，**Redis / RabbitMQ 到 V1.1 才引入**，各自都带着实测判据（见 §版本规划）。
 
 ```text
-状态：V1.0 后端 API 已完成（Day 01–35，V1.2 性能优化实质完成）
-端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   模块 11 个
-Java 185 文件 / 14.5k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 14 份
+状态：后端 V1.0–V1.3 完成（Day 01–41）  ·  前端 FE1–FE4 完成  ·  待办：V1.4 云部署
+端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   后端模块 11 个   ·   前端应用 2 个
+Java 188 文件 / 15.0k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 16 份
 回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
 ```
 
@@ -25,9 +26,11 @@ Java 185 文件 / 14.5k 行   ·   Controller 24 个   ·   Mapper XML 12 份   
 | 持久层 | MyBatis-Plus（`mybatis-plus-spring-boot4-starter`） | 3.5.17 |
 | 认证授权 | Spring Security + JWT（JJWT） | 7.1.1（随 Boot） |
 | 数据库 | PostgreSQL（Docker 运行） | 16（`16-alpine`） |
+| 缓存 | Redis + Spring Data Redis（lettuce，带快降级） | 7（`7-alpine`） |
+| 消息 | RabbitMQ（延迟关单：DLX + per-message TTL） | 3.13（`-management-alpine`） |
 | 接口文档 | springdoc-openapi + Swagger UI | 3.1.1 |
 | 搜索 | PostgreSQL 全文检索（`tsvector` + GIN）+ `pg_trgm` + `jsonb` GIN | — |
-| 前端 | **V1.0 不做**，界面由 Swagger UI 承担 | — |
+| 前端 | Vue 3 + TypeScript + Vite 8 + Element Plus + Pinia + axios（两个应用） | 见各 `package.json` |
 
 ---
 
@@ -72,13 +75,56 @@ MallX/
 │   ├── docker-compose.app.yml     #   全栈（postgres + app），独立 compose project
 │   ├── Dockerfile                 #   应用镜像（装宿主打好的 jar）
 │   └── README.md                  #   部署说明与排错
+├── frontend/
+│   ├── mall-app/                  # C 端（Vue 3 + TS + Vite，dev 端口 5173）
+│   └── admin-app/                 # 管理端（同栈，dev 端口 5174）
 ├── docs/
 │   ├── api/                       # ★ API-总览.md（自动生成）+ openapi.json 快照 + users-api.md
-│   ├── daily/                     # Day 01–34 的学习/交付文档（含 Day 28 方案稿）
+│   ├── daily/                     # Day 01–41 + 前端 FE1–FE4 的交付文档（含 Day 28 方案稿）
 │   ├── perf-report.md             # 并发压测与全链路回归汇总
 │   └── backlog.md                 # 缺陷与改进清单（当前一览表已归零）
 └── README.md
 ```
+
+---
+
+## 前端（两个独立应用）
+
+刻意**不做**单应用双角色：C 端与管理端的鉴权链、路由守卫、菜单与失败语义都不同，
+合在一个应用里只会靠 `if (isAdmin)` 分叉。两个应用共享的只有「栈的选择」和「接口契约」。
+
+| 应用 | 目录 | dev 端口 | 覆盖 |
+|---|---|---|---|
+| C 端 `mall-app` | `frontend/mall-app` | **5173** | 登录 / 商品列表（分类·品牌过滤）/ 详情（多 SKU）/ 购物车 / 结算（地址+可用券）/ 下单→支付 / 订单列表·详情 / 我的券 |
+| 管理端 `admin-app` | `frontend/admin-app` | **5174** | 登录 / 布局 / 商品 CRUD / 订单列表·详情 / 发货 / Dashboard |
+
+技术栈（两应用一致）：**Vue 3 + TypeScript + Vite 8 + Element Plus + Pinia + axios**，
+`vite.config.ts` 里把 `/api` 反代到 `http://127.0.0.1:8080`（开发期免 CORS，生产期同 nginx 反导思路）。
+
+```bash
+cd frontend/mall-app          # 或 admin-app
+npm ci                        # ★ 用锁文件，不要 npm install
+npm run dev                   # http://localhost:5173
+npm run build                 # = vue-tsc -b && vite build（类型检查 + 打包）
+```
+
+> ⚠️ **Vite 8 dev 只绑 localhost（IPv6）** —— 探活要用 `localhost`，`curl 127.0.0.1:5173` 会拿到 `000`。
+
+前端要消化的**唯一一个后端怪癖**是「两套状态」：Security 层拒绝给真实 HTTP **401/403**，
+业务失败给 **HTTP 200 + body.code**（见 §接口约定）。axios 封装按这个分流 ——
+401 统一踢登录、`code != 200` 提示拒绝并**不**当作网络错误重试。
+
+**CI 覆盖**：`frontend` job（与后端 `ci` job 并行）对两个应用各跑 `npm ci` → `npm run build`，
+并额外断言 `dist/index.html` 真实存在（退出码为 0 也可能是空产物）。
+刻意**不在 CI 里跑前端 e2e** —— 那需要把后端 + 数据库 + 种子数据整套复制过去，
+等前端出现过一次真实契约回归再上，不提前建。
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| FE1 | `mall-app` 骨架：登录 / 商品列表 / 详情 | ✅ |
+| FE2 | `mall-app` 交易链路：购物车 / 结算 / 下单支付 / 订单 / 券 | ✅ |
+| FE3 | `admin-app`：登录 / 布局 / 商品 CRUD / 订单 / 发货 / Dashboard | ✅ |
+| FE4 | 前端接入 CI + 文档 | ✅（e2e 进 CI 待有真实回归再说） |
 
 ---
 
@@ -294,8 +340,10 @@ python backend/loadtest/day25-api-inventory.py
 ## 测试与回归
 
 没有单元测试框架，取而代之的是 **70 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
-（**不信接口自报**），跑完自动回滚到跑前状态。同一套流程已搬进 GitHub Actions（`.github/workflows/ci.yml`）：
-每次 push 自动执行「构建 → 全新库 → SQL 严格检查 → 夹具 → M1 回归 → 各域验收」，判定全部来自脚本退出码。
+（**不信接口自报**），跑完自动回滚到跑前状态。同一套流程已搬进 GitHub Actions（`.github/workflows/ci.yml`），
+拆成两个并行 job：`ci`（后端）每次 push 自动执行「构建 → 全新库 → SQL 严格检查 → 夹具 → M1 回归 → 各域验收」，
+`frontend` 对两个 Vue 应用跑「`npm ci` → `vue-tsc -b && vite build` → 断言 `dist/index.html` 存在」；
+判定全部来自脚本退出码。
 
 ```bash
 cd backend/loadtest
@@ -390,7 +438,7 @@ Day 27 发现 `searchProducts` 的 `OR` 兜底挡住 `idx_products_search`（同
 
 ## 文档导航
 
-- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–34，每天一份，含设计取舍、实测记录、踩坑与判据。
+- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–41 每天一份 + 前端交付一篇，含设计取舍、实测记录、踩坑与判据。
 - **想知道还剩什么问题** → [`docs/backlog.md`](docs/backlog.md)：缺陷/改进清单（一览表已归零，遗留项与「刻意不做」的原因都写着）。
 - **想直接调接口** → [`docs/api/API-总览.md`](docs/api/API-总览.md) 或 Swagger UI。
 
@@ -399,10 +447,11 @@ Day 27 发现 `searchProducts` 的 `OR` 兜底挡住 `idx_products_search`（同
 ## 版本规划
 
 ```text
-V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–34，77 端点；界面由 Swagger UI 承担）
+V1.0 模块化单体 · 后端 API          ✅ 完成（Day 01–34，77 端点）
 V1.1 Redis + RabbitMQ                ✅ 完成（Day 37–41：商品/分类/品牌缓存 + 负缓存护栏；RabbitMQ 延迟关单（DLX+TTL），60s 扫描保留兜底）
 V1.2 性能优化                        ✅ 核心完成（Day 27–35：EXPLAIN 复盘、搜索修复 29x、15 号 trgm 补丁；读写分离未做）
 V1.3 Docker 容器化                   ✅ 完成（Day 25：deploy/ 三件套，非 root + healthcheck + 一键全栈）
+前端 FE1–FE4                          ✅ 完成（两个 Vue 3 应用 + 接入 CI；界面不再是 Swagger UI 一家）
 V1.4 云部署                          生产化：镜像瘦身、配置外置、可观测性
 V2.0 Spring Cloud Alibaba            微服务拆分（按当前模块边界）
 ```
