@@ -85,8 +85,28 @@ frontend:
 **本地等价验证（推之前必须做）**：本机按 CI 原命令跑两个应用 —— `npm ci` rc=0、`npm run build` rc=0、
 `dist/` 各 1.5 M。**验证方式本身就是纪律**：CI 改动先在本地把命令实跑一遍，再推。
 
+**首跑结果**（run `37946806601`，全 success）：`ci` 3m52s；`frontend (mall-app)` 21s；
+`frontend (admin-app)` 22s —— 前端两个 job 与后端并行，代价可以忽略。
+
 **刻意不做**：前端 e2e 不进 CI。那需要后端 + 数据库 + 种子数据整套复制到 runner；
 等前端出现过一次真实契约回归（改了接口而前端没跟上）再上，**不提前建**。
+
+### ★ 护栏自带对照组（不这么做，「通过」什么都说明不了）
+
+新增一条门禁时必须能证明它**会失败**。做法：往 `mall-app/src/api/http.ts` 末尾注入一行类型错误，
+跑**同一条命令**：
+
+| 场景 | 结果 |
+|---|---|
+| 注入 `const __controlGroup: number = "not-a-number";` | `npm run build` **rc=2**，`error TS2322: Type 'string' is not assignable to type 'number'`（+ `TS6133`） |
+| 复原后 | **rc=0**，`git status` 干净 |
+
+⇒ 这条门禁**有区分度**：类型错误会让 CI 的 `Type check + Build` 步骤真的失败（该步骤跑的就是这条命令）。
+对照组排除的是「步骤名字好看但没有牙齿」这类假绿 —— 本项目已有过反面实例
+（健康检查的正则被贪婪 `.*` 匹配到另一处输出而误判通过）。
+
+**runner 侧复核**：`frontend` job 的 `Assert build artifact exists` 打印 `dist ok: 1.5M`，
+与本机等价验证的 1.5M 一致 —— 说明 runner 上**真的构建出了产物**，不是步骤被跳过。
 
 ### 推送事故：GCM 挂死（值得单独记）
 
