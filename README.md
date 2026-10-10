@@ -8,11 +8,11 @@
 
 ```text
 状态：后端 V1.0–V1.4（前半）完成（Day 01–42）  ·  前端 FE1–FE4 完成 + 全栈联调跑通（Day 43）  ·  待办：V1.4 远端托管 + V2.0 微服务
-端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   后端模块 11 个   ·   前端应用 2 个
-Java 189 文件 / 15.1k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 16 份
+端点 113 个   ·   权限码 46 个   ·   核心表 25 张   ·   后端模块 12 个   ·   前端应用 2 个
+Java 206 文件 / 17.6k 行   ·   Controller 26 个   ·   Mapper XML 13 份   ·   SQL 脚本 18 份
 回归基线：**M1 全链路 434 条断言**（3 链 + 4 读侧 + 2 写侧；Day 43 名单 5→9）＋ 各域验收脚本见 §测试与回归末表，
 每次改动必跑（CI 每次 push 自动跑同一套；D43 起 day41 与前端 e2e 也已进 CI）
-**＋ Java 单元测试 41 条**（Day 45 起；`mvn test` 约 6 秒，不依赖 DB/Redis/MQ，CI 每次必跑）
+**＋ Java 单元测试 51 条**（Day 45 起；`mvn test` 约 7 秒，不依赖 DB/Redis/MQ，CI 每次必跑）
 ```
 
 第一次来？直接跳到 **[快速开始](#快速开始)**，或先看 **[接口文档](#接口文档)**。
@@ -51,6 +51,7 @@ Java 189 文件 / 15.1k 行   ·   Controller 24 个   ·   Mapper XML 12 份   
 | `mall-payment` | 支付 | `/api/payments` |
 | `mall-review` | 商品评价（含评分聚合） | `/api/products/{id}/reviews` |
 | `mall-marketing` | 优惠券（发放 / 领取 / 下单抵扣 / 核销退券） | `/api/coupons` |
+| `mall-aftersale` | **退款 / 售后**（仅退款 + 退货退款 + 负向支付流水，Day 46） | `/api/refunds`、`/api/admin/refunds` |
 | `mall-admin` | 管理端聚合：管理员账号 / 角色 / 权限 / 仪表盘 / 用户管理 | `/api/admin/**` |
 | `mall-server` | 启动模块（唯一有 `main` 的模块） | — |
 
@@ -217,13 +218,19 @@ mvn -o install                     # 依赖已缓存后（离线）
 
 产出的可执行 jar：`backend/mallx/mall-server/target/mall-server-0.0.1-SNAPSHOT.jar`。
 
-> ★ **单元测试（Day 45 起，此前 189 个源文件 0 个测试类）**：`mvn test` 跑 **41 条**，
-> 全部**不依赖 DB / Redis / MQ**（CI 里这一步跑在起 postgres **之前**，约 6 秒）：
+> ★ **单元测试（Day 45 起，此前 189 个源文件 0 个测试类）**：`mvn test` 跑 **51 条**，
+> 全部**不依赖 DB / Redis / MQ**（CI 里这一步跑在起 postgres **之前**，约 7 秒）：
 >
 > | 层 | 类 | 条数 | 依赖 |
 > |---|---|---|---|
 > | L1 纯逻辑 | `mall-common` · `JwtUtilTest` | 9 | 无 Spring / 无 DB / 无 mock |
 > | L2 Mockito | `mall-marketing` · `CouponServiceImplTest` | 32 | 只 mock 一个 `UserCouponMapper` |
+> | L2 Mockito | `mall-aftersale` · `RefundServiceImplTest` | 10 | 只 mock `RefundMapper` + `OrderService` |
+>
+> ★ `RefundServiceImplTest` 存在的理由值得单独记一笔：重复申请在【并发】下由
+> `uk_refunds_active_order` 那条部分唯一索引守着，而**并发是否真撞上是概率性的**
+> （本机 8 线程跑下来全是 SELECT 拦的）⇒ 概率性路径只能靠单测【确定地】覆盖
+> （直接让 `insert` 抛 `DataIntegrityViolationException`，断言它翻译成 400 而不是 500）。
 >
 > ⚠️ 新增测试必须守住这条边界：**需要起 DB/Redis/MQ 的，就该是 `backend/loadtest` 下的
 > Python 端到端脚本，不是 JUnit**。⚠️ 被测模块要在自己的 pom 里引一次
@@ -271,7 +278,7 @@ curl http://127.0.0.1:8080/api/hello
 | 身份 | 账号 / 密码 | 权限 |
 |---|---|---|
 | C 端用户 | `demo` / `demo123` | 登录后可用 C 端接口（token **不带**权限码） |
-| 管理端超管 | `admin` / `admin123` | 全部 41 个权限码（`SUPER_ADMIN`） |
+| 管理端超管 | `admin` / `admin123` | 全部 46 个权限码（`SUPER_ADMIN`） |
 | 管理端受限 | `op_order` / `op123456` | 仅 `order:*`（**需先执行 `06-day17-fixtures.sql`**） |
 | 管理端受限 | `op_product` / `prod123456` | 商品 / 库存域，**无** `order:*` |
 
@@ -436,6 +443,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 | `day43-fe-full-stack-e2e.py` | **前端全栈联调**：两个 dev server 代理 + 跨端链路（C 端下单支付 → 管理端发货 → C 端收货评价）+ 跨端权限对照 + 基线还原。★ 字段名以**前端自己的类型定义**为准（`frontend/*/src/types/api.d.ts`） | 54 |
 | `day44-identity-domain-verify.py` | **身份域隔离**：管理端 token 打 C 端接口（`/api/users/me` `/api/orders` `/api/cart` `/api/addresses` `/api/coupons/my`）必须**真 403 且无数据**；反向同理；★ 例外通道 `POST /api/orders/*/ship` 归管理端；含 8 条正向控制组 + fail closed。★ 已进 CI ★ 控制组：修复前跑出 10 条 FAIL（泄露的 email/订单/地址） | 28 |
+| `day46-refund-verify.py` | **退款 / 售后链路**：仅退款 + 退货退款 + 负向支付流水。执行退款一次性写 5 张表（`refunds`/`orders`/`inventories`/`user_coupons`/`payments`），判据是**对账式**：库存逐格守恒 + 同单 `SUM(payments.amount)==0` + 回补流水必须是 `REFUND_RETURN`。★ 反向：选错类型/未收货退钱/重复申请/重复退款 → 400；C 端 token → 403；**商品管理员 role2 → 403**（反向对照）。★ 并发 8 线程抢单 + **SQL 层直接验部分唯一索引**（确定性证据）。★ 已进 CI ★ 控制组：删索引 → [G] 段红；去 catch → 单测红 2 条 | 82 |
 
 写脚本的三条硬规矩（都来自踩过的坑）：
 
