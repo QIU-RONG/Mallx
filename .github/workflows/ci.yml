@@ -132,6 +132,53 @@ jobs:
         working-directory: backend/loadtest
         run: python day26-m1-fixture.py
 
+      # ================================================================================
+      # Day 41（V1.1 · RabbitMQ 延迟关单）—— 补上 CI 里唯一还缺的【功能】面。
+      #
+      # ★★ 为什么这一步必须排在 M1 regression【之前】（首跑失败换来的一条规律）：
+      #   延迟队列用的是 **per-message TTL**，而 RabbitMQ 的 TTL 停靠队列是
+      #   **顺序投递**的 —— 只有队首消息过期后才会检查下一条。M1 的链路脚本（day14/15/16）
+      #   在 8080 上下单时会发 TTL=120000 的消息进 `mallx.order.ttl`；它们一旦排在前面，
+      #   后面 TTL=5000 的消息就得等满 120 秒 ⇒ day41 的「秒级关单」必然超时。
+      #   首跑实测：M1 先跑 ⇒ day41 等到 46.2s 超时（11/13 FAIL）；本机单独跑则 13/13。
+      #   排在 M1 之前时 TTL 队列还是空的（容器刚起）⇒ 队首就是自己的 5s 消息。
+      #
+      # ★ 为什么单起一个实例：这条验收要的是「秒级关单」，靠 ORDER_CLOSE_DELAY_MS=5000；
+      #   而 M1 链路的写操作（下单→支付）必须用**默认 TTL**（120s）。两者不能共用一个实例。
+      # ★ 为什么以前只有 --selfcheck：它要短 TTL + 全局环境变量，当时没接进来。而 D43-B
+      #   恰好证明了「不进 CI 的脚本会悄悄烂掉」。现在把功能验收也接上。
+      # ================================================================================
+      - name: Day 41 rabbitmq close verify (短 TTL 实例 :8081，必须排在 M1 之前)
+        run: |
+          # 防御性清队：per-message TTL 队列是顺序投递的，队首若残留长 TTL 消息会把
+          # 本次的 5s 消息堵在后面（见上面的注释）。容器刚起时它本来就是空的。
+          docker exec mallx-rabbitmq rabbitmqctl purge_queue mallx.order.ttl || true
+          ROOT="$PWD"
+          ORDER_CLOSE_DELAY_MS=5000 nohup java -jar \
+            "$ROOT/backend/mallx/mall-server/target/mall-server-0.0.1-SNAPSHOT.jar" \
+            --server.port=8081 > /tmp/app-shortttl.log 2>&1 &
+          code=000
+          for i in $(seq 1 40); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/api/hello || true)
+            if [ "$code" = "200" ]; then echo "short-ttl app (8081) up after $((i*3))s"; break; fi
+            sleep 3
+          done
+          if [ "$code" != "200" ]; then
+            echo "::error::短 TTL 实例未在 120s 内就绪"
+            tail -60 /tmp/app-shortttl.log || true
+            exit 1
+          fi
+          cd backend/loadtest
+          if ! MALLX_BASE=http://127.0.0.1:8081 python day41-rabbitmq-close-verify.py; then
+            echo "::error::Day 41 失败 —— 报告尾部："
+            tail -40 day41-rabbitmq-close-verify-report.txt || true
+            echo "::group::短 TTL 实例日志"
+            tail -30 /tmp/app-shortttl.log || true
+            echo "::endgroup::"
+            exit 1
+          fi
+
+
       # ★ Day 43：名单 5 → 9 —— 补上 day17-c/d/e/f（订单取消 / 库存列表 / 库存调整 / 库存流水）。
       #   T2（Day 24）当时只把 a/b 补进名单，c/d/e/f 四条同样漏着 ⇒ 它只治了当场撞上的那半边。
       #   其中 c/e 是**写侧**（会改库），但两条都自带还原（净变化 0 + 高水位删流水），
@@ -175,44 +222,6 @@ jobs:
             fi
             echo "::endgroup::"
           done
-
-      # ================================================================================
-      # Day 41（V1.1 · RabbitMQ 延迟关单）—— 补上 CI 里唯一还缺的【功能】面。
-      #
-      # ★ 为什么单起一个实例：这条验收要的是「秒级关单」，靠 ORDER_CLOSE_DELAY_MS=5000；
-      #   而 M1 链路的写操作（下单→支付）必须用**默认 TTL**（120s）—— 5s 的 TTL 会跟写
-      #   链路抢时序（订单可能在支付前就被自动关掉）。两者不能共用一个应用实例。
-      # ★ 为什么以前只有 --selfcheck：它要短 TTL + 全局环境变量，当时没接进来。而 D43-B
-      #   恰好证明了「不进 CI 的脚本会悄悄烂掉」——那条 13/13 全 OK 却判 FAIL 的假红就是
-      #   这么藏了一个多月的。现在把功能验收也接上。
-      #   （最前面那一步的 --selfcheck 保留：它验的是常量而非功能，两者互补。）
-      # ================================================================================
-      - name: Day 41 rabbitmq close verify (短 TTL 实例 :8081)
-        run: |
-          ROOT="$PWD"
-          ORDER_CLOSE_DELAY_MS=5000 nohup java -jar \
-            "$ROOT/backend/mallx/mall-server/target/mall-server-0.0.1-SNAPSHOT.jar" \
-            --server.port=8081 > /tmp/app-shortttl.log 2>&1 &
-          code=000
-          for i in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8081/api/hello || true)
-            if [ "$code" = "200" ]; then echo "short-ttl app (8081) up after $((i*3))s"; break; fi
-            sleep 3
-          done
-          if [ "$code" != "200" ]; then
-            echo "::error::短 TTL 实例未在 120s 内就绪"
-            tail -60 /tmp/app-shortttl.log || true
-            exit 1
-          fi
-          cd backend/loadtest
-          if ! MALLX_BASE=http://127.0.0.1:8081 python day41-rabbitmq-close-verify.py; then
-            echo "::error::Day 41 失败 —— 报告尾部："
-            tail -40 day41-rabbitmq-close-verify-report.txt || true
-            echo "::group::短 TTL 实例日志"
-            tail -30 /tmp/app-shortttl.log || true
-            echo "::endgroup::"
-            exit 1
-          fi
 
       # ================================================================================
       # 前端全栈联调（Day 43）—— 两个 dev server 代理 + 一个后端，跨端链路 54 条断言。

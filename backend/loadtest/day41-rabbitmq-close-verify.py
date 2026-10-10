@@ -5,6 +5,15 @@
 listener 走 cancelOne CAS 关单。**秒级关闭** —— 扫描兜底是 60s 周期 + 2min 超时，
 所以「几十秒内就关了」只有 MQ 路径能解释（本脚本启动的应用用 ORDER_CLOSE_DELAY_MS=5000）。
 断言：新单 ~10s 内 PENDING_PAYMENT → CANCELLED；.elapsed 远小于扫描周期。
+
+★★ 跑这条验收前，TTL 停靠队列里【不能排着长 TTL 的消息】（D43 首次进 CI 失败换来的一条）：
+   延迟队列用的是 **per-message TTL**，而 RabbitMQ 的 TTL 停靠队列是**顺序投递**的 ——
+   只有队首消息过期后才会检查下一条。若前面排着别处发的 TTL=120000 的消息（例如 M1 链路的
+   day14/15/16 在【默认 TTL 实例】上下单留下的），本次 TTL=5000 的消息就得等满 120 秒
+   ⇒ 本脚本的「秒级关单」断言必然超时（实测等满 45s 后 FAIL）。
+   ⇒ 两条隔离手段（CI 里都做了）：
+     ① 用 MALLX_BASE 指向一个**单独的短 TTL 实例**，并把它排在那些写链路的【之前】跑；
+     ② 或先 `rabbitmqctl purge_queue mallx.order.ttl` 清掉残留（防御性，容器刚起时本是空的）。
 """
 from _paths import lp
 import json
