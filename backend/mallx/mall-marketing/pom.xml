@@ -19,5 +19,14 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
+
+        <!-- ★ Day 44 单元测试（L2：Mockito 打桩测 Service 层纯计算）
+             版本由父 pom 的 dependencyManagement 托管，不写 version。
+             ⚠️ 与 mall-common 那份同理：父 pom 里只有版本声明，被测模块必须各自引一次。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
