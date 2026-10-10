@@ -116,23 +116,26 @@ npm run build                 # = vue-tsc -b && vite build（类型检查 + 打�
 
 **CI 覆盖**：`frontend` job（与后端 `ci` job 并行）对两个应用各跑 `npm ci` → `npm run build`，
 并额外断言 `dist/index.html` 真实存在（退出码为 0 也可能是空产物）。
-刻意**不在 CI 里跑前端 e2e** —— 那需要把后端 + 数据库 + 种子数据整套复制过去，
-等前端出现过一次真实契约回归再上，不提前建。
 
-**全栈联调（本地，已跑通）**：`backend/loadtest/day43-fe-full-stack-e2e.py` ——
+**全栈联调已进 CI**（`ci` job 的 `Frontend e2e` 步骤）：`backend/loadtest/day43-fe-full-stack-e2e.py` ——
 两个 dev server 与后端同时起，走**跨端**链路（C 端经 5173 下单支付 → 管理端经 5174 发货 →
-C 端经 5173 收货评价），54 条断言含跨端权限对照与基线还原；
-一键入口 `backend/loadtest/day43-run-full-stack.ps1`（本机专用，见
-[`docs/daily/Day-43-前端全栈联调.md`](docs/daily/Day-43-前端全栈联调.md)）。
+C 端经 5173 收货评价），54 条断言含跨端权限对照与基线还原。
 > ★ 它存在的理由：**分端验收不等于合起来能跑**。而且它按**前端自己的类型定义**断言字段名 ——
 > 直接打 8080 只能证明后端对，证明不了「前端拿到的字段名对」。
+>
+> ★ **它是按承诺上线的**：FE4 时写下的判据是「等前端出现过一次真实契约回归再上，不提前建」——
+> Day 43 本机联调正好抓到那一次（商品列表 VO 里没有 `price`，价格挂在 SKU 上；**编译期查不出**，
+> 只有经由 dev proxy 打真实接口再按 `frontend/*/src/types/api.d.ts` 核对才会现形）。
+> 代价：`ci` job 约 +1.5 分钟（一次 `setup-node` + 两个 `npm ci` + 两个 dev server）。
+> 本机一键入口仍是 `backend/loadtest/day43-run-full-stack.ps1`（本机专用，见
+> [`docs/daily/Day-43-前端全栈联调.md`](docs/daily/Day-43-前端全栈联调.md)）。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
 | FE1 | `mall-app` 骨架：登录 / 商品列表 / 详情 | ✅ |
 | FE2 | `mall-app` 交易链路：购物车 / 结算 / 下单支付 / 订单 / 券 | ✅ |
 | FE3 | `admin-app`：登录 / 布局 / 商品 CRUD / 订单 / 发货 / Dashboard | ✅ |
-| FE4 | 前端接入 CI + 文档 | ✅（e2e 进 CI 待有真实回归再说） |
+| FE4 | 前端接入 CI + 文档 | ✅（e2e 已于 Day 43 进 CI —— 触发条件「一次真实契约回归」已出现） |
 
 ---
 

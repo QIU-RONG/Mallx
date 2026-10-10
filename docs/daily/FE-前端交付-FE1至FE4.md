@@ -88,8 +88,36 @@ frontend:
 **首跑结果**（run `37946806601`，全 success）：`ci` 3m52s；`frontend (mall-app)` 21s；
 `frontend (admin-app)` 22s —— 前端两个 job 与后端并行，代价可以忽略。
 
-**刻意不做**：前端 e2e 不进 CI。那需要后端 + 数据库 + 种子数据整套复制到 runner；
-等前端出现过一次真实契约回归（改了接口而前端没跟上）再上，**不提前建**。
+**当时刻意不做**：前端 e2e 不进 CI —— 那需要后端 + 数据库 + 种子数据整套复制到 runner。
+判据是「等前端出现过一次真实契约回归（改了接口而前端没跟上）再上，**不提前建**」。
+
+**【Day 43 补记 —— 那个信号出现了，已经接上】**
+
+Day 43 本机联调正好抓到那一次契约回归：**商品列表 VO 里根本没有 `price`**（价格挂在 SKU 上），
+前端拿不到这个字段 —— **编译期查不出来**（后端接口本身是对的），只有经由 dev server 代理
+打真实接口、再按前端自己的类型定义 `frontend/*/src/types/api.d.ts` 核对字段名才会现形。
+⇒ 按承诺把它接进 CI：`ci` job 新增 `Frontend e2e` 步骤（`actions/setup-node` + 两个 `npm ci`
++ 两个 dev server + 跑 `day43-fe-full-stack-e2e.py`）。
+
+**为什么放 `ci` job 而不是新开一个 job**：它复用的正是 `ci` job 已经起好的后端 + 数据库 +
+M1 夹具数据 —— 上面第 1 点说「前端不需要 postgres/redis/应用」，但**e2e 需要**，
+新开 job 等于把这套依赖再复制一遍。
+**代价**：`ci` job 从 3m36s → **5m02s**（约 +1.5 min），在预估范围内。
+
+**首跑核实**（run `38039700183`，三 job 全 success）—— 按「绿灯不等于在干活」逐条查了 runner 输出：
+
+| 证据 | runner 上的原文 |
+|---|---|
+| `npm ci` 真跑了 | `##[group]npm ci mall-app` · `##[group]npm ci admin-app` |
+| 探测胶水真等了 | `mall-app up after 6s` · `admin-app up after 3s` |
+| 联调真跑通 | `结果：54 通过 / 0 失败   （期望断言数 54）` + `VERDICT: PASS` |
+
+⚠️ **本机无法等价跑这段胶水的边界（诚实标注）**：`day43` 脚本本身（54/54）、两个 dev server
+起在 5173/5174、「轮询到 curl 返回 200」这套判定（用 PowerShell 等价跑，3s 内两个都 200）、
+两个 `npm ci` rc=0 —— 都在本机实跑过；但**这段 bash 胶水本机跑不了**：
+Git Bash 里 `npm` 不可直接执行（node 目录下的 npm 是无扩展名脚本 + `.cmd` 配对，
+`npm -v` 输出乱码 + null byte），而且 Bash 工具不能嵌套起 bash（`bash script` 直接 rc=1、零输出）。
+若将来要改这段胶水，只能靠 CI 首跑核实。
 
 ### ★ 护栏自带对照组（不这么做，「通过」什么都说明不了）
 
