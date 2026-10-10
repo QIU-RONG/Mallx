@@ -12,6 +12,7 @@
 Java 189 文件 / 15.1k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 16 份
 回归基线：**M1 全链路 434 条断言**（3 链 + 4 读侧 + 2 写侧；Day 43 名单 5→9）＋ 各域验收脚本见 §测试与回归末表，
 每次改动必跑（CI 每次 push 自动跑同一套；D43 起 day41 与前端 e2e 也已进 CI）
+**＋ Java 单元测试 41 条**（Day 45 起；`mvn test` 约 6 秒，不依赖 DB/Redis/MQ，CI 每次必跑）
 ```
 
 第一次来？直接跳到 **[快速开始](#快速开始)**，或先看 **[接口文档](#接口文档)**。
@@ -210,11 +211,23 @@ done
 
 ```bash
 cd backend/mallx
-mvn install -DskipTests            # 首次（需联网）
-mvn -o install -DskipTests         # 依赖已缓存后（离线，约 40s）
+mvn install                        # 首次（需联网）—— 含单元测试，约 40s + 6s
+mvn -o install                     # 依赖已缓存后（离线）
 ```
 
 产出的可执行 jar：`backend/mallx/mall-server/target/mall-server-0.0.1-SNAPSHOT.jar`。
+
+> ★ **单元测试（Day 45 起，此前 189 个源文件 0 个测试类）**：`mvn test` 跑 **41 条**，
+> 全部**不依赖 DB / Redis / MQ**（CI 里这一步跑在起 postgres **之前**，约 6 秒）：
+>
+> | 层 | 类 | 条数 | 依赖 |
+> |---|---|---|---|
+> | L1 纯逻辑 | `mall-common` · `JwtUtilTest` | 9 | 无 Spring / 无 DB / 无 mock |
+> | L2 Mockito | `mall-marketing` · `CouponServiceImplTest` | 32 | 只 mock 一个 `UserCouponMapper` |
+>
+> ⚠️ 新增测试必须守住这条边界：**需要起 DB/Redis/MQ 的，就该是 `backend/loadtest` 下的
+> Python 端到端脚本，不是 JUnit**。⚠️ 被测模块要在自己的 pom 里引一次
+> `spring-boot-starter-test`（父 pom 里那份只是版本声明）。
 
 ### 4. 启动
 
