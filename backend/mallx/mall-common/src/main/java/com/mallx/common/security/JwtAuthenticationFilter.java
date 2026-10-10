@@ -30,6 +30,25 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String HEADER = "Authorization";
     private static final String PREFIX = "Bearer ";
 
+    /**
+     * ★★ 身份域 authority（Day 44）。**不是权限码**，只表达「这个 token 是从哪个域签出来的」。
+     *
+     * <p>为什么必须有它：两种 token 的主体都是「一个 {@code Long}」——
+     * 过滤器的 principal 就是 token 的 {@code sub}，C 端是 {@code users.id}、
+     * 管理端是 {@code admins.id}，而这是 {@code 01-schema.sql} 里<b>两张独立的表</b>，
+     * id 各自从 1 起 ⇒ <b>同一个数值可能代表两个完全不同的人</b>。
+     *
+     * <p>不加域标记的后果是实测到的（Day 44 取证）：超管 {@code sub=1} 打
+     * {@code GET /api/users/me} 返回了顾客 {@code demo} 的手机号 / 昵称 / 邮箱，
+     * 打 {@code GET /api/orders} 返回了该顾客的全部 6 张订单 —— 因为过滤器只看
+     * {@code sub}，把管理端的 {@code adminId} 当成了 {@code userId}。
+     *
+     * <p>分清域之后 {@code SecurityConfig} 就能按路径把关：
+     * {@code /api/admin/**} 只收 {@code DOMAIN_ADMIN}，其余只收 {@code DOMAIN_USER}。
+     */
+    public static final String DOMAIN_USER = "DOMAIN_USER";
+    public static final String DOMAIN_ADMIN = "DOMAIN_ADMIN";
+
     private final JwtUtil jwtUtil;
 
     public JwtAuthenticationFilter(JwtUtil jwtUtil) {
@@ -52,7 +71,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 String username = claims.get("username", String.class);
 
 
+                // ★★ 身份域（Day 44）：type=ADMIN / USER 决定这个 token 属于哪个域。
+                //   ⚠️ 域不明时【fail closed】：不登记身份（等同未登录 → 401），
+                //      而不是猜「大概是 C 端」—— 猜错一次就是那个越权漏洞本身。
+                //      抛 IllegalArgumentException 会被下面的 catch 接住，语义与
+                //      「token 解析失败就当没登录」一致（绝不抛到 500）。
+                String type = claims.get("type", String.class);
+                if (!"USER".equals(type) && !"ADMIN".equals(type)) {
+                    throw new IllegalArgumentException("缺少/未知的身份域 type=" + type);
+                }
+
+                // perms 照旧（C 端 token 本来就没有这个 claim ⇒ 权限集只有域标记一项）
                 List<GrantedAuthority> authorities = new ArrayList<>();
+                authorities.add(new SimpleGrantedAuthority(
+                        "ADMIN".equals(type) ? DOMAIN_ADMIN : DOMAIN_USER));
                 List<?> perms = claims.get("perms",List.class);
                 if(perms != null){
                     for(Object p  : perms){
@@ -75,7 +107,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 context.setAuthentication(authentication);
                 SecurityContextHolder.setContext(context);
 
-                logger.debug("已登记身份：userId=" + userId + ", username=" + username);
+                logger.debug("已登记身份：type=" + type + ", userId=" + userId + ", username=" + username);
 
             } catch (JwtException | IllegalArgumentException e) {
                 // 关键：这里【不能抛异常】！解析失败就当"没登录"，继续放行，

@@ -214,6 +214,30 @@ jobs:
           python day23-rbac-verify.py
           python day24-brand-crud-verify.py
 
+      # ================================================================================
+      # Day 44 · 身份域隔离 —— 「管理端 token 能顶替 C 端顾客」这条**静默越权**的回归闸门。
+      #
+      # ★ 为什么必须进 CI（而不是只在本机跑一次）：这个漏洞**不报错、不告警、不打日志** ——
+      #   管理端 token 打 `/api/users/me` / `/api/orders` 拿到的是 HTTP 200 + 别人的
+      #   手机号/昵称/邮箱/全部订单，任何「看退出码 / 看 5xx」的监控都发现不了。
+      #   它横跨 `users` 与 `admins` 两张**各自从 1 起**的 id 空间（01-schema.sql），
+      #   只要有人再写一次「principal 就是 sub」的代码，漏洞立刻原样回来。
+      #
+      # ★ 脚本自带控制组（本项目的硬要求）：同一套断言在【修复前】的代码上跑 → 10 条 FAIL，
+      #   FAIL 详情里正是泄露出来的 `email` / `records` / 地址列表（见 docs/daily/Day-44）。
+      #   ⇒ 断言对「有没有这道闸门」敏感，不是恒真的摆设。
+      #
+      # 只依赖 8080（demo / admin 两个种子账号由 initdb 提供），纯读、不写业务数据。
+      # ================================================================================
+      - name: Identity domain isolation (Day 44 —— 跨域 token 必须 403)
+        working-directory: backend/loadtest
+        run: |
+          if ! python day44-identity-domain-verify.py; then
+            echo "::error::身份域隔离失效 —— 报告尾部："
+            cat day44-identity-domain-result.txt || true
+            exit 1
+          fi
+
       # V1.1 · D38-40：缓存验收（需要应用 + redis，都已在上面步骤就绪）。
       # day38 详情 cache-aside（含毒性注入对照组 + 停机降级）；
       # day39 tree/brands；day40 负缓存护栏（下架→NEG→上架翻转）。

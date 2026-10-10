@@ -70,7 +70,22 @@ public class SecurityConfig {
                                  "/actuator/health/liveness",
                                  "/actuator/health/readiness",
                                  "/actuator/info").permitAll()
-                .anyRequest().authenticated()
+                // ★★★ Day 44 · 身份域隔离。**下面三条必须放在 anyRequest 之前。**
+                //   背景：principal 只是 token 的 sub（一个 Long），而 `users` 与 `admins`
+                //   是 01-schema.sql 里两张【独立的表】、id 各自从 1 起 ⇒ 光看 sub 分不出
+                //   「顾客 1」和「超管 1」。Day 44 实测：超管 token（sub=1）打
+                //   `GET /api/users/me` 返回了顾客 demo 的手机号/昵称/邮箱，打
+                //   `GET /api/orders` 返回了该顾客全部 6 张订单。
+                //   ⇒ 过滤器已按 type claim 写入 DOMAIN_USER / DOMAIN_ADMIN，这里按路径把关：
+                //     跨域使用一律走 AccessDeniedHandler ⇒ **真 HTTP 403**（不是 200+code）。
+                .requestMatchers("/api/admin/**").hasAuthority(JwtAuthenticationFilter.DOMAIN_ADMIN)
+                // ⚠️ 唯一的例外：发货是【管理端动作】，却与 C 端接口同处 OrderController、
+                //   共用 /api/orders 前缀（该类注释里写过「同一个类里出现两种鉴权模型是有意为之」）。
+                //   漏掉这一行 ⇒ 发货立刻 403（M1 的 day15-ship-confirm 会红）。
+                //   ★ 将来若新增「管理端动作挂在 C 端路径下」的接口，**必须同时在这里加一行**。
+                .requestMatchers(HttpMethod.POST, "/api/orders/*/ship")
+                    .hasAuthority(JwtAuthenticationFilter.DOMAIN_ADMIN)
+                .anyRequest().hasAuthority(JwtAuthenticationFilter.DOMAIN_USER)
             )
             // ⑤ 认证失败返回 401、授权失败返回 403，统一 JSON（一次配全，别拆成两次调用）
             .exceptionHandling(ex -> ex
