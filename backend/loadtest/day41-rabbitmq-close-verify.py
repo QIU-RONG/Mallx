@@ -30,7 +30,17 @@ opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 lines = []
 say = lines.append
 checks = []
-EXPECTED_CHECKS = 12         # 满额护栏
+# ★ 满额护栏：断言「被创建」的数量 —— 防的是「断言没被创建」的假绿（本项目老教训）。
+#   D43-B：这个常量曾经是 12 而实跑 13 条 ⇒ 13 条断言全 [OK] 却判 FAIL（**假红**）。
+#   按实际执行路径数清（全通过路径）：
+#       [0] 2 条（应用可达 / RabbitMQ 可达）
+#       [1] 4 条（demo 登录 / 有地址 / 加购 / 购物车里有目标 SKU）
+#       [2] 4 条（下单成功 / 状态 PENDING / 秒级关单 / 快于扫描周期）
+#       [3] 3 条（详情可查 / 清流水 / 清单据）
+#       ------------------------------------------------------ 合计 13
+#   ★ 别再手工数：`--selfcheck` 用 AST 静态度量本文件的 chk( 调用点数并与本常量比对，
+#     不需要应用/数据库、秒级 —— 它就是为「让这个常量不可能再和断言脱节」而加的。
+EXPECTED_CHECKS = 13
 
 
 def chk(name, ok, detail=""):
@@ -202,5 +212,50 @@ def bail(code=None):
     return code
 
 
+def selfcheck():
+    """静态核对：AST 数出本文件里 chk( 的调用点数，与 EXPECTED_CHECKS 比对。
+
+    D43-B 的根因 = 「满额护栏的常量与实际断言数脱节，而本脚本不进 CI ⇒ 没人发现」。
+    这条自检不需要应用/数据库，秒级可跑 ⇒ 常量一漂就现形（可挂 CI 或 pre-commit）。
+
+    ★★ 适用前提：chk 调用必须都是【顺序执行】的 —— 既不在循环里、也没有 if/else
+       二选一。不满足时本函数【拒绝给结论】并返回 2（而不是硬报一个 MISMATCH）。
+       为什么这么严：D43 全库扫描实证 —— day20-coupon / day23-rbac / day27 的静态
+      调用点分别比它们各自的常量少 11 / 18 / 24 条，差额【全部】来自循环体内的调用
+      点（一个调用点执行多次）。在那类脚本上静态数必然小于运行时数，拿它比对只会
+      制造新的假红 —— 而「护栏反过来制造假红」正是 D43-B 本身。
+      本脚本 13 条全在顺序主线上（循环体内 0 处），所以适用。
+    """
+    import ast
+    with open(os.path.abspath(__file__), encoding="utf-8") as f:
+        src = f.read()
+    tree = ast.parse(src)
+
+    def calls_in(node):
+        return [n for n in ast.walk(node)
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "chk"]
+
+    sites = len(calls_in(tree))
+    loops = 0
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.For, ast.While, ast.comprehension)):
+            loops += len(calls_in(node))
+
+    if loops:
+        print("★ 本文件有 %d 处 chk( 落在循环体内 ⇒ 静态核对【不适用】"
+              "（一个调用点会执行多次，静态数必然小于运行时数）" % loops)
+        print("  请改用运行时核对：跑一遍脚本，看报告里的 ASSERTIONS 行与 EXPECTED 是否相等。")
+        return 2
+
+    ok = (sites == EXPECTED_CHECKS)
+    print("chk( call sites = %d   EXPECTED_CHECKS = %d   %s"
+          % (sites, EXPECTED_CHECKS,
+             "OK" if ok else "★ MISMATCH -- 有断言被增删却没同步常量"))
+    return 0 if ok else 1
+
+
 if __name__ == "__main__":
+    if "--selfcheck" in sys.argv:
+        sys.exit(selfcheck())
     sys.exit(main())

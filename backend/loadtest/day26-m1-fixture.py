@@ -244,6 +244,57 @@ def identity_ok(sku):
     return t == a + l + s, (t, a, l, s)
 
 
+# ---------------------------------------------------------------- D43-A
+# 为什么要有这一段（Day 43 镜像瘦身时翻出来的）
+# -------------------------------------------------
+# 一天 day14/15/16 三条链路集体变红、而 day20/21/23 全绿 —— 差一点归因成「jlink 漏模块」。
+# 真相是 sku4 上有 1 个【无主锁定】：locked_stock=1，却没有任何 PENDING_PAYMENT 单认领它。
+# 恒等式 available+locked+sold=total 仍成立 ⇒ 它不是超卖，是残留。
+#
+# 为什么夹具没兜住：幂等判定只看「状态文件里那 6 张单还在不在」，**不看库存对不上账**。
+# 于是漂移能一直藏到那 6 张单被删掉为止；而它爆出来的时机，往往是你正在做一件
+# **完全无关的改动**（那天我在换镜像），非常容易顺着错误的方向改下去。
+#
+# ⇒ 判据要落在【数据】上：locked_stock == Σ(PENDING_PAYMENT 订单的明细数量)，逐 sku 对账。
+LOCKED_DRIFT_SQL = (
+    "SELECT i.sku_id||'|'||i.locked_stock||'|'||COALESCE(w.qty,0) "
+    "FROM inventories i LEFT JOIN ("
+    "  SELECT oi.sku_id AS sku_id, SUM(oi.quantity) AS qty "
+    "  FROM order_items oi JOIN orders o ON o.id = oi.order_id "
+    "  WHERE o.status = 'PENDING_PAYMENT' GROUP BY oi.sku_id) w "
+    "ON w.sku_id = i.sku_id "
+    "WHERE i.locked_stock <> COALESCE(w.qty,0) ORDER BY i.sku_id;")
+
+# 「拉回常态」= 把 locked 改成应有值，差额在 available 上找平 —— total 不动，
+# 所以恒等式始终成立（不是简单地把 locked 抹成 0：库里真要挂着单时，抹 0 才是错的）。
+LOCKED_HEAL_SQL = (
+    "UPDATE inventories i SET "
+    "  available_stock = i.available_stock + i.locked_stock - w.qty, "
+    "  locked_stock    = w.qty, "
+    "  updated_at      = CURRENT_TIMESTAMP "
+    "FROM (SELECT i2.sku_id AS sku_id, "
+    "        (SELECT COALESCE(SUM(oi.quantity),0) FROM order_items oi "
+    "           JOIN orders o ON o.id = oi.order_id "
+    "          WHERE o.status = 'PENDING_PAYMENT' AND oi.sku_id = i2.sku_id) AS qty "
+    "      FROM inventories i2) w "
+    "WHERE w.sku_id = i.sku_id AND i.locked_stock <> w.qty;")
+
+
+def locked_drift():
+    """返回 [(sku, 实际 locked, 应有 locked), ...]；空列表 = 账对得上。"""
+    out = []
+    for ln in one(LOCKED_DRIFT_SQL).splitlines():
+        p = ln.split("|")
+        if len(p) == 3:
+            out.append((int(p[0]), int(p[1]), int(p[2])))
+    return out
+
+
+def heal_locked():
+    """把漂移的 locked 拉回应有值。返回 psql 的 'UPDATE n' 回执。"""
+    return one(LOCKED_HEAL_SQL)
+
+
 # ---------------------------------------------------------------- main
 def main():
     status_only = "--status" in sys.argv
@@ -259,6 +310,24 @@ def main():
         return 1
     say("[0] 应用就绪")
 
+    # ---- D43-A：库存对账。★ 必须排在幂等检查【之前】——
+    #   放在后面就等于「只有重建路径才查」，而漂移恰恰发生在「6 张单都在」的时候。
+    say("[1] 库存对账（D43-A）：locked_stock 应等于 Σ(PENDING_PAYMENT 订单的明细数量）")
+    drift = locked_drift()
+    if drift:
+        say("    ★ 检测到 %d 个 sku 的 locked 对不上账：" % len(drift))
+        for sku, got, should in drift:
+            say("      sku%-3d locked=%-4d 应为 %-4d   (差 %+d)"
+                % (sku, got, should, got - should))
+        if status_only:
+            say("    [--status] 只读盘点，不修正")
+        else:
+            say("    → %s" % heal_locked())
+            say("      按恒等式拉回常态：locked 取应有值，差额在 available 上找平（total 不变）")
+    else:
+        say("    locked 与挂起单明细一致，无漂移")
+    drift_after = locked_drift()
+
     # 幂等检查（--status 也走这一段）
     if os.path.exists(STATE):
         try:
@@ -269,11 +338,11 @@ def main():
             ids = ",".join(str(o["id"]) for o in prev["orders"])
             present = one("SELECT count(*) FROM orders WHERE id IN (%s);" % ids)
             if present == str(len(prev["orders"])):
-                say("[1] 夹具已在位（状态文件 %d 单全部存在）→ no-op" % len(prev["orders"]))
+                say("[2] 夹具已在位（状态文件 %d 单全部存在）→ no-op" % len(prev["orders"]))
                 say("    订单: %s" % ids)
                 flush()
                 return 0
-            say("[1] 状态文件在但订单缺（present=%s/%d）→ 重建"
+            say("[2] 状态文件在但订单缺（present=%s/%d）→ 重建"
                 % (present, len(prev["orders"])))
 
     if status_only:
@@ -282,7 +351,11 @@ def main():
         return 0
 
     checks = []
-    say("[1] SQL 夹具（显式 id 惯例，插后校准序列）")
+    # D43-A：对账的【结果】也判一条 —— 上面只是「报告漂移」，这条把「修完之后账必须平」
+    # 变成可判定的。两条都不缺：只报不判 ⇒ 漂移修没修好没人管；只判不报 ⇒ 看不到修过什么。
+    checks.append(("locked 对账后无残留漂移 (drifted=%d)" % len(drift_after),
+                   len(drift_after) == 0))
+    say("[2] SQL 夹具（显式 id 惯例，插后校准序列）")
     if not ensure_intruder():
         flush()
         return 1
@@ -295,7 +368,7 @@ def main():
                    one("SELECT count(*) FROM user_addresses WHERE id=%d AND user_id=1;"
                        % DEMO_ADDRESS_ID) == "1"))
 
-    say("[2] 登录")
+    say("[3] 登录")
     demo, m1 = login("/api/auth/login", "demo", "demo123")
     admin, m2 = login("/api/auth/admin/login", "admin", "admin123")
     say("    demo token_len=%s (code=%s)   admin token_len=%s (code=%s)"
@@ -306,22 +379,22 @@ def main():
         flush()
         return 1
 
-    say("[3] 归零幽灵计数（种子自带 sold/locked 残数且无订单可解释，违反链路守恒前提）")
+    say("[4] 归零幽灵计数（种子自带 sold/locked 残数且无订单可解释，违反链路守恒前提）")
     one("UPDATE inventories SET locked_stock = 0, sold_stock = 0, "
         "available_stock = total_stock, updated_at = CURRENT_TIMESTAMP;")
     say("    locked/sold 全表归零，available=total")
 
-    say("[4] API 建单（真实业务路径：购物车 → 下单 → 支付）")
+    say("[5] API 建单（真实业务路径：购物车 → 下单 → 支付）")
     created = cart_flow(demo, admin, PLAN, checks)
     say("    创建 %d 单: %s" % (len(created),
         ", ".join("#%d sku%d->%s" % (o["id"], o["sku"], o["target"]) for o in created)))
 
-    say("[5] 清空库存流水（day14 基线要求 ledger 空；dev 库历史形态即「有订单/零流水」）")
+    say("[6] 清空库存流水（day14 基线要求 ledger 空；dev 库历史形态即「有订单/零流水」）")
     one("DELETE FROM inventory_logs;")
     n_logs = one("SELECT count(*) FROM inventory_logs;")
     checks.append(("ledger emptied (rows=%s)" % n_logs, n_logs == "0"))
 
-    say("[6] 一致性核查")
+    say("[7] 一致性核查")
     for sku in sorted({p["sku"] for p in PLAN}):
         ok, tals = identity_ok(sku)
         checks.append(("inventory identity sku%d (t=%d a=%d l=%d s=%d)" % (sku, *tals), ok))
@@ -343,7 +416,7 @@ def main():
                    "orders": created,
                    "address_id": DEMO_ADDRESS_ID, "intruder_id": INTRUDER_ID},
                   open(STATE, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-        say("[5] 状态文件已写: %s" % os.path.basename(STATE))
+        say("[8] 状态文件已写: %s" % os.path.basename(STATE))
 
     say("=" * 78)
     say("FIXTURE: %d / %d passed" % (passed, total))

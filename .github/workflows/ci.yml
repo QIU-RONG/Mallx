@@ -76,6 +76,17 @@ jobs:
             exit 1
           fi
 
+      # Day 43（D43-B）：护栏自检 —— 用 AST 核对「满额护栏常量 vs 实际断言调用点数」。
+      # 不需要 DB / 应用，秒级；放在最前面（它检的是脚本自己，连库都不用连）。
+      # ★ 为什么非要有这一步：D43-B 的根因正是「常量脱节 + 脚本不进 CI ⇒ 没人发现」，
+      #   结果 13 条断言全 [OK] 却判 FAIL（假红），而满额护栏的本意恰恰是防假绿。
+      # ⚠️ 该自检只适用于【顺序执行】的脚本；检测到 chk( 落在循环体内会返回 2 并拒绝出结论
+      #   （循环里一个调用点执行多次，静态数必然小于运行时数 —— 见脚本 docstring）。
+      - name: Guard self-checks (满额护栏常量 vs 实际断言数，AST 静态核对)
+        working-directory: backend/loadtest
+        run: |
+          python day41-rabbitmq-close-verify.py --selfcheck
+
       - name: SQL strict check (熔断语义 / 临时库 / 零痕迹)
         working-directory: backend/loadtest
         run: python day25-sql-strict-check.py
