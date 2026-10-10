@@ -11,8 +11,8 @@ Day 22 验收：用户管理 + 仪表盘 + 安全收口回归 + L7（A–E）
     login op_order       -> OK
     login op_product     -> OK
     demo.id=1  公开字段白名单=['createdAt', 'email', 'id', 'nickname', 'phone', 'status', 'username']
-    夹具用户 alpha=40(启用) beta=41(禁用) gamma=42(用户名命中)
-    夹具订单 id=184（created_at = 4 天前）
+    夹具用户 alpha=46(启用) beta=47(禁用) gamma=48(用户名命中)
+    夹具订单 id=186（created_at = 4 天前）
 
 [A] ★ 安全回归：漏洞入口必须【全部 404】，出口必须【不再有 password】
   [PASS] A1 匿名 GET /api/users -> HTTP 401（仍要登录，不是公开）
@@ -43,6 +43,7 @@ Day 22 验收：用户管理 + 仪表盘 + 安全收口回归 + L7（A–E）
   [PASS] B14 ★ 幂等：重复禁用 -> 200（不是 404/409），DB 仍是 0
   [PASS] B15 改回启用 -> DB 落到 1（状态可双向改）
   [PASS] B16 ★ 改不存在的 id -> code 404（影响行数 0 == 不存在，没有先查后改）
+       B17 诊断: before=2020-01-01 00:00:00  after=2026-10-10 18:57:25.751411  api=200/code=200
   [PASS] B17 ★ updates 走了显式 updated_at（手写 UpdateWrapper 不走自动填充 ⇒ 我们显式补了）
   [PASS] B18 越界 status=9 -> code 400（@Max 挡下，不是 200+500）
   [PASS] B19 空载荷 {} -> code 400（@NotNull 挡下）

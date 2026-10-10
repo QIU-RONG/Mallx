@@ -417,23 +417,32 @@ try:
     check("B16 ★ 改不存在的 id -> code 404（影响行数 0 == 不存在，没有先查后改）",
           code_of(j) == 404, "HTTP %s code %s / %s" % (st, code_of(j), raw[:100]))
 
-    # ★★ B17 要在 CI 上也稳（首次进 CI 就被它挂过一次）：
-    #   判据是 `updated_at > created_at`，但「创建 ALPHA 用户」与「改状态」可能落在
-    #   **同一时刻** ⇒ 两者相等 ⇒ `>` 为 false。本地能过只是运气（本地慢半拍），
-    #   CI 机器快 ⇒ 稳定假红。
-    #   修法：把 created_at 与 updated_at **一起**拨到 10 分钟前，再走一次接口更新：
-    #     · 接口显式补了 ⇒ updated_at 刷成 now() > created_at(10 分钟前) ⇒ 判据 true（期望）
-    #     · 接口没补     ⇒ updated_at 停在 10 分钟前 == created_at   ⇒ 判据 false（会被抓到）
-    #   ⚠️ 只拨 created_at 是不行的：没补时 updated_at 仍停在「创建时刻」，而它 > 拨旧的
-    #      created_at ⇒ 判据会**假通过**。
-    #   另一条等价修法是 sleep 1 秒再更新，但那是拿时间换判据，不如把时间差造在数据里。
-    sql_exec("UPDATE users SET created_at = now() - interval '10 minutes', "
-             "updated_at = now() - interval '10 minutes' WHERE id = %d" % ALPHA_ID)
-    api("PUT", "/api/admin/users/%d/status" % ALPHA_ID, token=ADMIN_TOKEN,
-        body={"status": 1})
-    bump = sql1("SELECT (updated_at > created_at)::text FROM users WHERE id = %d" % ALPHA_ID)
+    # ★★★ B17 要在 CI 上也稳（这条断言首次进 CI 时连续挂了两次，两次都是「本地过」）：
+    #   它想证明的是「手写 UpdateWrapper 不走自动填充，所以代码里【显式补了 updated_at】」。
+    #   原判据 `updated_at > created_at` 有两个环境依赖，都会在更快的机器上翻车：
+    #     ① 判据用的是「时间先后」——「创建 ALPHA」与「改状态」落在**同一时刻**时两者相等
+    #        ⇒ `>` 为 false（本地慢半拍所以侥幸通过）；
+    #     ② 它拿 `created_at` 当参照，而参照物本身也是刚写的，等于在拿两个几乎同时的值比大小。
+    #   ⇒ 换成**不依赖 created_at、也不依赖时间精度**的写法：
+    #     把 updated_at 先钉到一个明确的旧值（2020-01-01），再走一次接口更新，
+    #     然后问「它有没有离开那个旧值」：
+    #        显式补了 ⇒ updated_at = now() ≫ 2020-01-01 ⇒ true
+    #        没补     ⇒ 停在 2020-01-01                 ⇒ false（能抓到）
+    #   ★ 状态必须**真的变化**：B15 刚把 status 置 1，所以这里发 0（而不是再发一次 1）——
+    #     「状态相同时会不会刷新 updated_at」是实现细节，拿它做判据同样不稳。
+    #   ★ 改完必须**复原成 1**：C7 的判据是 `before == after == 1`（被拒的写一行都没落库）。
+    OLD_TS = "2020-01-01 00:00:00"
+    sql_exec("UPDATE users SET updated_at = '%s' WHERE id = %d" % (OLD_TS, ALPHA_ID))
+    ts_before = sql1("SELECT updated_at::text FROM users WHERE id = %d" % ALPHA_ID)
+    st, j, raw = api("PUT", "/api/admin/users/%d/status" % ALPHA_ID, token=ADMIN_TOKEN,
+                     body={"status": 0})
+    ts_after = sql1("SELECT updated_at::text FROM users WHERE id = %d" % ALPHA_ID)
+    bump = sql1("SELECT (updated_at > '%s')::text FROM users WHERE id = %d" % (OLD_TS, ALPHA_ID))
+    say("       B17 诊断: before=%s  after=%s  api=%s/code=%s" % (ts_before, ts_after, st, code_of(j)))
     check("B17 ★ updates 走了显式 updated_at（手写 UpdateWrapper 不走自动填充 ⇒ 我们显式补了）",
-          bump == "true", "updated_at > created_at = %r" % bump)
+          bump == "true", "updated_at 是否已离开 2020-01-01：%r（after=%s）" % (bump, ts_after))
+    api("PUT", "/api/admin/users/%d/status" % ALPHA_ID, token=ADMIN_TOKEN,
+        body={"status": 1})          # 复原成 1 —— C7 需要它
 
     st, j, raw = api("PUT", "/api/admin/users/%d/status" % ALPHA_ID, token=ADMIN_TOKEN,
                      body={"status": 9})
