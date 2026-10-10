@@ -198,11 +198,19 @@ jobs:
           python day17-f-inventory-log-verify.py
           python day17-m1-regression.py
 
-      - name: Extended suites (券 L1/L2、用券、RBAC、品牌 CRUD)
+      # ★ Day 43 续：补上两个【功能面完全无人覆盖】的脚本（用端点差集盘出来的）——
+      #   · day19：C 端搜索（V1.2 的核心）。`/api/products/search` 此前**没有任何在 CI 的
+      #     脚本打过** —— 也就是说搜索修了 29x 之后，功能回归里一直没人守着它。纯读零写入。
+      #   · day22：管理端用户管理 + 仪表盘。`/api/admin/users*` 与 `/api/admin/dashboard/*`
+      #     同样无人覆盖（67 条断言）。自带高水位清理 + 基线还原，并在报告里自断言 F1。
+      #   两条本地各跑两遍均 rc=0（第 2 遍验「自清理有效、可重复」）。
+      - name: Extended suites (搜索、券 L1/L2、用券、用户管理+仪表盘、RBAC、品牌 CRUD)
         working-directory: backend/loadtest
         run: |
+          python day19-search-verify.py
           python day20-coupon-verify.py
           python day21-coupon-use-verify.py
+          python day22-admin-verify.py
           python day23-rbac-verify.py
           python day24-brand-crud-verify.py
 

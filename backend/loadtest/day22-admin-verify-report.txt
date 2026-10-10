@@ -5,14 +5,14 @@ Day 22 验收：用户管理 + 仪表盘 + 安全收口回归 + L7（A–E）
 [0] 护栏与准备
   [OK] 7 处实现与 5 条 SQL 均已落地（无 UnsupportedOperationException / 无空语句体）
   [OK] 应用已就绪
-  基线: {'users': 2, 'products': 5, 'orders': 8, 'payments': 5, 'coupons': 0, 'user_coupons': 0}
+  基线: {'users': 2, 'products': 5, 'orders': 6, 'payments': 6, 'coupons': 0, 'user_coupons': 0}
     login demo(C端)       -> OK
     login admin(超管)      -> OK
     login op_order       -> OK
     login op_product     -> OK
     demo.id=1  公开字段白名单=['createdAt', 'email', 'id', 'nickname', 'phone', 'status', 'username']
-    夹具用户 alpha=44(启用) beta=45(禁用) gamma=46(用户名命中)
-    夹具订单 id=9107（created_at = 4 天前）
+    夹具用户 alpha=34(启用) beta=35(禁用) gamma=36(用户名命中)
+    夹具订单 id=182（created_at = 4 天前）
 
 [A] ★ 安全回归：漏洞入口必须【全部 404】，出口必须【不再有 password】
   [PASS] A1 匿名 GET /api/users -> HTTP 401（仍要登录，不是公开）
@@ -72,7 +72,7 @@ Day 22 验收：用户管理 + 仪表盘 + 安全收口回归 + L7（A–E）
   [PASS] D10 trend days=7 -> 恰好 7 个点（★ 直觉写法只会有「有单的那几天」）
   [PASS] D11 日期序列 = 连续 7 天、升序、最后一天=今天
   [PASS] D12 趋势里的 orderCount 之和 == DB 窗口内订单数
-  [PASS] D13 ★★ 补 0 的证明：零点个数 == 天数 - DB 里有单的天数（7 - 2 = 5）
+  [PASS] D13 ★★ 补 0 的证明：零点个数 == 天数 - DB 里有单的天数（7 - 1 = 6）
   [PASS] D14 我造的「4 天前那一单」落在正确的点上（orderCount >= 1）
   [PASS] D15 ★ 补 0 补的是 0 而不是 null（salesAmount 全非 null）
   [PASS] D16 ★ days=-1 夹到【下限 1】-> 1 个点（不夹的话 generate_series 回空集，看着像「没生意」）
