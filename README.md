@@ -422,6 +422,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数。★ Day 43 补了 `locked_stock` 对账（排在幂等检查**之前**） | 32 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 | `day43-fe-full-stack-e2e.py` | **前端全栈联调**：两个 dev server 代理 + 跨端链路（C 端下单支付 → 管理端发货 → C 端收货评价）+ 跨端权限对照 + 基线还原。★ 字段名以**前端自己的类型定义**为准（`frontend/*/src/types/api.d.ts`） | 54 |
+| `day44-identity-domain-verify.py` | **身份域隔离**：管理端 token 打 C 端接口（`/api/users/me` `/api/orders` `/api/cart` `/api/addresses` `/api/coupons/my`）必须**真 403 且无数据**；反向同理；★ 例外通道 `POST /api/orders/*/ship` 归管理端；含 8 条正向控制组 + fail closed。★ 已进 CI ★ 控制组：修复前跑出 10 条 FAIL（泄露的 email/订单/地址） | 28 |
 
 写脚本的三条硬规矩（都来自踩过的坑）：
 
