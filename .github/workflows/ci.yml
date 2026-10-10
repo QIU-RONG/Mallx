@@ -168,6 +168,79 @@ jobs:
             echo "::endgroup::"
           done
 
+      # ================================================================================
+      # 前端全栈联调（Day 43）—— 两个 dev server 代理 + 一个后端，跨端链路 54 条断言。
+      #
+      # ★ 为什么现在才上（这是 FE4 那条注释承诺的触发条件）：FE4 时写的是
+      #   「等前端出现过一次真实契约回归再上，别提前建」—— Day 43 本机联调正好抓到那一次：
+      #   商品列表 VO 里根本没有 price（价格挂在 SKU 上），**编译期查不出来**；
+      #   只有经由 dev proxy 打真实接口、再按前端自己的类型定义
+      #   （frontend/*/src/types/api.d.ts）核对字段名，才会现形。
+      #
+      # ★ 为什么放 ci job 而不是单开 job：它复用的正是本 job 已经起好的后端 + 数据库 +
+      #   M1 夹具数据。单开 job 等于把整套依赖再复制一遍（见下面 frontend job 的注释）。
+      #   代价：本 job 多一次 setup-node + 两个 npm ci + 两个 dev server，约 +1.5–2 min。
+      #
+      # ★ 为什么每条断言都打 5173/5174 而不直连 8080：直连只能证明后端对；
+      #   经由 dev server 代理才能同时覆盖「代理配置 + 接口契约 + 前端真正依赖的字段名」。
+      #
+      # ⚠️ 本地等价验证的边界（D43 实测，诚实标注）：
+      #   ✓ 已在本地实跑：day43 脚本本身（54/54）；两个 dev server 起在 5173/5174；
+      #     「轮询到 curl 返回 200」这套判定（用 PowerShell 等价跑，3s 内两个都 200）；
+      #     两个 npm ci 退出码为 0（FE4 那一轮验过）。
+      #   ✗ 本机**无法**等价跑这段 bash 胶水：Git Bash 里 npm 不可直接执行
+      #     （node 目录下 npm 是无扩展名脚本 + .cmd 配对，`npm -v` 输出乱码 + null byte），
+      #     而且 Bash 工具不能嵌套起 bash（`bash script` 直接 rc=1、零输出）。
+      #   ⇒ 因此本步骤的**首次 CI 跑必须逐步核实**，不能因为绿灯就认为它在干活。
+      #   （curl/sleep/while 是 ubuntu runner 标配；刻意不用 seq —— 本机 coreutils 缺它。）
+      # ================================================================================
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/mall-app/package-lock.json
+            frontend/admin-app/package-lock.json
+
+      - name: Frontend e2e (Day 43 —— 两个 dev server 代理 + 跨端链路)
+        run: |
+          set -e
+          for app in mall-app admin-app; do
+            echo "::group::npm ci $app"
+            (cd "frontend/$app" && npm ci --no-audit --no-fund)
+            echo "::endgroup::"
+          done
+
+          # 两个 dev server 后台起（vite dev 只绑 localhost ⇒ 探测也用 localhost）
+          (cd frontend/mall-app  && nohup npm run dev > /tmp/dev-mall.log  2>&1 &)
+          (cd frontend/admin-app && nohup npm run dev > /tmp/dev-admin.log 2>&1 &)
+
+          wait_dev() {   # $1=url $2=name $3=log
+            i=0
+            while [ $i -lt 60 ]; do
+              i=$((i+1))
+              code=$(curl -s -o /dev/null -w "%{http_code}" "$1" || true)
+              if [ "$code" = "200" ]; then echo "$2 up after $((i*3))s"; return 0; fi
+              sleep 3
+            done
+            echo "::error::$2 未在 180s 内就绪（vite 首请求要预构建依赖）"
+            tail -40 "$3" || true
+            return 1
+          }
+          wait_dev http://localhost:5173/ mall-app  /tmp/dev-mall.log
+          wait_dev http://localhost:5174/ admin-app /tmp/dev-admin.log
+
+          cd backend/loadtest
+          if ! python day43-fe-full-stack-e2e.py; then
+            echo "::error::Day 43 前端联调失败 —— 报告尾部："
+            tail -70 day43-fe-full-stack-report.txt || true
+            echo "::group::dev server 日志"
+            tail -20 /tmp/dev-mall.log || true
+            tail -20 /tmp/dev-admin.log || true
+            echo "::endgroup::"
+            exit 1
+          fi
+
       - name: Dump app log on failure
         if: failure()
         run: tail -100 /tmp/app.log || true
