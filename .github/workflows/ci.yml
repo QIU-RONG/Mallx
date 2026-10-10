@@ -46,9 +46,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Build (mvn install, 在线 —— CI 没有本地离线仓库)
+      # ★ 不再 -DskipTests（Day 44）：此前项目 189 个源文件、0 个测试类，
+      #   「测试」全靠 81 个需要起全套基础设施的 Python 端到端脚本 —— 它们能证「链路通」，
+      #   证不了「单个方法对」。现在补上真正的单元测试，install 会跑 test 阶段 ⇒ 失败即构建失败。
+      # ⚠️ 约束：能进 src/test 的必须是**不依赖 DB / Redis / MQ** 的测试
+      #   （本步骤跑在起 postgres 之前）。需要基础设施的验证继续走下面的 Python 脚本。
+      - name: Build + unit tests (mvn install, 在线 —— CI 没有本地离线仓库)
         working-directory: backend/mallx
-        run: mvn -B -ntp install -DskipTests
+        run: mvn -B -ntp install
 
       - name: Start PostgreSQL (dev topology + initdb 01-14)
         working-directory: deploy

@@ -32,6 +32,17 @@
             <artifactId>jjwt-jackson</artifactId>
             <scope>runtime</scope>
         </dependency>
+
+        <!-- ★ Day 44：单元测试（此前 189 个源文件、0 个测试类，CI 一直 -DskipTests）。
+             spring-boot-starter-test 自带 JUnit 5 + AssertJ + Mockito，版本由父 pom 的
+             dependencyManagement 托管（不写 version）。
+             ⚠️ scope=test：只进测试 classpath，不打进生产 jar。
+             ⚠️ 加依赖不够 —— 必须在被测模块各自加，父 pom 里那份只是版本声明。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
 
