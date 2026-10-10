@@ -6,14 +6,14 @@ accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin
 
 [0] BASELINE (psql)
   inventories 行数 = 7 ；恒等式 = t
-    sku1  黑色 256GB         Apple iPhone 17 Pro        total=100  avail=100  locked=0   sold=0  
-    sku2  黑色 512GB         Apple iPhone 17 Pro        total=80   avail=80   locked=0   sold=0  
-    sku3  原色钛金属 512GB      Apple iPhone 17 Pro        total=60   avail=56   locked=0   sold=4  
-    sku4  曜金黑 512GB        Huawei Mate 80 Pro         total=150  avail=147  locked=0   sold=3  
-    sku5  白色 512GB         Xiaomi 15 Ultra            total=120  avail=117  locked=0   sold=3  
-    sku6  i7 16GB 512GB    Lenovo ThinkPad X1 Carbon  total=40   avail=40   locked=0   sold=0  
+    sku1  黑色 256GB         Apple iPhone 17 Pro        total=100  avail=99   locked=0   sold=1  
+    sku2  黑色 512GB         Apple iPhone 17 Pro        total=80   avail=78   locked=0   sold=2  
+    sku3  原色钛金属 512GB      Apple iPhone 17 Pro        total=60   avail=59   locked=0   sold=1  
+    sku4  曜金黑 512GB        Huawei Mate 80 Pro         total=150  avail=149  locked=0   sold=1  
+    sku5  白色 512GB         Xiaomi 15 Ultra            total=120  avail=119  locked=0   sold=1  
+    sku6  i7 16GB 512GB    Lenovo ThinkPad X1 Carbon  total=40   avail=39   locked=0   sold=1  
     sku7  星光色 8GB 256GB    Apple MacBook Air M3       total=90   avail=90   locked=0   sold=0  
-  counters: cart_items=0, inventory_logs=0, order_items=9, orders=8, payments=5
+  counters: cart_items=0, inventory_logs=0, order_items=6, orders=6, payments=6
 
 [1] 匿名 GET /api/admin/inventory/skus
   http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
@@ -21,9 +21,9 @@ accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin
 
 [2] 登录四个身份（token 只在内存里，不落盘）
   demo       code=200 token_len=191
-  op_order   code=200 token_len=311
-  op_product code=200 token_len=421
-  admin      code=200 token_len=503
+  op_order   code=200 token_len=397
+  op_product code=200 token_len=644
+  admin      code=200 token_len=1096
 
 [3] ★ 权限矩阵（同一个点，四种身份 —— 区分度就在这里）
   demo(C 端 token)      http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
@@ -60,9 +60,9 @@ accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin
 [9] 只读性：跑完 DB 必须一个字节都没动
   cart_items       = 0     unchanged
   inventory_logs   = 0     unchanged
-  order_items      = 9     unchanged
-  orders           = 8     unchanged
-  payments         = 5     unchanged
+  order_items      = 6     unchanged
+  orders           = 6     unchanged
+  payments         = 6     unchanged
   inventories     : 逐字节相同
 
 ==============================================================================

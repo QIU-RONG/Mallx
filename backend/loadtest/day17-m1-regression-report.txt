@@ -1,13 +1,13 @@
 ==============================================================================
 MallX  M1 milestone regression   (place -> pay -> ship -> confirm -> review)
 ==============================================================================
-run at : 2026-10-10 16:03:34
+run at : 2026-10-10 17:30:55
 
 [1] CHAIN -- each link's own end-to-end report, regenerated in this run
     (produce side: place -> pay -> ship -> confirm -> review)
   -> Day 14  day14-e2e-walk.py
      proves: place -> pay  (both state-machine exits + the ledger)
-     report mtime : 2026-10-10 16:02:07   (regenerated this run)
+     report mtime : 2026-10-10 17:27:53   (regenerated this run)
      RESULT: 67 / 67 passed
        [0] BASELINE FINGERPRINT (all 7 SKUs)
        [1] login demo (token stays in memory, never on disk)
@@ -23,7 +23,7 @@ run at : 2026-10-10 16:03:34
 
   -> Day 15  day15-ship-confirm.py
      proves: pay -> ship -> confirm
-     report mtime : 2026-10-10 16:02:43   (regenerated this run)
+     report mtime : 2026-10-10 17:28:30   (regenerated this run)
      RESULT: 56 / 56 passed
        [0] BASELINE FINGERPRINT (all 7 SKUs)
        [1] logins (tokens stay in memory, never on disk)
@@ -41,7 +41,7 @@ run at : 2026-10-10 16:03:34
 
   -> Day 16  day16-review-e2e.py
      proves: confirm -> review
-     report mtime : 2026-10-10 16:03:22   (regenerated this run)
+     report mtime : 2026-10-10 17:29:12   (regenerated this run)
      RESULT: 75 / 75 passed
        [0] BASELINE FINGERPRINT
        [1] logins (tokens stay in memory, never on disk)
@@ -58,22 +58,111 @@ run at : 2026-10-10 16:03:34
        [12] CLEANUP -- remove this run's artifacts, restore the baseline
        [13] VERIFY -- the database is byte-for-byte back at baseline
 
-[1b] READ-SIDE -- the same milestone's read surfaces (T2)
-     ★ these are the two scripts that were NOT on the list until Day 24 --
-       which is exactly how Day 22's OrderDetailVO discountAmount drift
-       slipped past every automated regression.
+[1b] READ-SIDE -- 同一里程碑的读面（★ 纯读：跑完 DB 一字节不动）
+     ★ a/b 是 Day 24（T2）补的；d/f 是 Day 43 补的 —— T2 当时只治了它撞上的那半边。
   -> Day 17a  day17-a-order-list-verify.py
      proves: read-side: admin order list, 10 fields reconciled against the DB
-     report mtime : 2026-10-10 16:03:30   (regenerated this run)
+     report mtime : 2026-10-10 17:29:20   (regenerated this run)
      RESULT: 26 / 26 passed
+       [1] DB 基线（直接查库，作为唯一真相）
+       [2] 登录  demo: OK   admin: OK
+       [3] 权限三态（真 HTTP 状态码，不是 body.code）
+       [4] 超管：HTTP 与业务码
+       [5] ★ 逐记录逐字段对账（接口 vs DB，10 字段全覆盖）
+       [6] 两个可选筛选条件（<if>）
+       [7] 分页正确性（不重不漏）与参数夹紧
+       [8] 排序（不带排序的分页 = 随机翻页 / 漏行）
 
   -> Day 17b  day17-b-order-detail-verify.py
      proves: read-side: order detail, 15 fields + items (the T2 blind spot)
-     report mtime : 2026-10-10 16:03:34   (regenerated this run)
+     report mtime : 2026-10-10 17:29:24   (regenerated this run)
      RESULT: 21 / 21 passed
+       [1] DB 基线
+       [2] 登录  demo:OK  intruder:OK  admin:OK  op_order:OK
+       [3] 判别力前提（实测，不假设）
+       [4] 权限三态 —— /api/admin/orders/6
+       [5] ★★ 数据权限反转 —— 同一订单 id，四个身份 × 两个端点
+       [6] 防枚举 —— C 端「不是你的单」与「不存在的单」必须不可区分
+       [7] ★ 逐单逐字段对账（管理端，14 个字段 + items 9 个字段）
+       [8] 边界（HTTP 200 + body.code，不是真 404/400）
+
+  -> Day 17d  day17-d-inventory-list-verify.py
+     proves: read-side: 管理端库存分页，9 字段逐行与 DB 对账（权限矩阵有区分度）
+     report mtime : 2026-10-10 17:30:06   (regenerated this run)
+     RESULT: 40 / 40 passed
+       [0] BASELINE (psql)
+       [1] 匿名 GET /api/admin/inventory/skus
+       [2] 登录四个身份（token 只在内存里，不落盘）
+       [3] ★ 权限矩阵（同一个点，四种身份 —— 区分度就在这里）
+       [4] ★★ 9 字段逐行与 DB 对账（不信接口自报）
+       [5] 排序与恒等式
+       [6] 分页：size=3 取三页，并集必须 == 全量且无交集
+       [7] ★ 夹紧四态（MP 的两个静默坑：size=0 返空列表、size<0 查全表）
+       [8] 边界：非数字 / 负数 page 的原始报错
+       [9] 只读性：跑完 DB 必须一个字节都没动
+
+  -> Day 17f  day17-f-inventory-log-verify.py
+     proves: read-side: 管理端库存流水，8 字段 + 分页夹紧 + 两个可选过滤
+     report mtime : 2026-10-10 17:30:54   (regenerated this run)
+     RESULT: 70 / 70 passed
+       [0] BASELINE (psql)
+       [1] 匿名 GET /api/admin/inventory/logs
+       [2] 登录四个身份（token 只在内存里，不落盘）
+       [3] ★ 权限矩阵（同一个点，四种身份 —— 区分度就在这里）
+       [4] ★ 空表边界：造夹具【之前】先看一眼 —— 空表不能 500
+       [5] 造夹具：直接 INSERT 6 条流水（不动 inventories）
+       [6] ★★ 8 字段逐行与 DB 对账（不信接口自报）
+       [7] 排序
+       [8] 分页：size=2 取三页，并集必须 == 全量且无交集
+       [9] ★ 夹紧四态（MP 的两个静默坑：size=0 返空列表、size<0 查全表）
+       [10] ★★ 可选过滤：eq(condition, 列, 值) 的 condition 必须写对
+       [11] 边界：非数字 page 的原始报错
+       [12] 只读性：除【本脚本自己造的夹具】外，DB 必须一个字节都没动
+       [13] ★ CLEANUP —— 按高水位回收本次夹具（与 day14/15/16/17-C/E 逐字对齐）
+
+[1c] WRITE-SIDE -- 自清理的写面（会改库，但净变化 0 + 删净流水 ⇒ 逐字节回基线）
+     ★ c/e 是 Day 43 补的：两条 docstring 里都写着「好让 day17-m1-regression.py 的 BASELINE RESTORED 保持 YES」——它们本就是为进名单而写的。
+  -> Day 17c  day17-c-order-cancel-verify.py
+     proves: write-side: 管理端取消订单（回补与 C 端同源 + 流水口径 + 权限矩阵）
+     report mtime : 2026-10-10 17:29:53   (regenerated this run)
+     RESULT: 42 / 42 passed
+       [0] BASELINE (psql)
+       [1] 匿名 POST /api/admin/orders/1/cancel
+       [2] 登录三个身份（token 只在内存里，不落盘）
+       [3] C 端 token 打管理端端点（demo 权限集为空 -> 403）
+       [4] 造一张待支付单 A（demo 下单：available -1 / locked +1）
+       [5] ★ op_order(ORDER_ADMIN, id=2) 取消订单 A
+       [6] DB 对账：订单状态（不信接口自报）
+       [7] ★★ 库存回补：releaseLocked 与 deductStock 严格互逆
+       [8] ★★ 流水口径：CANCEL_RELEASE / change=+n / reference_id=orderId
+       [9] ★ 重复取消同一单（这就是端点用 POST 不用 PUT 的原因）
+       [10] 造单 B，改由 admin(SUPER_ADMIN) 取消 —— 两个管理身份都必须能取消
+       [11] ★ 取消已支付单 #1 —— 本日边界的显式声明（不做退款）
+       [12] ★ 边界：不存在的 id / 非数字 id（设计已定案 —— 本栏现在是【断言】，不再只报实测）
+       [13] CLEANUP —— 删掉本次造的单据与流水，库存 SET 回基线
+       [14] VERIFY —— 回到基线（这是留给 day17-m1-regression.py 的前提）
+
+  -> Day 17e  day17-e-inventory-adjust-verify.py
+     proves: write-side: 库存调整（total/available 同向同量、locked/sold 不动、流水自洽）
+     report mtime : 2026-10-10 17:30:32   (regenerated this run)
+     RESULT: 37 / 37 passed
+       [0] BASELINE (psql)
+       [1] 匿名 POST /api/admin/inventory/skus/1/adjust
+       [2] 登录四个身份（token 只在内存里，不落盘）
+       [3] ★ 权限矩阵（先做被拒的两个 —— 顺便证明「被拒 = 零副作用」）
+       [4] delta = 0 → 业务规则拒绝（Service 手工判，不在 DTO 上）
+       [5] DTO 格式校验（@NotNull / @NotBlank / @Size）
+       [6] SKU 不存在（999999）→ 同样是 400，不是 404 / 500
+       [7] ★ 正补货 delta=+5（op_product）
+       [8] ★ 正报损 delta=-3
+       [9] ★ 守卫挡下：delta = -(available+1) → 调整后为负
+       [10] ★ 流水核对（id > 0 的 ADMIN_ADJUST；此刻【还没做还原】）
+       [11] ★ 还原到基线（+5 → -3 的净额是 +2，所以补一次 -2）
+       [12] ★ 终局对账（库存四格）
+       [13] ★ CLEANUP —— 回收本次产生的流水
 
 [1c] COVERAGE
-     listed 5, collected 5   OK
+     listed 9, collected 9   OK
 
 [2] DATABASE -- snapshot now, compare with the baseline
   orders           = 6     unchanged
@@ -105,10 +194,14 @@ MILESTONE M1  --  verdict
   [chain] Day 16   day16-review-e2e.py              75/75  PASS   (this run)
   [read ] Day 17a  day17-a-order-list-verify.py     26/26  PASS   (this run)
   [read ] Day 17b  day17-b-order-detail-verify.py   21/21  PASS   (this run)
+  [read ] Day 17d  day17-d-inventory-list-verify.py 40/40  PASS   (this run)
+  [read ] Day 17f  day17-f-inventory-log-verify.py  70/70  PASS   (this run)
+  [write] Day 17c  day17-c-order-cancel-verify.py   42/42  PASS   (this run)
+  [write] Day 17e  day17-e-inventory-adjust-verify.py 37/37  PASS   (this run)
 
   (a) every CHAIN link all-green        : YES
-  (a2) every READ-SIDE check all-green  : YES
-  (b) all 5 listed reports collected    : YES
+  (a2) every SIDE check all-green       : YES
+  (b) all 9 listed reports collected    : YES
   (c) database back at baseline         : YES
   (d) milestone invariants all zero     : YES
 

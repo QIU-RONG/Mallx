@@ -360,7 +360,7 @@ cd backend/loadtest
 python day17-m1-regression.py --baseline
 python day14-e2e-walk.py && python day15-ship-confirm.py && python day16-review-e2e.py
 python day17-a-order-list-verify.py && python day17-b-order-detail-verify.py
-python day17-m1-regression.py                            # → 245/245 + BASELINE RESTORED: YES
+python day17-m1-regression.py                            # → 434/434 + BASELINE RESTORED: YES（D43 起名单 9 条）
 ```
 
 所有脚本都会把自己的结论写成同名 `*-report.txt`，便于与上面的数字逐项对照。

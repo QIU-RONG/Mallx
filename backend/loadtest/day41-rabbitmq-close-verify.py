@@ -17,7 +17,11 @@ import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-BASE = "http://127.0.0.1:8080"
+# ★ CI（D43）：MALLX_BASE 可覆盖 —— 这条验收在 CI 里要打**短 TTL 的 8081 实例**
+#   （ORDER_CLOSE_DELAY_MS=5000，见 .github/workflows/ci.yml）。不能复用 8080：
+#   M1 链路的下单→支付需要一个**默认 TTL**（120s）的应用，5s 的 TTL 会跟写链路抢时序
+#   （订单可能在支付前就被自动关掉）⇒ 两者必须各起一个实例。
+BASE = os.environ.get("MALLX_BASE", "http://127.0.0.1:8080")
 REPORT = lp(r"D:\MallX\backend\loadtest\day41-rabbitmq-close-verify-report.txt")
 
 DOCKER = os.environ.get("MALLX_DOCKER") or r"C:\Users\TIE\AppData\Local\Programs\DockerDesktop\resources\bin\docker.exe"

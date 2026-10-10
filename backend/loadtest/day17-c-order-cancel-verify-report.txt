@@ -4,8 +4,8 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
 ==============================================================================
 
 [0] BASELINE (psql)
-  stock          sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
-  counters: cart_items=0, inventory_logs=0, order_items=9, orders=8, payments=5
+  stock          sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
+  counters: cart_items=0, inventory_logs=0, order_items=6, orders=6, payments=6
   inventory_logs 水位线 = 0 ；找一个 PAID 单做对照 = 1
 
 [1] 匿名 POST /api/admin/orders/1/cancel
@@ -14,8 +14,8 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
 
 [2] 登录三个身份（token 只在内存里，不落盘）
   demo     code=200 token_len=191
-  op_order code=200 token_len=311
-  admin    code=200 token_len=503
+  op_order code=200 token_len=397
+  admin    code=200 token_len=1096
 
 [3] C 端 token 打管理端端点（demo 权限集为空 -> 403）
   http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
@@ -23,10 +23,10 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
 
 [4] 造一张待支付单 A（demo 下单：available -1 / locked +1）
     购物车里没有 sku4 -> POST /api/cart
-  新订单 id = 9052
+  新订单 id = 179
   psql: {'status': 'PENDING_PAYMENT', 'cancelled_at': 'NULL', 'paid_at': 'NULL'}
-  下单后            sku4  total=150  available=146  locked=  1  sold=  3  identity=OK
-  流水：115|4|ORDER_LOCK|-1|147|146|NULL
+  下单后            sku4  total=150  available=148  locked=  1  sold=  1  identity=OK
+  流水：366|4|ORDER_LOCK|-1|149|148|NULL
 
 [5] ★ op_order(ORDER_ADMIN, id=2) 取消订单 A
     注意 op_order.id=2 与订单属主 demo.userId=1 【不相等】——
@@ -34,15 +34,15 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
   http=200 code=200 message=success data=null
 
 [6] DB 对账：订单状态（不信接口自报）
-  psql: {'status': 'CANCELLED', 'cancelled_at': '2026-09-22 21:46:05.139362', 'paid_at': 'NULL'}
+  psql: {'status': 'CANCELLED', 'cancelled_at': '2026-10-10 17:29:35.185601', 'paid_at': 'NULL'}
 
 [7] ★★ 库存回补：releaseLocked 与 deductStock 严格互逆
-  取消后            sku4  total=150  available=147  locked=  0  sold=  3  identity=OK
+  取消后            sku4  total=150  available=149  locked=  0  sold=  1  identity=OK
   vs 基线：available +0  locked +0  sold +0
 
 [8] ★★ 流水口径：CANCEL_RELEASE / change=+n / reference_id=orderId
-  本次新增流水：115|4|ORDER_LOCK|-1|147|146|NULL  ;  116|4|CANCEL_RELEASE|1|146|147|9052
-  该条：sku=4 change=1 before=146 after=147 ref=9052
+  本次新增流水：366|4|ORDER_LOCK|-1|149|148|NULL  ;  367|4|CANCEL_RELEASE|1|148|149|179
+  该条：sku=4 change=1 before=148 after=149 ref=179
   ★ 账本自洽：本次 Σ(change) = 0   （下单 -1 与取消 +1 相抵）
 
 [9] ★ 重复取消同一单（这就是端点用 POST 不用 PUT 的原因）
@@ -50,12 +50,12 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
 
 [10] 造单 B，改由 admin(SUPER_ADMIN) 取消 —— 两个管理身份都必须能取消
     购物车里没有 sku4 -> POST /api/cart
-  新订单 id = 9053
+  新订单 id = 180
   admin 取消 http=200 code=200 -> status=CANCELLED
 
 [11] ★ 取消已支付单 #1 —— 本日边界的显式声明（不做退款）
   http=200 code=400 message=订单状态不允许取消
-  该单前后：{'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-19 15:05:21.106577'} -> {'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-19 15:05:21.106577'}
+  该单前后：{'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-25 17:13:13.236408'} -> {'status': 'PAID', 'cancelled_at': 'NULL', 'paid_at': '2026-09-25 17:13:13.236408'}
 
 [12] ★ 边界：不存在的 id / 非数字 id（设计已定案 —— 本栏现在是【断言】，不再只报实测）
   POST /api/admin/orders/99999999/cancel -> http=200 code=404 message=订单不存在
@@ -69,15 +69,15 @@ target : http://127.0.0.1:8080   account: demo(C端) / op_order(ORDER_ADMIN) / a
 ==============================================================================
 [13] CLEANUP —— 删掉本次造的单据与流水，库存 SET 回基线
 ==============================================================================
-  要删的订单：[9052, 9053]
+  要删的订单：[179, 180]
   要删的流水：id > 0
 
 [14] VERIFY —— 回到基线（这是留给 day17-m1-regression.py 的前提）
   cart_items       = 0     unchanged
   inventory_logs   = 0     unchanged
-  order_items      = 9     unchanged
-  orders           = 8     unchanged
-  payments         = 5     unchanged
+  order_items      = 6     unchanged
+  orders           = 6     unchanged
+  payments         = 6     unchanged
   inventories     : 逐字节相同
 
 ==============================================================================

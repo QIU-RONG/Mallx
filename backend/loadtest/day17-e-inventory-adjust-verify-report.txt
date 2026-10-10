@@ -6,10 +6,10 @@ accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin
 ==============================================================================
 
 [0] BASELINE (psql)
-  sku1  total=100  avail=100  locked=0   sold=0  
+  sku1  total=100  avail=99   locked=0   sold=1  
   恒等式 = True ；inventory_logs 水位线 = id>0
-  counters: cart_items=0, inventory_logs=0, order_items=9, orders=8, payments=5
-  ★ 基线快照 = total=100  avail=100  locked=0   sold=0  
+  counters: cart_items=0, inventory_logs=0, order_items=6, orders=6, payments=6
+  ★ 基线快照 = total=100  avail=99   locked=0   sold=1  
 
 [1] 匿名 POST /api/admin/inventory/skus/1/adjust
   http=401 code=401 {"code":401,"message":"未登录或登录已过期","data":null}
@@ -17,9 +17,9 @@ accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin
 
 [2] 登录四个身份（token 只在内存里，不落盘）
   demo        code=200 token_len=191
-  op_order    code=200 token_len=311
-  op_product  code=200 token_len=421
-  admin       code=200 token_len=503
+  op_order    code=200 token_len=397
+  op_product  code=200 token_len=644
+  admin       code=200 token_len=1096
 
 [3] ★ 权限矩阵（先做被拒的两个 —— 顺便证明「被拒 = 零副作用」）
   demo(C 端 token)      http=403 code=403 {"code":403,"message":"没有权限访问","data":null}
@@ -42,29 +42,29 @@ accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin
 
 [7] ★ 正补货 delta=+5（op_product）
   http=200 code=200 message=success
-  total=100  avail=100  locked=0   sold=0    →  total=105  avail=105  locked=0   sold=0  
+  total=100  avail=99   locked=0   sold=1    →  total=105  avail=104  locked=0   sold=1  
 
 [8] ★ 正报损 delta=-3
   http=200 code=200 message=success
-  total=105  avail=105  locked=0   sold=0    →  total=102  avail=102  locked=0   sold=0  
+  total=105  avail=104  locked=0   sold=1    →  total=102  avail=101  locked=0   sold=1  
 
 [9] ★ 守卫挡下：delta = -(available+1) → 调整后为负
-  当前 avail=102 ，提交 delta=-103
+  当前 avail=101 ，提交 delta=-102
   http=200 code=400 message=调整后可用/总库存不能为负
   对照：moveLockedToSold / releaseLocked 的 0 行是【账目不一致】→ 500；
         这里的 0 行是【管理员填了个太大的负数】→ 400。同为 0 行，语义不同。
 
 [10] ★ 流水核对（id > 0 的 ADMIN_ADJUST；此刻【还没做还原】）
   本次新增 2 条：
-    id=94   type=ADMIN_ADJUST  change=5     before=100  after=105  ref=NULL sku=1
-    id=95   type=ADMIN_ADJUST  change=-3    before=105  after=102  ref=NULL sku=1
+    id=370  type=ADMIN_ADJUST  change=5     before=99   after=104  ref=NULL sku=1
+    id=371  type=ADMIN_ADJUST  change=-3    before=104  after=101  ref=NULL sku=1
 
 [11] ★ 还原到基线（+5 → -3 的净额是 +2，所以补一次 -2）
   http=200 code=200 message=success
 
 [12] ★ 终局对账（库存四格）
-  基线 total=100  avail=100  locked=0   sold=0  
-  终局 total=100  avail=100  locked=0   sold=0  
+  基线 total=100  avail=99   locked=0   sold=1  
+  终局 total=100  avail=99   locked=0   sold=1  
 
 [13] ★ CLEANUP —— 回收本次产生的流水
   DELETE FROM inventory_logs WHERE id > 0
@@ -76,9 +76,9 @@ accounts: demo(C端) / op_order(ORDER_ADMIN) / op_product(PRODUCT_ADMIN) / admin
   五项 counters 终局 vs 基线：
     cart_items     0 → 0  (Δ=+0)
     inventory_logs 0 → 0  (Δ=+0)
-    order_items    9 → 9  (Δ=+0)
-    orders         8 → 8  (Δ=+0)
-    payments       5 → 5  (Δ=+0)
+    order_items    6 → 6  (Δ=+0)
+    orders         6 → 6  (Δ=+0)
+    payments       6 → 6  (Δ=+0)
   ★ 这是 day17-m1-regression.py 能给出 BASELINE RESTORED: YES 的前提
 
 ==============================================================================

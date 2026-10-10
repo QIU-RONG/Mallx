@@ -74,7 +74,10 @@ STAMP = os.path.join(HERE, "day17-m1-stamp.txt")
 # kind: "chain" = an actual link of place -> pay -> ship -> confirm -> review
 #       "read"  = a read-side surface of the same milestone (admin order list /
 #                 order detail with discountAmount). Read-side scripts must be
-#                 pure reads, otherwise requirement (b) below cannot hold.
+#                 pure reads, otherwise requirement (c) below cannot hold.
+#       "write" = ★ Day 43 新增：会改库的写面（取消订单 / 库存调整）。它们【必须自清理】——
+#                 净变化 0 + 高水位删流水 ⇒ 跑完逐字节回基线，否则 (c) 一样不成立。
+#                 把写面纳进来的理由：T2 只补了读侧 a/b，而 c/e 这两条写侧同样漏着。
 #
 # ★ 顺序即执行顺序：读侧的两条放在链路段【之后】—— 它们断言的是「链路跑完之后
 #   库里那些订单长什么样」，所以必须在链路产生数据之后再跑。
@@ -89,11 +92,25 @@ RUNS = [
      "read-side: admin order list, 10 fields reconciled against the DB", "read"),
     ("Day 17b", "day17-b-order-detail-verify.py", "day17-b-order-detail-verify-report.txt",
      "read-side: order detail, 15 fields + items (the T2 blind spot)", "read"),
+    # ---- Day 43（D43 收口）：T2 的同族盲区 ----
+    # ★ T2 当时只把 a/b 补进了名单，而 c/d/e/f 四条（订单取消 / 库存列表 / 库存调整 /
+    #   库存流水）同样不在 —— 换句话说 T2 只治了它当场撞上的那半边。
+    # ★ 四条都自带还原（c/e 是净变化 0 的往返 + 高水位删流水），各自 docstring 里都写着
+    #   「跑完 … 全部回到基线，好让 day17-m1-regression.py 的 BASELINE RESTORED 保持 YES」
+    #   ⇒ 它们本就是为进这份名单而写的，只是没被登记进来。
+    ("Day 17c", "day17-c-order-cancel-verify.py", "day17-c-order-cancel-verify-report.txt",
+     "write-side: 管理端取消订单（回补与 C 端同源 + 流水口径 + 权限矩阵）", "write"),
+    ("Day 17d", "day17-d-inventory-list-verify.py", "day17-d-inventory-list-verify-report.txt",
+     "read-side: 管理端库存分页，9 字段逐行与 DB 对账（权限矩阵有区分度）", "read"),
+    ("Day 17e", "day17-e-inventory-adjust-verify.py", "day17-e-inventory-adjust-verify-report.txt",
+     "write-side: 库存调整（total/available 同向同量、locked/sold 不动、流水自洽）", "write"),
+    ("Day 17f", "day17-f-inventory-log-verify.py", "day17-f-inventory-log-verify-report.txt",
+     "read-side: 管理端库存流水，8 字段 + 分页夹紧 + 两个可选过滤", "read"),
 ]
 
 # ★ 护栏：名单长度写死。改名单却忘了同步报告段落/verdict 逻辑时，这里会立刻炸
 #   （同 day20-coupon-verify.py 的 EXPECTED 常量 —— 那道护栏第一次跑就抓到过错）。
-EXPECTED_RUNS = 5
+EXPECTED_RUNS = 9
 
 assert len(RUNS) == EXPECTED_RUNS, (
     "RUNS has %d entries, EXPECTED_RUNS says %d -- update both (and the verdict "
@@ -189,7 +206,15 @@ def parse(path):
     text = read_report(path)
     m = re.search(r"ASSERTIONS:\s*(\d+)\s*/\s*(\d+)\s*passed", text)
     if not m:
-        m2 = re.search(r"RESULT:\s*(\d+)\s*/\s*(\d+)\s*passed", text)
+        # ★★ day17-e 用的是 "RESULT: 37/37 PASS"，而 c/d/f 用 "RESULT: 42/42 passed"。
+        #   两者差的不只是大小写 —— 还有「有没有 ed」。所以必须写成 pass(?:ed)?：
+        #   只加 re.I 是不够的（我第一版就只加了 re.I，以为解决了，是当场跑 parse
+        #   自检才发现的 —— 这条纪律存在的理由就在这）。
+        #   ⚠️ 这已经是【第二次】因为「报告结尾格式不同」导致采集器读不出（Day 24 是 a/b）。
+        #   根治方案是统一各脚本的结尾格式；在那之前每加一条脚本都要当场验一次 parse ——
+        #   做法：用 importlib 加载本模块，对 RUNS 里每一份报告直接调 parse()，断言 passed == total。
+        #   （名单与常量的同步由模块顶层的 assert len(RUNS) == EXPECTED_RUNS 守着。）
+        m2 = re.search(r"RESULT:\s*(\d+)\s*/\s*(\d+)\s*pass(?:ed)?", text, re.I)
         m = m2
     if not m:
         # ★★ Day 24（T2 落地时补）：day17-a / day17-b 用的是【另一套】报告结尾 ——
@@ -264,70 +289,50 @@ def mode_collect():
     # ★ 分两小节输出：链路段（生产数据的那条路）与读侧段（消费同一条数据）。
     #   把两者混在一张清单里，会让「链路绿了」这句话变得含糊 ——
     #   读者分不清「端到端走通」与「出参字段对得上」。
-    say("[1] CHAIN -- each link's own end-to-end report, regenerated in this run")
-    say("    (produce side: place -> pay -> ship -> confirm -> review)")
+    # ★ Day 43：三段（chain / read / write）共用一个循环 ——
+    #   原来是 chain 与 read 各抄一遍，再加第三段就得再抄一遍。
+    SECTIONS = [
+        ("chain", "[1] CHAIN -- each link's own end-to-end report, regenerated in this run",
+         "    (produce side: place -> pay -> ship -> confirm -> review)"),
+        ("read", "[1b] READ-SIDE -- 同一里程碑的读面（★ 纯读：跑完 DB 一字节不动）",
+         "     ★ a/b 是 Day 24（T2）补的；d/f 是 Day 43 补的 —— T2 当时只治了它撞上的那半边。"),
+        ("write", "[1c] WRITE-SIDE -- 自清理的写面（会改库，但净变化 0 + 删净流水 ⇒ 逐字节回基线）",
+         "     ★ c/e 是 Day 43 补的：两条 docstring 里都写着「好让 day17-m1-regression.py 的"
+         " BASELINE RESTORED 保持 YES」——它们本就是为进名单而写的。"),
+    ]
     results = []
-    for day, script, report, link, kind in RUNS:
-        if kind != "chain":
-            continue
-        path = os.path.join(HERE, report)
-        say("  -> %s  %s" % (day, script))
-        say("     proves: %s" % link)
-        if not os.path.exists(path):
-            say("     report MISSING: %s" % report)
-            results.append(dict(day=day, script=script, link=link, kind=kind,
-                                fresh=False, passed=None, total=None, when=None,
-                                parsed=None, missing=True))
+    for kind, title, subtitle in SECTIONS:
+        say(title)
+        say(subtitle)
+        for day, script, report, link, k in RUNS:
+            if k != kind:
+                continue
+            path = os.path.join(HERE, report)
+            say("  -> %s  %s" % (day, script))
+            say("     proves: %s" % link)
+            if not os.path.exists(path):
+                say("     report MISSING: %s" % report)
+                results.append(dict(day=day, script=script, link=link, kind=kind,
+                                    fresh=False, passed=None, total=None, when=None,
+                                    parsed=None, missing=True))
+                say("")
+                continue
+            when = os.path.getmtime(path)
+            fresh = (stamp_mtime is None) or (when > stamp_mtime)
+            p = parse(path)
+            results.append(dict(day=day, script=script, link=link, kind=kind, fresh=fresh,
+                                passed=p["passed"], total=p["total"], when=when,
+                                parsed=p, missing=False))
+            say("     report mtime : %s   (%s)"
+                % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(when)),
+                   "regenerated this run" if fresh else "★ STALE -- older than the stamp"))
+            if p["passed"] is None:
+                say("     RESULT: 读不出断言数 —— 文件在，但没有 ASSERTIONS/RESULT/VERDICT 行")
+            else:
+                say("     RESULT: %d / %d passed" % (p["passed"], p["total"]))
+            for ln in p["sections"]:
+                say("       %s" % ln)
             say("")
-            continue
-        when = os.path.getmtime(path)
-        fresh = (stamp_mtime is None) or (when > stamp_mtime)
-        p = parse(path)
-        results.append(dict(day=day, script=script, link=link, kind=kind, fresh=fresh,
-                            passed=p["passed"], total=p["total"], when=when,
-                            parsed=p, missing=False))
-        say("     report mtime : %s   (%s)"
-            % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(when)),
-               "regenerated this run" if fresh else "★ STALE -- older than the stamp"))
-        if p["passed"] is None:
-            say("     RESULT: 读不出断言数 —— 文件在，但没有 ASSERTIONS/RESULT/VERDICT 行")
-        else:
-            say("     RESULT: %d / %d passed" % (p["passed"], p["total"]))
-        for ln in p["sections"]:
-            say("       %s" % ln)
-        say("")
-
-    say("[1b] READ-SIDE -- the same milestone's read surfaces (T2)")
-    say("     ★ these are the two scripts that were NOT on the list until Day 24 --")
-    say("       which is exactly how Day 22's OrderDetailVO discountAmount drift")
-    say("       slipped past every automated regression.")
-    for day, script, report, link, kind in RUNS:
-        if kind != "read":
-            continue
-        path = os.path.join(HERE, report)
-        say("  -> %s  %s" % (day, script))
-        say("     proves: %s" % link)
-        if not os.path.exists(path):
-            say("     report MISSING: %s" % report)
-            results.append(dict(day=day, script=script, link=link, kind=kind,
-                                fresh=False, passed=None, total=None, when=None,
-                                parsed=None, missing=True))
-            say("")
-            continue
-        when = os.path.getmtime(path)
-        fresh = (stamp_mtime is None) or (when > stamp_mtime)
-        p = parse(path)
-        results.append(dict(day=day, script=script, link=link, kind=kind, fresh=fresh,
-                            passed=p["passed"], total=p["total"], when=when,
-                            parsed=p, missing=False))
-        say("     report mtime : %s   (%s)"
-            % (time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(when)),
-               "regenerated this run" if fresh else "★ STALE -- older than the stamp"))
-        if p["passed"] is None:
-            say("     RESULT: 读不出断言数 —— 文件在，但没有 ASSERTIONS/RESULT/VERDICT 行")
-        else:
-            say("     RESULT: %d / %d passed" % (p["passed"], p["total"]))
-        say("")
 
     # ★ 护栏：报告条数必须与名单一致 —— 漏跑一条时「少了」这件事本身要现形，
     #   而不是让 verdict 在一份短名单上「全绿」。
@@ -372,18 +377,20 @@ def mode_collect():
     say("MILESTONE M1  --  verdict")
     say("=" * 78)
     chain = [r for r in results if r["kind"] == "chain"]
-    read = [r for r in results if r["kind"] == "read"]
+    # ★ read 与 write 合成「side」一起判：它们共享同一个硬要求 ——
+    #   跑完必须回到基线（读侧是「不改」，写侧是「改完撤回」），所以同一把尺子。
+    side = [r for r in results if r["kind"] in ("read", "write")]
 
     def green(rs):
         return all(r["passed"] is not None and r["passed"] == r["total"] and r["fresh"]
                    for r in rs)
 
     chain_green = green(chain)
-    read_green = green(read)
+    side_green = green(side)
     coverage_ok = (len(results) == EXPECTED_RUNS)
 
     for r in results:
-        tag = "chain" if r["kind"] == "chain" else "read "
+        tag = {"chain": "chain", "read ": "read ", "read": "read ", "write": "write"}[r["kind"]]
         if r["passed"] is None:
             # ★ 区分两种「读不出来」—— 它们的排查方向完全不同：
             #   文件不存在 ⇒ 那个脚本根本没跑；
@@ -402,13 +409,13 @@ def mode_collect():
                    "this run" if r["fresh"] else "STALE report"))
     say("")
     say("  (a) every CHAIN link all-green        : %s" % ("YES" if chain_green else "NO"))
-    say("  (a2) every READ-SIDE check all-green  : %s" % ("YES" if read_green else "NO"))
+    say("  (a2) every SIDE check all-green       : %s" % ("YES" if side_green else "NO"))
     say("  (b) all %d listed reports collected    : %s"
         % (EXPECTED_RUNS, "YES" if coverage_ok else "NO -- see [1c]"))
     say("  (c) database back at baseline         : %s"
         % ("YES" if clean else ("UNKNOWN (no baseline)" if clean is None else "NO")))
     say("  (d) milestone invariants all zero     : %s" % ("YES" if all_zero else "NO"))
-    verdict = chain_green and read_green and coverage_ok and (clean is True) and all_zero
+    verdict = chain_green and side_green and coverage_ok and (clean is True) and all_zero
     say("")
     say("  M1 REGRESSION: %s" % ("OK -- the chain still works, the read surfaces still"
                                 " match, and the books balance"
@@ -419,8 +426,8 @@ def mode_collect():
     tp = sum(r["passed"] or 0 for r in results)
     tt = sum(r["total"] or 0 for r in results)
     print("ASSERTIONS ACROSS M1 (%d scripts): %d / %d passed" % (len(results), tp, tt))
-    print("CHAIN ALL-GREEN: %s   READ-SIDE ALL-GREEN: %s   COVERAGE: %d/%d"
-          % ("YES" if chain_green else "NO", "YES" if read_green else "NO",
+    print("CHAIN ALL-GREEN: %s   SIDE ALL-GREEN: %s   COVERAGE: %d/%d"
+          % ("YES" if chain_green else "NO", "YES" if side_green else "NO",
              len(results), EXPECTED_RUNS))
     print("BASELINE RESTORED: %s" % ("YES" if clean else ("UNKNOWN" if clean is None else "NO")))
     print("M1 REGRESSION: %s" % ("OK" if verdict else "NOT CLEAN"))

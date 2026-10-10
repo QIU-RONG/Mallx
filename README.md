@@ -10,7 +10,8 @@
 状态：后端 V1.0–V1.4（前半）完成（Day 01–42）  ·  前端 FE1–FE4 完成 + 全栈联调跑通（Day 43）  ·  待办：V1.4 远端托管 + V2.0 微服务
 端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   后端模块 11 个   ·   前端应用 2 个
 Java 189 文件 / 15.1k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 16 份
-回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
+回归基线：**M1 全链路 434 条断言**（3 链 + 4 读侧 + 2 写侧；Day 43 名单 5→9）＋ 各域验收脚本见 §测试与回归末表，
+每次改动必跑（CI 每次 push 自动跑同一套；D43 起 day41 与前端 e2e 也已进 CI）
 ```
 
 第一次来？直接跳到 **[快速开始](#快速开始)**，或先看 **[接口文档](#接口文档)**。
@@ -375,20 +376,25 @@ python day17-m1-regression.py --baseline      # ① 记录基线（全表计数�
 python day14-e2e-walk.py                      # ② 走全链路：下单→支付→发货→收货→评价
 python day15-ship-confirm.py
 python day16-review-e2e.py
-python day17-a-order-list-verify.py           #    读侧
+python day17-a-order-list-verify.py           #    读侧（订单列表 / 详情）
 python day17-b-order-detail-verify.py
+python day17-c-order-cancel-verify.py         #    写侧（自清理：净变化 0 + 删流水）
+python day17-d-inventory-list-verify.py       #    读侧（库存列表 / 流水）
+python day17-e-inventory-adjust-verify.py     #    写侧（+5 → -3 → -2 归位）
+python day17-f-inventory-log-verify.py
 python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 ```
 
-> ★★ **为什么需要 ⓪**：M1 的五个脚本各自带着「干净起始态」的隐藏前置——
+> ★★ **为什么需要 ⓪**：M1 的九个脚本各自带着「干净起始态」的隐藏前置——
 > 流水必须空、全库无挂起单、sold 与已付订单对账一致、读侧要有历史订单可读、
 > 还要 `intruder` 账号和 `address_id=2`。这些在 dev 库里从来都是手工测试的残留，
-> 全新 initdb 库直接跑 M1 只有 44/72（脚本早退 ⇒ 断言总数也从 245 掉到 72）。夹具把它们固化成脚本（幂等，可重复），
-> **245/245 从此可以从零复现**——这也是 CI 能成立的前提。
+> 全新 initdb 库直接跑 M1 会大幅掉分（脚本早退 ⇒ 断言总数也跟着缩水）。夹具把它们固化成脚本（幂等，可重复），
+> **434/434 从此可以从零复现**——这也是 CI 能成立的前提。
+> 　　　　　　　　　　（Day 26 实测的是 5 脚本时代的 `44/72`；Day 43 把名单扩到 9 脚本后未重测「无夹具」那一侧，此处不再写具体数字。）
 
 | 脚本 | 覆盖 | 断言 |
 |---|---|---|
-| `day17-m1-regression.py` | **M1 全链路回归**（3 条链路 + 2 条读侧，含逐字节回基线） | **245** |
+| `day17-m1-regression.py` | **M1 全链路回归**（3 条链路 + 4 条读侧 + 2 条写侧，含逐字节回基线） | **434** |
 | `day23-rbac-verify.py` | 管理端 / 角色 / 权限 / 分配 + 权限装载链路 | 91 |
 | `day20-coupon-verify.py` | 优惠券发放 / 领取 / 我的券 | 82 |
 | `day22-admin-verify.py` | 用户管理 + 仪表盘口径 | 67 |
@@ -412,8 +418,8 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day38-redis-detail-verify.py` | **详情缓存验收**：miss回填 / 命中逐字节一致 / ★毒性注入对照组（改写缓存毒值必须被读到）/ 改名失效 / Redis 停机降级 / 软删 404 | 25 |
 | `day39-tree-brand-verify.py` | **树/品牌缓存验收**：同一代次键域的三层缓存，各做回填/毒性注入/失效 | 22 |
 | `day40-redis-guard-verify.py` | **负缓存护栏**：下架→404→NEG→短路；★重新上架→代次翻转→200（没误伤恢复）；幽灵 id 穿透被挡 | 19 |
-| `day41-rabbitmq-close-verify.py` | **延迟关单验收**：下单→TTL→DLX→cancelOne，★秒级关闭（6.1s，扫描兜底 60s+2min）；高水位自清 | 12 |
-| `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数 | 31 |
+| `day41-rabbitmq-close-verify.py` | **延迟关单验收**：下单→TTL→DLX→cancelOne，★秒级关闭（6.1s，扫描兜底 60s+2min）；高水位自清。★ 已进 CI（短 TTL 的 :8081 实例） | 13 |
+| `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数。★ Day 43 补了 `locked_stock` 对账（排在幂等检查**之前**） | 32 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
 | `day43-fe-full-stack-e2e.py` | **前端全栈联调**：两个 dev server 代理 + 跨端链路（C 端下单支付 → 管理端发货 → C 端收货评价）+ 跨端权限对照 + 基线还原。★ 字段名以**前端自己的类型定义**为准（`frontend/*/src/types/api.d.ts`） | 54 |
 
