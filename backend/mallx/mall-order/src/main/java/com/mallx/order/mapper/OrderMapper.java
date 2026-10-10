@@ -6,6 +6,7 @@ import com.mallx.order.entity.Order;
 import com.mallx.order.vo.AddressForOrderVO;
 import com.mallx.order.vo.AdminOrderVO;
 import com.mallx.order.vo.OrderItemSourceVO;
+import com.mallx.order.vo.OrderRefundContext;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
@@ -244,4 +245,56 @@ public interface OrderMapper extends BaseMapper<Order> {
     IPage<AdminOrderVO> selectAdminOrders(IPage<AdminOrderVO> page,
                                           @Param("status") String status,
                                           @Param("userId") Long userId);
+
+    // ================== 售后域（Day 46） ==================
+
+    /**
+     * ★★ 售后域只读门面：取「这张订单能不能退、退多少」的事实。
+     *
+     * <p>★★ 归属过滤写死在 {@code WHERE}（{@code o.user_id = #{userId}}）⇒
+     * 返回 {@code null} <b>同时</b>表示「订单不存在」与「订单不是你的」，
+     * 两种原因在数据库层就合成了一个空结果（与 {@code selectAddressForOrder} /
+     * {@code OrderItemMapper#selectBuyContext} 同一条 404 伪装口径）。
+     *
+     * <p>★ 只取四列（见 {@link com.mallx.order.vo.OrderRefundContext}）：
+     * 售后域不该认识 {@code orders} 的全字段 —— 那是订单域的内部形状。
+     *
+     * @param userId 来自 token，绝不接受客户端传参
+     * @param orderId 订单 id
+     * @return 事实；不存在<b>或</b>不是你的 → {@code null}
+     */
+    OrderRefundContext selectRefundContext(@Param("userId") Long userId,
+                                           @Param("orderId") Long orderId);
+
+    /**
+     * ★★★ 退款完成：CAS 把订单推进到 {@code REFUNDED}（条件 UPDATE 在本项目的第七次使用）。
+     *
+     * <p>★ 起点集合是 <b>{@code PAID} / {@code SHIPPED} / {@code COMPLETED}</b> ——
+     * 也就是「已付过钱、且还没退过」的三种状态：
+     * <ul>
+     *   <li>{@code PAID}：付了没发货 → 走<b>仅退款</b>；</li>
+     *   <li>{@code SHIPPED} / {@code COMPLETED}：货已发出 → 走<b>退货退款</b>；</li>
+     *   <li>{@code PENDING_PAYMENT} / {@code CANCELLED} 不在集合里 ——
+     *       前者该去取消，后者没有钱可退；</li>
+     *   <li>{@code REFUNDED} 也不在集合里 ⇒ <b>同一张单不可能退两次</b>。</li>
+     * </ul>
+     *
+     * <p>★★ 为什么必须是 CAS 而不是「先查后改」：
+     * 两个售后审核员同时点「执行退款」，都会先读到 {@code PAID}，
+     * 各自 UPDATE 一次 ⇒ 钱退两次、库存回补两次。
+     * 把状态判断放进 {@code WHERE}，由数据库做原子比较，
+     * <b>只有第一个人能拿到 1 行</b>，第二个人拿 0 行 → 抛异常 → 整笔回滚。
+     *
+     * <p>★ 与 {@link #markPaid} 一样 {@code WHERE} 里<b>不带 user_id</b>：
+     * 归属与「该不该退」已在售后域的 {@code selectRefundContext} 验完，
+     * 再带进来会让「订单不存在 / 不是你的 / 状态不对」三种 0 行原因糊在一起。
+     *
+     * <p>★ {@code refunded_at} 由 SQL 手写（不挂 fill）——
+     * 与 {@code paid_at} / {@code shipped_at} 同理由：它记的是业务事实发生的那一刻。
+     * ⚠️ 本列是本表<b>第一次</b>被写入（此前全为 NULL）。
+     *
+     * @param orderId 订单主键
+     * @return 影响行数：1 = 抢到了；0 = 订单不存在 / 已退过 / 状态不在起点集合里
+     */
+    int markRefunded(@Param("orderId") Long orderId);
 }

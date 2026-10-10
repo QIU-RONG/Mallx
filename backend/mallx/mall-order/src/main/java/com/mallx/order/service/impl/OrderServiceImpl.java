@@ -23,6 +23,8 @@ import com.mallx.order.vo.AdminOrderVO;
 import com.mallx.order.vo.OrderDetailVO;
 import com.mallx.order.vo.OrderItemSourceVO;
 import com.mallx.order.vo.OrderItemVO;
+import com.mallx.order.vo.OrderRefundContext;
+import com.mallx.order.vo.OrderRefundItem;
 import com.mallx.order.vo.OrderVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -613,6 +615,29 @@ public class OrderServiceImpl implements OrderService {
         }
         if (!cancelExecutor.cancelOne(orderId)) {
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许取消");
+        }
+    }
+
+    // ============================ 售后域门面（Day 46） ============================
+
+    @Override
+    public OrderRefundContext getRefundContext(Long userId, Long orderId) {
+        // ★ 归属过滤写在 SQL 里：null 同时表示「不存在」与「不是你的」，不可区分
+        return orderMapper.selectRefundContext(userId, orderId);
+    }
+
+    @Override
+    public List<OrderRefundItem> listItemsForRefund(Long orderId) {
+        return orderItemMapper.selectItemsForRefund(orderId);
+    }
+
+    @Override
+    public void markRefunded(Long orderId) {
+        // ★ CAS：0 行 = 订单不存在 / 已退过 / 状态不在 (PAID, SHIPPED, COMPLETED) 里。
+        //   ★★ 「已退过」正是靠这一行挡住的 —— REFUNDED 不在起点集合里，
+        //       所以同一张单第二次执行退款必然 0 行 ⇒ 调用方整笔回滚 ⇒ 不可能退两次钱。
+        if (orderMapper.markRefunded(orderId) == 0) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许退款");
         }
     }
 

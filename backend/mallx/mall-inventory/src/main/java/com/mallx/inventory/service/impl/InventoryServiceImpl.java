@@ -129,6 +129,18 @@ public class InventoryServiceImpl implements InventoryService {
         writeLog(skuId, InventoryLogType.CANCEL_RELEASE, quantity, after, orderId);
     }
 
+    @Override
+    public void returnToStock(Long skuId, int quantity, Long orderId) {
+        Integer after = inventoryMapper.returnStock(skuId, quantity);
+        if (after == null) {
+            // ★ 500 而不是 400：守卫不成立 = 「这一单买的货在 sold 格子里已经不够了」，
+            //   是账目不一致（与 moveLockedToSold 同类），不是用户操作有误。
+            throw new BusinessException(ResultCode.FAIL.getCode(), "库存已售状态异常，退款已回滚");
+        }
+        // available 增加了 quantity，所以 change = +quantity
+        writeLog(skuId, InventoryLogType.REFUND_RETURN, quantity, after, orderId);
+    }
+
     // ============================ 私有工具 ============================
 
     /**

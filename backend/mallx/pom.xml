@@ -30,6 +30,9 @@
         <module>mall-review</module>
         <module>mall-marketing</module>
         <module>mall-admin</module>
+        <!-- Day 46 · 售后（退款 / 退货退款）。★ 必须排在 mall-server 【之前】：
+             mall-server 是本模块的唯一消费者，Maven 的反应堆按声明顺序构建。 -->
+        <module>mall-aftersale</module>
         <module>mall-server</module>
     </modules>
 
@@ -94,6 +97,12 @@
             <dependency>
                 <groupId>com.mallx</groupId>
                 <artifactId>mall-admin</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- Day 46 · 售后模块（依赖图的叶子：谁都不依赖它，它依赖订单/支付/库存/营销） -->
+            <dependency>
+                <groupId>com.mallx</groupId>
+                <artifactId>mall-aftersale</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

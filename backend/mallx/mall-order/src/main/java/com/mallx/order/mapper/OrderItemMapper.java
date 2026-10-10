@@ -3,7 +3,10 @@ package com.mallx.order.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.mallx.order.api.OrderItemBuyContext;
 import com.mallx.order.entity.OrderItem;
+import com.mallx.order.vo.OrderRefundItem;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 /**
  * 订单明细 Mapper
@@ -51,4 +54,25 @@ public interface OrderItemMapper extends BaseMapper<OrderItem> {
      */
     OrderItemBuyContext selectBuyContext(@Param("userId") Long userId,
                                          @Param("orderItemId") Long orderItemId);
+
+    /**
+     * ★★ 供售后域（{@code mall-aftersale}）调用：取出这张订单要回补库存的明细。
+     *
+     * <p>只要两列 —— {@code sku_id} / {@code quantity}：退款回补库存只需要这两个数，
+     * 不需要商品名、价格快照之类的任何其它东西。
+     * ★ 与 {@link com.mallx.order.mapper.OrderMapper#selectSelectedCartItems} 那类
+     * 「一次把 JOIN 结果全拖回来」的写法相反：这里<b>刻意不 JOIN</b>。
+     *
+     * <p>★ 为什么仍要手写 SQL 而不用 {@code BaseMapper.selectList(wrapper)}：
+     * 出参是一个<b>只有两个字段的专用 VO</b>，而不是 {@code OrderItem} 实体 ——
+     * 售后域不该认识订单明细的全字段（那是订单域的内部形状）。
+     * 这就是「跨模块只给一个窄门面」的那一贯做法（与 {@link #selectBuyContext} 同源）。
+     *
+     * <p>★ 排序 {@code ORDER BY sku_id}：与下单扣库存「按 skuId 升序」同一个理由 ——
+     * 统一顺序 ⇒ 并发下不会互相等成环。
+     *
+     * @param orderId 订单 id
+     * @return 明细列表；这张单没有明细时返回空列表（不是 null）
+     */
+    List<OrderRefundItem> selectItemsForRefund(@Param("orderId") Long orderId);
 }

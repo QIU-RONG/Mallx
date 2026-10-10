@@ -4,6 +4,8 @@ import com.mallx.common.api.PageResult;
 import com.mallx.payment.dto.PaymentCreateDTO;
 import com.mallx.payment.vo.PaymentVO;
 
+import java.math.BigDecimal;
+
 /**
  * 支付服务
  */
@@ -57,4 +59,36 @@ public interface PaymentService {
      * @throws com.mallx.common.exception.BusinessException code=404 支付记录不存在
      */
     PaymentVO detailMyPayment(Long userId, Long paymentId);
+
+    // ================== 售后域（Day 46 · 负向流水） ==================
+
+    /**
+     * ★★★ 记一笔退款的<b>负向支付流水</b>（售后域调用）。
+     *
+     * <p>★ 为什么退款也要写 {@code payments}：
+     * 支付表是<b>资金账本</b>，「收了多少」与「退了多少」必须记在同一张账上，
+     * 否则对账时只能看到「这单收了 100」，看不出「这单后来退了 100」。
+     * ★ 本项目 {@code idx_payments_order_id} 是<b>普通索引</b>（不是唯一的），
+     * 一个订单本来就允许多条记录 —— 退款正是「多条」里最正当的那一条。
+     *
+     * <p>★★★ <b>金额存【负数】</b>（{@code -|amount|}）：
+     * 这样「这张单一共净收多少」就是 {@code SUM(amount)}，
+     * 对账式退化成一条 SUM —— 不需要在 WHERE 里区分正负、也不需要额外的方向列。
+     * ⚠️ 若存成正数，就必须再引一列 {@code direction} 才能区分收与退，
+     *    而那一列一旦漏写默认值就会把「退」记成「收」（钱凭空翻倍）。
+     *    ★ 带符号的金额是<b>唯一不需要额外协作就能自解释</b>的记法。
+     *
+     * <p>★ {@code method} 写 {@code PaymentMethod.REFUND}、{@code status} 写
+     * {@code PaymentStatus.REFUNDED} —— 与正向流水（{@code SUCCESS}）严格区分，
+     * 免得「查这个订单付成功了几次」把退款那笔也算进去。
+     *
+     * <p>★ 不加 {@code @Transactional}：单条 INSERT 自身即原子，
+     * 事务边界由调用方（售后域「执行退款」）持有 ——
+     * 让「推进退款单 + 推进订单状态 + 回补库存 + 写负向流水」共处一个事务才有意义。
+     *
+     * @param orderId 订单 id
+     * @param amount  退款额（正数；本方法负责取负号落库）
+     * @return 新流水 id
+     */
+    Long recordRefund(Long orderId, BigDecimal amount);
 }

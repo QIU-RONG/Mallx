@@ -194,6 +194,43 @@ public interface InventoryMapper extends BaseMapper<Inventory> {
     Integer adjustStock(@Param("skuId") Long skuId, @Param("delta") int delta);
 
     /**
+     * ★★★ 退货回补（Day 46）—— <b>本项目的第五个库存写点</b>。
+     *
+     * <p>★★ 它是 {@code moveLockedToSold}（支付：{@code locked → sold}）的
+     * <b>逆向</b>动作，但不是 {@code releaseLocked} 那条路的回头：
+     * <pre>
+     *   ORDER_LOCK       available → locked   （下单）
+     *   PAY_SOLD         locked    → sold     （支付）
+     *   CANCEL_RELEASE   locked    → available（未支付就取消）
+     *   REFUND_RETURN    sold      → available（★ 付过钱之后再退：货从「已售」回到「可售」）
+     * </pre>
+     *
+     * <p>★★★ <b>判据必须落在 {@code sold_stock} 上</b>（{@code AND sold_stock &gt;= n}），
+     * 理由与 {@code releaseLocked} 判 {@code locked} 完全同构：
+     * <b>「我要动的那一格」才是我该看的那一格。</b>
+     * 若错判成 {@code available_stock &gt;= n}，就会出现「这单明明没卖出去过，
+     * 却凭空回补了 n 件货」—— 那等于用退款接口刷库存，
+     * 而且守恒式 {@code total = available + locked + sold} 会被当场打破
+     * （{@code available} 涨了、{@code sold} 没降）。
+     *
+     * <p>★ 返回 {@code null} = 守卫不成立（这一单买的货在 {@code sold} 格子里已经不够了）
+     * ⇒ 属<b>账目不一致</b>（与 {@code moveLockedToSold} 同类），上层必须抛
+     * <b>500</b> 并整笔回滚，不是 400 ——
+     * 「用户想退」永远是合理的，「账对不上」永远是服务端的错。
+     *
+     * <p>★ 与其余四条共用同一套实现约定（缺一条就会静默出错）：
+     * ① 用 {@code <select>} 包 {@code UPDATE ... RETURNING}；
+     * ② 必须 {@code flushCache="true"}（一级缓存坑，Day 13 实测）；
+     * ③ {@code updated_at} 手写（自定义 XML 的 UPDATE 不走 {@code MetaObjectHandler}）；
+     * ④ 加减法由数据库做，绝不「先查后改」。
+     *
+     * @param skuId    SKU 主键
+     * @param quantity 回补数量（必须 &gt; 0）
+     * @return 更新后的 {@code available_stock}；{@code null} = sold 不足（异常态）
+     */
+    Integer returnStock(@Param("skuId") Long skuId, @Param("quantity") int quantity);
+
+    /**
      * ★ 管理端库存分页读（Day 17）—— JOIN 出 SKU 名与商品名，让列表自解释。
      *
      * <p>★ 起点是 {@code inventories i}，{@code LEFT JOIN product_skus s} +

@@ -55,6 +55,14 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-admin</artifactId>
         </dependency>
+        <!-- Day 46 · 售后：退款 / 退货退款。
+             ⚠️ 漏了这一处的后果不是编译失败，而是【接口 404】——
+                （空壳模块写码不用改 POM，但新建模块要改 3 处：父 <modules>、
+                  父 <dependencyManagement>、本文件。） -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-aftersale</artifactId>
+        </dependency>
         <!-- V1.1 · D37：Redis 缓存基建。★ 只声明在启动模块 —— RedisAutoConfiguration
              在应用层生效，各业务模块（mall-product 等）编译期需要时再各自声明依赖。 -->
         <dependency>

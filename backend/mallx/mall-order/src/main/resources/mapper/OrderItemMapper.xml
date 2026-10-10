@@ -40,4 +40,29 @@
           AND o.user_id = #{userId}
     </select>
 
+    <!--
+      ★★ Day 46：售后域回补库存要用的明细（只要 sku_id / quantity 两列）
+
+      要求见 OrderItemMapper.java#selectItemsForRefund。要点：
+
+        · SELECT oi.sku_id AS sku_id, oi.quantity AS quantity
+          FROM order_items oi WHERE oi.order_id = #{orderId}
+          ORDER BY oi.sku_id
+        · ★ 刻意【不 JOIN】：回补库存只需要「哪个 SKU、退几件」两个数，
+          商品名 / 价格快照一概不需要（跨模块只开窄门面）。
+        · ★ ORDER BY sku_id：与下单扣库存「按 skuId 升序」同理由 ——
+          统一加锁顺序 ⇒ 并发下不会互相等成环。
+        · ⚠️ 别名一律【下划线】（AS sku_id，不是 AS skuId）——
+          驼峰别名会被 PG 折成小写 → 字段静默为 null 且不报错。
+        · ⚠️ 本语句【不带】user_id：调用方是售后域（管理端动作），
+          归属已由 OrderMapper#selectRefundContext 在申请那一刻验过。
+    -->
+    <select id="selectItemsForRefund" resultType="com.mallx.order.vo.OrderRefundItem">
+        SELECT oi.sku_id   AS sku_id,
+               oi.quantity AS quantity
+        FROM order_items oi
+        WHERE oi.order_id = #{orderId}
+        ORDER BY oi.sku_id
+    </select>
+
 </mapper>

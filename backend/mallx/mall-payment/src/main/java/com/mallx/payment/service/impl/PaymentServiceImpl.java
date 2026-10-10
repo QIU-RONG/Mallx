@@ -22,6 +22,7 @@ import com.mallx.payment.vo.PaymentVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -208,6 +209,33 @@ public class PaymentServiceImpl implements PaymentService {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "支付记录不存在");
         }
         return vo;
+    }
+
+    @Override
+    public Long recordRefund(Long orderId, BigDecimal amount) {
+        Payment refund = new Payment();
+        refund.setPaymentNo(generateRefundNo());
+        refund.setOrderId(orderId);
+        // ★★ 负数：让「这张单净收多少」退化成 SUM(amount)，对账不需要额外的方向列
+        refund.setAmount(amount.abs().negate());
+        refund.setMethod(PaymentMethod.REFUND);
+        refund.setStatus(PaymentStatus.REFUNDED);
+        // 业务时间戳手写（不挂 fill）：它记的是「钱退出去的那一刻」
+        refund.setPaidAt(LocalDateTime.now());
+        paymentMapper.insert(refund);   // ★ 插入后自增 id 回填
+        return refund.getId();
+    }
+
+    /**
+     * 退款流水号：{@code RFD + yyyyMMddHHmmssSSS + 4 位随机}。
+     *
+     * <p>★ 前缀<b>刻意与正向的 {@code PAY} 不同</b>：
+     * 一眼能分辨收与退，而且「按前缀查退款流水」不需要额外列。
+     */
+    private String generateRefundNo() {
+        return "RFD"
+                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS"))
+                + String.format("%04d", ThreadLocalRandom.current().nextInt(10_000));
     }
 
     /**

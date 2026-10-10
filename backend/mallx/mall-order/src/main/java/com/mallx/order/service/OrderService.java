@@ -5,7 +5,11 @@ import com.mallx.order.api.OrderItemBuyContext;
 import com.mallx.order.dto.OrderCreateDTO;
 import com.mallx.order.vo.AdminOrderVO;
 import com.mallx.order.vo.OrderDetailVO;
+import com.mallx.order.vo.OrderRefundContext;
+import com.mallx.order.vo.OrderRefundItem;
 import com.mallx.order.vo.OrderVO;
+
+import java.util.List;
 
 /**
  * 订单服务
@@ -265,5 +269,55 @@ public interface OrderService {
      * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许取消（含 PAID 单）
      */
     void cancelByAdmin(Long orderId);
+
+    // ================== 售后域门面（Day 46） ==================
+
+    /**
+     * ★★ 售后域只读门面：取「这张订单能不能申请退款、退多少」的事实。
+     *
+     * <p>★★ 为什么售后域要绕道订单服务，而不是自己裸读 {@code orders}：
+     * 「这张单现在处于哪个状态」的<b>权威答案在订单域</b> ——
+     * 状态机的所有权柄都在这里（{@code OrderStatus} + 那几条 CAS UPDATE）。
+     * 让别的模块自己去读状态列，等于把状态机的知识复制到第二个模块，
+     * 以后状态机一改就得满仓库找（与 {@link #getBuyContext} 完全同一条推理）。
+     *
+     * <p>★ 归属条件写死在 SQL 里 ⇒ 返回 {@code null} <b>同时</b>表示
+     * 「订单不存在」与「订单不是你的」，两种原因不可区分（防枚举）。
+     * 调用方（售后域）把 {@code null} 统一翻成 404。
+     *
+     * <p>★ 本方法只读、不加事务：单条 SELECT 自身即一致性快照。
+     *
+     * @param userId  当前登录用户（来自 token，绝不接受客户端传参）
+     * @param orderId 订单 id
+     * @return 事实；不存在<b>或</b>不属于该用户 → {@code null}
+     */
+    OrderRefundContext getRefundContext(Long userId, Long orderId);
+
+    /**
+     * ★★ 售后域只读门面：取这张订单要回补库存的明细（只要 skuId + quantity）。
+     *
+     * <p>★ 同样是为了不让售后域认识 {@code order_items} 的内部形状 ——
+     * 它只需要「哪个 SKU、退几件」两个数。
+     *
+     * @param orderId 订单 id
+     * @return 明细列表；无明细时返回空列表（不是 null）
+     */
+    List<OrderRefundItem> listItemsForRefund(Long orderId);
+
+    /**
+     * ★★★ 退款完成：CAS 把订单推进到 {@code REFUNDED}（售后域调用）。
+     *
+     * <p>★ 起点集合 {@code PAID / SHIPPED / COMPLETED} = 「付过钱、且还没退过」。
+     * ★★ {@code REFUNDED} 自身<b>不在</b>起点集合里 ⇒
+     * <b>同一张单不可能退两次</b>：第二次调用拿 0 行 → 抛 400 → 售后域整笔回滚。
+     *
+     * <p>★ 不加 {@code @Transactional}：单条 UPDATE 自身即原子，
+     * 事务边界由调用方（售后域的「执行退款」）持有 ——
+     * 让「推进订单状态 + 回补 N 个 SKU 库存 + 写负向支付流水 + 退券」
+     * 共处一个事务才有意义（与 {@link #markPaid} 完全同构）。
+     *
+     * @throws com.mallx.common.exception.BusinessException code=400 订单状态不允许退款
+     */
+    void markRefunded(Long orderId);
 
 }

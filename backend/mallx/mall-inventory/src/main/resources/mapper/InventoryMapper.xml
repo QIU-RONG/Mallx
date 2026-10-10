@@ -146,6 +146,40 @@
     </select>
 
     <!--
+      ★★★ ⑪ Day 46 的第五个库存写点：退货回补（sold → available）
+
+      它是 moveLockedToSold 的【逆向】动作 —— 付过钱之后货退回来，
+      从「已售」那一格挪回「可售」那一格。与 CANCEL_RELEASE（locked → available）
+      不是同一条路：那条是「还没付钱就取消」，这条是「付过钱又退」。
+
+        · UPDATE inventories
+             SET available_stock = available_stock + #{quantity},
+                 sold_stock      = sold_stock      - #{quantity},
+                 updated_at      = CURRENT_TIMESTAMP
+           WHERE sku_id = #{skuId}
+             AND sold_stock &gt;= #{quantity}
+          RETURNING available_stock
+
+        · ★★★ 守卫判 sold_stock（「我要动的那一格」），判据理由见 Java 侧 javadoc。
+        · ★★ 守恒式 total = available + locked + sold 必须保持：
+              available +n / sold -n ⇒ 总量不变（本条【不改】total_stock，
+              与 ADMIN_ADJUST 那条「唯一会改 total 的」严格区分）。
+        · ★ 流水口径：type=REFUND_RETURN，change=+n，before=返回值-n，after=返回值。
+        · 沿用 Day 13 定型做法：① <select> 包 UPDATE...RETURNING
+          ② flushCache="true"（不写 ⇒ 同一事务内第二次调用【根本不发 SQL】）。
+        ⚠️ 返回语义：值 = 改完之后的 available_stock；null = 守卫不成立（0 行）。
+    -->
+    <select id="returnStock" resultType="java.lang.Integer" flushCache="true" useCache="false">
+        UPDATE inventories
+           SET available_stock = available_stock + #{quantity},
+               sold_stock      = sold_stock      - #{quantity},
+               updated_at      = CURRENT_TIMESTAMP
+         WHERE sku_id = #{skuId}
+           AND sold_stock &gt;= #{quantity}
+        RETURNING available_stock
+    </select>
+
+    <!--
       ★ ⑩ Day 17 的读 SQL：管理端库存分页（JOIN 出 SKU 名与商品名）
 
       要求见 InventoryMapper.java#selectInventoryPage。要点：

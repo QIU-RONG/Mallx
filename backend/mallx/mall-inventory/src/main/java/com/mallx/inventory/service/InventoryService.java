@@ -152,6 +152,39 @@ public interface InventoryService {
      */
     void adjust(Long skuId, int delta, String reason);
 
+    // ================== 售后域（Day 46 · 退货回补） ==================
+
+    /**
+     * ★★★ 退货回补：<b>第五个写点</b> —— 退款成功后把货从「已售」搬回「可售」。
+     *
+     * <p>动作：{@code sold_stock - n , available_stock + n}（<b>不动 {@code total_stock}</b>）。
+     * 它是 {@link #moveLockedToSold}（支付：{@code locked → sold}）的逆向动作。
+     *
+     * <p>★★ 与 {@link #releaseLocked}（取消回补）<b>不是一回事</b>，分岔点在「付没付过钱」：
+     * <pre>
+     *   releaseLocked  还没付钱就取消  → locked - n , available + n
+     *   returnToStock  付过钱之后再退  → sold   - n , available + n
+     * </pre>
+     * 混用会直接打破守恒式：对一张已支付订单调 {@code releaseLocked}，
+     * 那一格的 {@code locked} 早就被 {@code moveLockedToSold} 搬空了，
+     * 守卫 {@code locked >= n} 必然 0 行 ⇒ 抛 500 ⇒ 退款整笔回滚。
+     * （★ 换句话说：这个错不会静默，但它会以「库存异常」的面貌出现，
+     *   离真正的原因「用错了回补方向」很远。）
+     *
+     * <p>★ 必须加 {@code @Transactional}：与 {@link #adjust} 同一个理由 ——
+     * <b>两个写点</b>（改 {@code inventories} + 写 {@code inventory_logs}）。
+     * 判据永远是写点个数。
+     *
+     * <p>★ 0 行（守卫 {@code sold_stock >= n} 不成立）→ <b>500</b>「库存已售状态异常」：
+     * 这是账目不一致（这一单买的货在 sold 格子里不够了），与 {@code adjust} 的 400 不同类。
+     *
+     * @param skuId    SKU 主键
+     * @param quantity 回补数量（必须 &gt; 0）
+     * @param orderId  关联订单 id —— 写进流水 {@code reference_id}，
+     *                 事后能反查「这批货是哪张单退回来的」（与 {@code releaseLocked} 同口径）
+     */
+    void returnToStock(Long skuId, int quantity, Long orderId);
+
     /**
      * ★ 管理端库存流水分页（可按 {@code skuId} / {@code type} 过滤）。
      *

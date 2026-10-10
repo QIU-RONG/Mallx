@@ -187,6 +187,61 @@
     </update>
 
     <!--
+      ★★★ ⑨ Day 46：售后域只读门面 —— 取「这张订单能不能退、退多少」
+
+      要求见 OrderMapper.java#selectRefundContext。要点：
+
+        · ★★ 归属条件【必须在】：WHERE o.id = #{orderId} AND o.user_id = #{userId}
+          ⇒ 返回 null 同时表达「不存在」与「不是你的」，两者不可区分（404 伪装口径）。
+          与 ⑧ 的「故意没有归属条件」正好相反 —— 一条是 C 端口径，一条是管理端口径，
+          差别写在 SQL 文本里，不写在一个布尔开关里。
+        · 只取四列：id / user_id / status / pay_amount
+          ⚠️ 别名一律【下划线】（AS user_id，不是 AS userId）：
+             驼峰别名会被 PG 折成小写 → 字段静默为 null 且不报错。
+        · ★ 不需要 JOIN、不需要 ORDER BY：主键等值查询最多一行。
+        · ⚠️ 本语句【只读】：售后域拿它去做判据，真正的状态推进走 markRefunded。
+    -->
+    <select id="selectRefundContext" resultType="com.mallx.order.vo.OrderRefundContext">
+        SELECT o.id         AS id,
+               o.user_id    AS user_id,
+               o.status     AS status,
+               o.pay_amount AS pay_amount
+        FROM orders o
+        WHERE o.id = #{orderId}
+          AND o.user_id = #{userId}
+    </select>
+
+    <!--
+      ★★★ ⑩ Day 46 的核心 SQL：退款完成 —— CAS 推进到 REFUNDED（第七次条件 UPDATE）
+
+      要求见 OrderMapper.java#markRefunded。要点：
+
+        · UPDATE orders
+             SET status      = 'REFUNDED',
+                 refunded_at = CURRENT_TIMESTAMP,
+                 updated_at  = CURRENT_TIMESTAMP
+           WHERE id = #{orderId}
+             AND status IN ('PAID', 'SHIPPED', 'COMPLETED')
+
+        · ★★ 起点集合 = 「付过钱、且还没退过」的三种状态：
+            PAID      → 仅退款（没发货）
+            SHIPPED   → 退货退款
+            COMPLETED → 退货退款（确认收货后仍在售后期内）
+          ⚠️ REFUNDED 【不在】集合里 ⇒ 同一张单不可能退第二次（重复退款 = 0 行 = 整笔回滚）。
+        · ★ 为什么不带 user_id：归属已在 selectRefundContext 里验完（理由同 markPaid）。
+        · ⚠️ refunded_at 必须手写：本列由 17-refunds.sql 补上，是本表【第一次】被写入。
+        · ⚠️ 不用 RETURNING：调用方只要影响行数（0 行的解释权交给售后域）。
+    -->
+    <update id="markRefunded">
+        UPDATE orders
+           SET status      = 'REFUNDED',
+               refunded_at = CURRENT_TIMESTAMP,
+               updated_at  = CURRENT_TIMESTAMP
+         WHERE id = #{orderId}
+           AND status IN ('PAID', 'SHIPPED', 'COMPLETED')
+    </update>
+
+    <!--
       ★★★ ⑧ Day 17 的核心 SQL：管理端订单列表（★★ 数据权限反转的第一条查询）
 
       要求见 OrderMapper.java#selectAdminOrders 与

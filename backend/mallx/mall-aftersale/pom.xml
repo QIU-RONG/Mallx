@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mallx</groupId>
+        <artifactId>mallx</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>mall-aftersale</artifactId>
+    <name>mall-aftersale</name>
+    <description>MallX 售后模块：退款 / 退货退款（Day 46）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-common</artifactId>
+        </dependency>
+
+        <!-- ★★ 方向：aftersale → order / payment / inventory / marketing。
+             售后是【订单的逆向生命周期】：要读订单状态、推进订单状态（markRefunded）、
+             要写负向支付流水、要把货从 sold 回补到 available、要退这一单用掉的券。
+             ★ 无环：order / payment / inventory / marketing 【都不依赖】aftersale
+               —— 它们的 pom 里没有本模块，本模块是依赖图的【叶子】。
+             ★ 为什么不把退款塞进 mall-order：那样 mall-order 就得依赖 mall-payment
+               去写负向流水，而 payment → order 已经存在 ⇒ 立刻循环依赖，构建直接失败。
+               新建模块是唯一的干净解（这也是「循环依赖会逼你把模块切对」的实例）。 -->
+
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-order</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-payment</artifactId>
+        </dependency>
+
+        <!-- ⚠️ mall-order 已传递带出 inventory / marketing，但「自己用到的依赖要自己声明」
+             （直接依赖原则）：本模块直接调 InventoryService#returnToStock 与
+             CouponService#releaseByOrder，不该靠别人的传递依赖活着。 -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-inventory</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-marketing</artifactId>
+        </dependency>
+
+        <!-- ★ 父 pom 里那份只是【版本声明】，被测模块必须各自再引一次，
+             否则 src/test 下的类编译期找不到 JUnit/Mockito（表现为 0 条测试静默跳过）。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

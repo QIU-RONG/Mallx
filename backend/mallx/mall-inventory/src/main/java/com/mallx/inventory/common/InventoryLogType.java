@@ -7,17 +7,22 @@ package com.mallx.inventory.common;
  * 与 {@code OrderStatus} 同一个理由：全项目必须只用这里的常量，禁止散落裸字符串
  * （否则会出现 {@code "ORDER_LOCK"} 与 {@code "ORDER_LOCKED"} 共存这种数据灾难）。
  *
- * <p>★★ 四个常量与四个库存写点一一对应，不多不少：
+ * <p>★★ 五个常量与五个库存写点一一对应，不多不少：
  * <pre>
  *   ORDER_LOCK       deductStock       available - n , locked + n      （下单）
  *   PAY_SOLD         moveLockedToSold  locked - n    , sold + n        （支付）
  *   CANCEL_RELEASE   releaseLocked     locked - n    , available + n   （取消 / 超时关单）
  *   ADMIN_ADJUST     adjustStock       total + d , available + d       （管理端调整，Day 17）
+ *   REFUND_RETURN    returnStock       sold - n     , available + n    （退款退货回补，Day 46）
  * </pre>
  * （★ 本行原先写「三个常量与三个库存写点」。Day 17 加了管理端调整这条路径，它必须跟着改 ——
  *   <b>说谎的注释比没有注释更坏</b>：下一个人会照着「只有三个写点」去找，
  *   然后漏掉 {@code ADMIN_ADJUST} 这条路径。这是本日唯一一处「改历史注释」，
  *   所以它值得被单独记一笔。）
+ * （★ Day 46 第四次改这里：五个写点。第四条与第五条<b>长得极像却不是一回事</b> ——
+ *   {@code ADMIN_ADJUST} 改的是「仓库里一共有多少货」（动 {@code total}），
+ *   {@code REFUND_RETURN} 改的是「货归哪一格」（不动 {@code total}）。
+ *   把它们合并成一个常量，守恒式就再也对不上了。）
  *
  * <p>★★ 记住这张表就能推出流水里 {@code change_quantity} 的正负（流水记的是
  * {@code available_stock} 的变化，见 {@link com.mallx.inventory.entity.InventoryLog}）：
@@ -26,6 +31,7 @@ package com.mallx.inventory.common;
  *   PAY_SOLD         → available 不动        → change = 0   ← ★ 恒为 0，不是漏写
  *   CANCEL_RELEASE   → available 增加        → change = +n
  *   ADMIN_ADJUST     → available 跟着 total 走 → change = ±d（带符号）
+ *   REFUND_RETURN    → available 增加        → change = +n
  * </pre>
  * 所以「某条 {@code PAY_SOLD} 的 change ≠ 0」= 支付动了 {@code available_stock}
  * = Day 13 反复强调的那场事故。流水把这个不变量变成了可自动断言的检查。
@@ -66,6 +72,29 @@ public final class InventoryLogType {
      * 单独调 {@code locked} 等于让账本和事实脱钩。
      */
     public static final String ADMIN_ADJUST = "ADMIN_ADJUST";
+
+    /**
+     * ★★ 退货回补：{@code sold → available}（Day 46）—— <b>退款链路的库存动作</b>。
+     *
+     * <p>它是 {@link #PAY_SOLD} 的<b>逆向</b>：支付把 {@code locked} 搬进 {@code sold}，
+     * 退款把货从 {@code sold} 搬回 {@code available}。
+     *
+     * <p>★★ 与 {@link #CANCEL_RELEASE} 的区别（两条都是「货退回来」，极易混淆）：
+     * <pre>
+     *   CANCEL_RELEASE  还没付钱就取消  → locked - n , available + n
+     *   REFUND_RETURN   付过钱之后再退  → sold   - n , available + n
+     * </pre>
+     * 分岔点在<b>有没有付过钱</b>。把它们写成一个常量，
+     * 对账脚本就没法回答「这批货是从哪一格回来的」。
+     *
+     * <p>★ {@code change_quantity} = {@code +n}（{@code available} 增加）。
+     *
+     * <p>★ 与 {@link #CANCEL_RELEASE} 一样<b>不改 {@code total_stock}</b>：
+     * 货没有离开过仓库，只是从「已售」回到「可售」。
+     * ★ 五条里<b>只有 {@link #ADMIN_ADJUST} 会改 {@code total}</b> —— 这条不变式
+     * 是 Day 17 新对账式的依据，加第五条时<b>必须</b>再确认一遍。
+     */
+    public static final String REFUND_RETURN = "REFUND_RETURN";
 
     private InventoryLogType() {
     }
