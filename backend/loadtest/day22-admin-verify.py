@@ -417,6 +417,20 @@ try:
     check("B16 ★ 改不存在的 id -> code 404（影响行数 0 == 不存在，没有先查后改）",
           code_of(j) == 404, "HTTP %s code %s / %s" % (st, code_of(j), raw[:100]))
 
+    # ★★ B17 要在 CI 上也稳（首次进 CI 就被它挂过一次）：
+    #   判据是 `updated_at > created_at`，但「创建 ALPHA 用户」与「改状态」可能落在
+    #   **同一时刻** ⇒ 两者相等 ⇒ `>` 为 false。本地能过只是运气（本地慢半拍），
+    #   CI 机器快 ⇒ 稳定假红。
+    #   修法：把 created_at 与 updated_at **一起**拨到 10 分钟前，再走一次接口更新：
+    #     · 接口显式补了 ⇒ updated_at 刷成 now() > created_at(10 分钟前) ⇒ 判据 true（期望）
+    #     · 接口没补     ⇒ updated_at 停在 10 分钟前 == created_at   ⇒ 判据 false（会被抓到）
+    #   ⚠️ 只拨 created_at 是不行的：没补时 updated_at 仍停在「创建时刻」，而它 > 拨旧的
+    #      created_at ⇒ 判据会**假通过**。
+    #   另一条等价修法是 sleep 1 秒再更新，但那是拿时间换判据，不如把时间差造在数据里。
+    sql_exec("UPDATE users SET created_at = now() - interval '10 minutes', "
+             "updated_at = now() - interval '10 minutes' WHERE id = %d" % ALPHA_ID)
+    api("PUT", "/api/admin/users/%d/status" % ALPHA_ID, token=ADMIN_TOKEN,
+        body={"status": 1})
     bump = sql1("SELECT (updated_at > created_at)::text FROM users WHERE id = %d" % ALPHA_ID)
     check("B17 ★ updates 走了显式 updated_at（手写 UpdateWrapper 不走自动填充 ⇒ 我们显式补了）",
           bump == "true", "updated_at > created_at = %r" % bump)
