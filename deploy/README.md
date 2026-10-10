@@ -218,7 +218,7 @@ docker compose -f docker-compose.app.yml logs -f postgres   # 看着它把 01→
 
 ---
 
-## 八、四个刻意的设计决定
+## 八、五个刻意的设计决定
 
 **① 镜像不负责编译。** `deploy/Dockerfile` 只把**宿主已打好的 jar** 装进运行时镜像，
 不做「多阶段：容器内跑 mvn」。原因：
@@ -253,6 +253,33 @@ docker compose -f docker-compose.app.yml logs -f postgres   # 看着它把 01→
 容器内 `MaxHeapSize` = 384MB × 75% = **288 MB**（把百分比改成 25% 就变 96MB —— 对照组）。
 ★ 参数的**单一来源是镜像 `ENV JAVA_OPTS`**；compose 里刻意不再写同名的键，
 否则它会永远覆盖镜像值（这正是 v1.4 之前的状态：改了 Dockerfile 却毫无效果）。
+
+**⑤ 基底是 jlink 生成的最小运行时，不是现成的 JRE 镜像（D43）。**
+`eclipse-temurin:21-jre-alpine` 有 **287 MB**，其中 JDK 目录只占 158 MB，
+另 **约 129 MB 是构建期工具留下的杂物**（`gnupg` / `font-dejavu` / `fontconfig` / `sqlite` …），
+跑 headless 服务用不上。所以：
+
+```text
+阶段 1  JDK 镜像里拆层（--layers --launcher）
+阶段 2  jdeps 算出真实模块 → jlink 生成 /opt/jre（62 MB）
+阶段 3  纯 alpine:3.24 + /opt/jre + apk add tzdata ca-certificates
+```
+
+| | 改前 | 改后 |
+|---|---|---|
+| `docker images` | 393 MB | **229 MB** |
+| `docker history` 各层之和 | 269 MB | **≈ 133 MB** |
+| 其中的 JRE | JDK 目录 158 MB + 杂物 129 MB | jlink 运行时 **62 MB** + alpine 9 MB |
+
+三个要点：
+- **模块清单在构建时算**（`jdeps --print-module-deps`），不抄常量 —— 依赖变了它自己跟上；
+  结果会 `echo` 进构建日志，将来漂移时看得见。
+- **额外补 `jdk.crypto.ec` 与 `jdk.zipfs`**：静态分析看不到反射用法，
+  这是「编译期查不出、运行时才炸」的典型，宁可多带几 MB。
+- **运行时基底与构建镜像的 alpine 版本对齐（3.24）**：jlink 产物链接的是构建镜像那份 musl。
+
+> ⚠️ 换基底最容易悄悄弄丢的是「镜像还能不能跑」。本项目为此把 **M1 全链 + 各域套件
+> 都跑在镜像上**（不是只冒烟）—— 判据见 `docs/daily/Day-43-镜像再瘦身.md` §四。
 
 ---
 
@@ -308,6 +335,8 @@ docker run --rm -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST=nope -e DB_NAME=nope \
 | 探针一直 **401** ⇒ 永远 unhealthy | 探针路径与 `SecurityConfig` 白名单不一致 | 两者的路径必须**逐字符**一致（`/actuator/health`、`/liveness`、`/readiness`、`/info`）。改路径要同时改 `SecurityConfig` 与 `Dockerfile` 的 HEALTHCHECK |
 | 改了 `Dockerfile` 的 `JAVA_OPTS` 但容器里没变 | 被 `docker-compose.app.yml` 的 `environment` 覆盖 | V1.4 已删掉 compose 里那行；`/proc/1/cmdline` 可核对实际参数 |
 | 改了代码但接口行为没变 | 镜像里的 jar 是旧的 | ★ 镜像**不负责编译**：先 `mvn install` 再 `up -d --build`（§八①） |
+| 容器起来就 `NoClassDefFoundError` / `ClassNotFoundException` | jlink 最小运行时**漏了模块**（静态分析看不到反射用法） | 别手写模块清单 —— 回看 `docker build` 日志里的 `jdeps modules:` 行，把它与出错类所属的模块名对照，补进 §八⑤ 的 `--add-modules` |
+| `docker build` 报 `error getting credentials - docker-credential-desktop not found` | BuildKit 要拉新基底时找不到 Windows 凭据助手 | 把 `...\DockerDesktop\resources\bin` 加进 `PATH`（§六 坑 2）；**或先把基底 `docker pull` 到本地**（本机实测：预拉之后构建不再需要凭据） |
 
 ---
 

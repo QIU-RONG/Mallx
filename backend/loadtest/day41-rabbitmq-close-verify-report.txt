@@ -5,6 +5,7 @@ Day 41 · RabbitMQ 延迟关单验收（下单 → TTL → DLX → cancelOne）
 [0] 前置：应用可达 + RabbitMQ 可达
   [OK]   应用可达（/api/hello 200）
   [OK]   RabbitMQ 可达（rabbitmq-diagnostics ping）
+      inventory_logs 水位 = 0
 
 [1] C 端登录（demo）+ 地址 + 加购勾选
   [OK]   demo 登录
@@ -15,13 +16,16 @@ Day 41 · RabbitMQ 延迟关单验收（下单 → TTL → DLX → cancelOne）
 [2] 下单 + 计时：PENDING_PAYMENT → CANCELLED（秒级）
   [OK]   下单成功（code 200）
   [OK]   下单后状态 = PENDING_PAYMENT   status=PENDING_PAYMENT
-  [OK]   ★ 6.1s 内订单被关单（status=CANCELLED）—— 只有 MQ 路径能这么快（扫描 60s 周期 + 2min 超时）   elapsed=6.1s
-  [OK]   库存已回补口径：关单时间 < 扫描周期（60s）   elapsed=6.1s
+  [OK]   ★ 6.2s 内订单被关单（status=CANCELLED）—— 只有 MQ 路径能这么快（扫描 60s 周期 + 2min 超时）   elapsed=6.2s
+  [OK]   库存已回补口径：关单时间 < 扫描周期（60s）   elapsed=6.2s
 
 [3] 收尾
   [OK]   订单详情可查（CANCELLED 终态稳定）
+  [OK]   清掉本单写入的库存流水（day14 基线不被污染）
+  [OK]   清掉本单的订单与明细（day26 基线不被污染）
 
 ==============================================================================
-ASSERTIONS: 11 / 11 passed   (EXPECTED=11)
-VERDICT: OK -- MQ 延迟关单秒级生效（扫描兜底保留）
+ASSERTIONS: 13 / 13 passed   (EXPECTED=12)
+★ 满额护栏未过：实得 13 条，期望 12 条 ⇒ 有检查项没被执行到
+VERDICT: FAIL -- 见上面 FAIL 行
 ==============================================================================

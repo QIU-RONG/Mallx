@@ -473,8 +473,10 @@ V1.1 Redis + RabbitMQ                ✅ 完成（Day 37–41：商品/分类/�
 V1.2 性能优化                        ✅ 核心完成（Day 27–35：EXPLAIN 复盘、搜索修复 29x、15 号 trgm 补丁；读写分离未做）
 V1.3 Docker 容器化                   ✅ 完成（Day 25：deploy/ 三件套，非 root + healthcheck + 一键全栈）
 前端 FE1–FE4                          ✅ 完成（两个 Vue 3 应用 + 接入 CI；界面不再是 Swagger UI 一家）
-V1.4 云部署                          🔄 前半段完成（Day 42）：镜像分层（改代码只需重建 549KB 的层）、
-                                     容器感知 JVM（MaxRAMPercentage）、prod 缺配置启动失败、actuator 探针
+V1.4 云部署                          🔄 前半段完成（Day 42–43）：
+                                     镜像分层（改代码只需重建 549KB 的层）
+                                     + 基底换 jlink 最小运行时（393MB → 229MB）
+                                     + 容器感知 JVM、prod 缺配置启动失败、actuator 探针
                                      ⬜ 后半段：远端托管（CI/CD 到云、域名 + HTTPS、日志采集）
 V2.0 Spring Cloud Alibaba            微服务拆分（按当前模块边界）
 ```
