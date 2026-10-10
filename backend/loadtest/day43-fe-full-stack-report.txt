@@ -1,0 +1,96 @@
+==============================================================================
+MallX  Day 43 · 前端全栈联调（两个 dev server 代理 / 跨端链路 / 基线还原）
+==============================================================================
+run at : 2026-10-10 14:32:24
+C 端代理 : http://localhost:5173   ·   管理端代理 : http://localhost:5174
+baseline: sku4 avail/locked/sold = {'available': 149, 'locked': 0, 'sold': 1}   rows o/p/oi/rv/il = 6/6/6/0/0
+
+[1] 两个 dev server 是否都在跑（★ 用 localhost，Vite 8 只绑 IPv6）
+  GET http://localhost:5173/  -> http=200  html_has_app_div=True
+  [OK] mall-app dev server 返回可挂载的 HTML
+  GET http://localhost:5174/  -> http=200  html_has_app_div=True
+  [OK] admin-app dev server 返回可挂载的 HTML
+
+[2] 后端是否经【两个代理】都可达（代理规则本身）
+  [OK] 5173 代理 /api -> 8080 可达（code=200）
+  [OK] 5174 代理 /api -> 8080 可达（code=200）
+
+[3] C 端经 5173 登录
+  [OK] demo 登录成功并拿到 token
+  [OK] 错误密码被拒（code != 200）
+
+[4] C 端商品列表 / 详情（前端真实用到的字段）
+  [OK] 商品列表可读且非空（records=5）
+  [OK] 列表项带前端 ProductVO 必需的 id/name/status
+  [OK] 商品详情可读且带 SKU 列表（skus=1）
+  [OK] 详情 id 与列表 id 一致
+  [OK] SKU 带前端选规格/显示价格必需的 id/price
+
+[5] C 端购物车 → 下单 → 支付（经 5173）
+  [OK] 加购成功（SKU 4 不在车里 → POST /api/cart）
+  [OK] 改数量成功（PUT /api/cart/{id}）
+  [OK] 勾选成功（PUT /api/cart/{id}/selected）
+  [OK] 下单成功（POST /api/orders）
+  orderId = 106
+  [OK] 新订单状态 PENDING_PAYMENT（DB）
+  [OK] ★ 金额恒等式（DB）：total - discount = pay
+  [OK] 下单锁定库存（DB available 减 1）
+  [OK] 支付成功（POST /api/payments，入参没有 amount）
+  [OK] 支付后状态 PAID（DB）
+  [OK] paid_at 已写入（DB）
+  [OK] ★ 支付流水金额 = orders.pay_amount（跨表对账，前端金额恒等式的后端基础）
+  [OK] 订单列表可读且能看到本单
+  [OK] 订单详情可读（GET /api/orders/{id}）
+  [OK] 他人/匿名读该订单被拒（不是 200）
+
+[6] 管理端经 5174 —— 看到 C 端刚下的单并发货
+  [OK] admin 登录成功（经 5174）
+  [OK] 管理端订单列表可读且能看到这张单（GET /api/admin/orders）
+  [OK] 管理端能读到该单详情（GET /api/admin/orders/{id}）
+  （记录，不判定）管理端 token -> C 端 /api/orders/{id} : http=200 code=200
+  [OK] 发货成功（POST /api/orders/{id}/ship）
+  [OK] 发货后状态 SHIPPED（DB）
+  [OK] shipped_at 已写入（DB）
+  [OK] 重复发货被拒（状态机：不是 200）
+  [OK] 已发货订单不可取消（不是 200）
+
+[7] C 端经 5173 —— 确认收货 + 评价
+  [OK] 确认收货成功（POST /api/orders/{id}/confirm）
+  [OK] 收货后状态 COMPLETED（DB）
+  [OK] completed_at 已写入（DB）
+  [OK] 评价成功（POST /api/reviews，只传 orderItemId）
+  [OK] reviews 表多了一行（DB 复算）
+  [OK] ★ 评价的 order_id / product_id 由后端从 order_items 反查（DB 校验）
+  [OK] 同一 orderItemId 重复评价被拒（不是 200）
+  [OK] 公开读评价（无 token，C 端商品详情页要用）
+
+[8] 跨端权限对照（白名单/权限码按【端】分开）
+  C 端 token -> 管理端 /api/admin/roles : http=403 code=403
+  [OK] C 端 token 打管理端接口被拒
+  [OK] 匿名打管理端接口被拒
+  [OK] ★ 正向对照：管理端 token 打同一接口可以（200）
+  [OK] 匿名打 C 端私有接口被拒
+  （记录，不判定）管理端 token -> C 端 /api/cart : http=200 code=200
+
+[9] 账目对账（DB）
+  [OK] 支付流水正好 1 行
+  [OK] 订单行数 = 1（本单只买了一个 SKU）
+  [OK] ★ 已收货订单：sold 比基线 +1
+  [OK] ★ 已收货订单：available 比基线 -1
+  [OK] locked 回到基线（无挂起锁定）
+  [OK] 评价数 +1（相对基线）
+
+==============================================================================
+[10] CLEANUP —— 抹掉本次痕迹，回到基线
+==============================================================================
+  orders to delete : [106]
+  ledger rows      : id > 0
+  [OK] 清理未报 SQL 错误
+  [OK] 库存逐字段回到基线
+  rows before/after = 6/6/6/0/0 / 6/6/6/0/0
+  [OK] 表计数回到基线（orders/payments/order_items/reviews/inventory_logs）
+
+==============================================================================
+结果：54 通过 / 0 失败   （期望断言数 54）
+VERDICT: PASS —— 两个前端 + 后端作为一个整体跑通了
+==============================================================================

@@ -7,7 +7,7 @@
 所以 V1.0 只有关系库，**Redis / RabbitMQ 到 V1.1 才引入**，各自都带着实测判据（见 §版本规划）。
 
 ```text
-状态：后端 V1.0–V1.4（前半）完成（Day 01–42）  ·  前端 FE1–FE4 完成  ·  待办：V1.4 远端托管 + V2.0 微服务
+状态：后端 V1.0–V1.4（前半）完成（Day 01–42）  ·  前端 FE1–FE4 完成 + 全栈联调跑通（Day 43）  ·  待办：V1.4 远端托管 + V2.0 微服务
 端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   后端模块 11 个   ·   前端应用 2 个
 Java 189 文件 / 15.1k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 16 份
 回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
@@ -80,7 +80,7 @@ MallX/
 │   └── admin-app/                 # 管理端（同栈，dev 端口 5174）
 ├── docs/
 │   ├── api/                       # ★ API-总览.md（自动生成）+ openapi.json 快照 + users-api.md
-│   ├── daily/                     # Day 01–41 + 前端 FE1–FE4 的交付文档（含 Day 28 方案稿）
+│   ├── daily/                     # Day 01–43 + 前端 FE1–FE4 的交付文档（含 Day 28 方案稿）
 │   ├── perf-report.md             # 并发压测与全链路回归汇总
 │   └── backlog.md                 # 缺陷与改进清单（当前一览表已归零）
 └── README.md
@@ -118,6 +118,14 @@ npm run build                 # = vue-tsc -b && vite build（类型检查 + 打�
 并额外断言 `dist/index.html` 真实存在（退出码为 0 也可能是空产物）。
 刻意**不在 CI 里跑前端 e2e** —— 那需要把后端 + 数据库 + 种子数据整套复制过去，
 等前端出现过一次真实契约回归再上，不提前建。
+
+**全栈联调（本地，已跑通）**：`backend/loadtest/day43-fe-full-stack-e2e.py` ——
+两个 dev server 与后端同时起，走**跨端**链路（C 端经 5173 下单支付 → 管理端经 5174 发货 →
+C 端经 5173 收货评价），54 条断言含跨端权限对照与基线还原；
+一键入口 `backend/loadtest/day43-run-full-stack.ps1`（本机专用，见
+[`docs/daily/Day-43-前端全栈联调.md`](docs/daily/Day-43-前端全栈联调.md)）。
+> ★ 它存在的理由：**分端验收不等于合起来能跑**。而且它按**前端自己的类型定义**断言字段名 ——
+> 直接打 8080 只能证明后端对，证明不了「前端拿到的字段名对」。
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
@@ -404,6 +412,7 @@ python day17-m1-regression.py                 # ③ 汇总 + 比对基线
 | `day41-rabbitmq-close-verify.py` | **延迟关单验收**：下单→TTL→DLX→cancelOne，★秒级关闭（6.1s，扫描兜底 60s+2min）；高水位自清 | 12 |
 | `day26-m1-fixture.py` | **M1 从零复现夹具**（幂等）：intruder + 地址 + 6 张 PAID 单 + 归零幽灵计数 | 31 |
 | `day25-api-inventory.py` | API 总览生成 + 源码↔运行时↔数据库 三方核对 | 9 |
+| `day43-fe-full-stack-e2e.py` | **前端全栈联调**：两个 dev server 代理 + 跨端链路（C 端下单支付 → 管理端发货 → C 端收货评价）+ 跨端权限对照 + 基线还原。★ 字段名以**前端自己的类型定义**为准（`frontend/*/src/types/api.d.ts`） | 54 |
 
 写脚本的三条硬规矩（都来自踩过的坑）：
 
@@ -450,7 +459,7 @@ Day 27 发现 `searchProducts` 的 `OR` 兜底挡住 `idx_products_search`（同
 
 ## 文档导航
 
-- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–41 每天一份 + 前端交付一篇，含设计取舍、实测记录、踩坑与判据。
+- **想了解每一步怎么做的** → [`docs/daily/`](docs/daily/)：Day 01–43 + 前端交付 + 全栈联调，含设计取舍、实测记录、踩坑与判据。
 - **想知道还剩什么问题** → [`docs/backlog.md`](docs/backlog.md)：缺陷/改进清单（一览表已归零，遗留项与「刻意不做」的原因都写着）。
 - **想直接调接口** → [`docs/api/API-总览.md`](docs/api/API-总览.md) 或 Swagger UI。
 
