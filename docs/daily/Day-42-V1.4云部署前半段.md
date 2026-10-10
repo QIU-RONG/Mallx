@@ -176,6 +176,18 @@ Hikari 连接池懒初始化、MyBatis-Plus 启动期不碰数据库 ⇒
 
 四个命令都在本机原样跑过一遍再推（「CI 改动先在本地把命令实跑一遍」）。
 
+**首跑核验**（run `38029164903`，全 success：`ci` 3m0s / `frontend` 12s + 20s）。
+runner 侧日志原文 —— 这两行就是「护栏真的有牙齿」的证据：
+
+```text
+guard ok: 缺 DB_PASSWORD -> rc=1（非零退出）
+control ok: 给齐配置 -> 正常启动（② 的失败确实是闸门拦的，不是镜像坏的）
+```
+
+且 CI 日志里的闸门中文**显示正常**（`生产 profile(prod) 启动中止 ……`），
+说明应用输出的是 UTF-8 —— 本机抓日志时的乱码纯粹是 PowerShell 的 `[Console]::OutputEncoding`
+在解码 docker 输出时的问题，**不是应用的问题**。
+
 ---
 
 ## 八、本次踩到的坑
