@@ -161,6 +161,65 @@ jobs:
         if: failure()
         run: tail -100 /tmp/app.log || true
 
+      # ================================================================================
+      # 镜像构建 + 两条「本该失败却没失败」的防护（V1.4 · D42）
+      #
+      # 为什么放在 ci job 末尾而不是单开一个 job：jar 已经在上面的 mvn install 产出，
+      # 这里直接复用同一个产物来构建镜像 —— 不重复编译，也保证镜像里装的正是刚才那一套验收过的字节。
+      #
+      # 三条断言都必须在 CI 里，因为它们守的都是**静默失败**：
+      #   ① 少 `--launcher` ⇒ spring-boot-loader 层是空目录 ⇒ 镜像根本起不来，
+      #      但 `docker build` 仍然**成功**（构建成功 ≠ 能跑）。
+      #   ② prod profile 缺 DB_PASSWORD ⇒ 曾经**照样启动成功**（Spring 占位符懒解析），
+      #      直到第一次查库才炸。现在由 ProdConfigGuard 在启动时拦住。
+      #   ③ ★ 正向对照：没有它，② 的「失败」可能只是因为镜像本身是坏的 ——
+      #      那样 ② 会通过而实际什么都没守住（本项目的老教训）。
+      # 全部命令都已在本机等价跑过一遍，见 docs/daily/Day-42。
+      # ================================================================================
+      - name: Image build (layered) + prod config guard
+        run: |
+          docker build -f deploy/Dockerfile -t mallx-server:local .
+
+          echo "::group::① 启动器类真的在镜像里（--launcher 陷阱）"
+          docker run --rm --entrypoint sh mallx-server:local -c \
+            'test -f org/springframework/boot/loader/launch/JarLauncher.class && test -d BOOT-INF/lib && echo "layers ok: JarLauncher + BOOT-INF/lib 都在"'
+          echo "::endgroup::"
+
+          echo "::group::② prod 缺 DB_PASSWORD 必须起不来"
+          set +e
+          timeout 90 docker run --rm \
+            -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST=nope -e DB_NAME=nope -e DB_USERNAME=nope \
+            -e JWT_SECRET=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKL \
+            mallx-server:local > /tmp/guard.log 2>&1
+          rc=$?
+          set -e
+          cat /tmp/guard.log | tail -12
+          if [ "$rc" = "0" ] || [ "$rc" = "124" ]; then
+            echo "::error::prod 缺 DB_PASSWORD 竟然起来了（rc=$rc，124=超时说明它一直在跑）—— 配置闸门失效"
+            exit 1
+          fi
+          echo "guard ok: 缺 DB_PASSWORD -> rc=$rc（非零退出）"
+          echo "::endgroup::"
+
+          echo "::group::③ 正向对照：必填项给齐必须能起来"
+          docker run -d --name guard-ok \
+            -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST=nope -e DB_NAME=nope -e DB_USERNAME=nope \
+            -e DB_PASSWORD=nope -e JWT_SECRET=abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKL \
+            mallx-server:local > /dev/null
+          ok=no
+          for i in $(seq 1 20); do
+            sleep 3
+            if docker logs guard-ok 2>&1 | grep -q "Started MallXApplication"; then ok=yes; break; fi
+          done
+          docker logs guard-ok 2>&1 | tail -5
+          docker rm -f guard-ok > /dev/null
+          if [ "$ok" != "yes" ]; then
+            echo "::error::正向对照失败：配置给齐也起不来 ⇒ 上面第 ② 条的「通过」不可信"
+            exit 1
+          fi
+          echo "control ok: 给齐配置 -> 正常启动（② 的失败确实是闸门拦的，不是镜像坏的）"
+          echo "::endgroup::"
+
   # ==================================================================================
   # 前端构建门禁（FE4）。两个 Vue 3 + TS 应用各自独立构建，互不阻塞（fail-fast: false）。
   #

@@ -7,9 +7,9 @@
 所以 V1.0 只有关系库，**Redis / RabbitMQ 到 V1.1 才引入**，各自都带着实测判据（见 §版本规划）。
 
 ```text
-状态：后端 V1.0–V1.3 完成（Day 01–41）  ·  前端 FE1–FE4 完成  ·  待办：V1.4 云部署
+状态：后端 V1.0–V1.4（前半）完成（Day 01–42）  ·  前端 FE1–FE4 完成  ·  待办：V1.4 远端托管 + V2.0 微服务
 端点 77 个   ·   权限码 41 个   ·   核心表 22 张   ·   后端模块 11 个   ·   前端应用 2 个
-Java 188 文件 / 15.0k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 16 份
+Java 189 文件 / 15.1k 行   ·   Controller 24 个   ·   Mapper XML 12 份   ·   SQL 脚本 16 份
 回归基线：全链路 245 条断言 + 各域验收 979 条（合计 1224），每次改动必跑（见 §测试与回归；CI 每次 push 自动跑同一套）
 ```
 
@@ -304,6 +304,7 @@ curl http://127.0.0.1:8080/api/hello
 ```text
 ① 公开（白名单，无需 token）      /api/hello · swagger · GET /api/products/** · GET /api/categories/**
                                   GET /api/brands · GET /api/coupons（精确路径）
+                                  /actuator/health(/liveness|/readiness) · /actuator/info   ← V1.4 精确路径
 ② 登录（C 端 token，无权限码）    /api/cart/** · /api/orders/** · /api/users/me · /api/addresses/**
 ③ 权限码（管理端 token 携带）     /api/admin/**  →  @PreAuthorize("hasAuthority('域:动作')")
 ```
@@ -312,6 +313,12 @@ curl http://127.0.0.1:8080/api/hello
 - 「谁能干什么」由 `roles` / `permissions` / `role_permissions` 决定，登录时**打成快照写进 token**。
   因此**改权限后需要重新登录**（当前 TTL 120 分钟）。
 - 完整的「端点 → 权限码」对照表见 [`docs/api/API-总览.md`](docs/api/API-总览.md)。
+- ★ **白名单一律用精确路径，绝不写 `/**`**。V1.4 加 actuator 时同样如此：
+  只放行健康探针与 `info`，**不是** `/actuator/**` —— 后者会把 `metrics` / `env` /
+  `configprops` / `heapdump` 一起静默公开。实测匿名打 `/actuator/env`、`/actuator/metrics`
+  得到 **401**（未暴露 + 未放行；注意是 401 而不是 404，因为 Security 过滤器链**先于** MVC 路由）。
+- **生产**（`SPRING_PROFILES_ACTIVE=prod`）会关掉 swagger-ui 与 api-docs，
+  并且 `DB_*` / `JWT_SECRET` 缺失时**启动失败**（`ProdConfigGuard`），详见 [`deploy/README.md`](deploy/README.md) §九。
 
 ---
 
@@ -341,9 +348,14 @@ python backend/loadtest/day25-api-inventory.py
 
 没有单元测试框架，取而代之的是 **70 个端到端验收脚本**：它们打真实 HTTP + 用 `docker exec psql` 直查数据库对账
 （**不信接口自报**），跑完自动回滚到跑前状态。同一套流程已搬进 GitHub Actions（`.github/workflows/ci.yml`），
-拆成两个并行 job：`ci`（后端）每次 push 自动执行「构建 → 全新库 → SQL 严格检查 → 夹具 → M1 回归 → 各域验收」，
-`frontend` 对两个 Vue 应用跑「`npm ci` → `vue-tsc -b && vite build` → 断言 `dist/index.html` 存在」；
-判定全部来自脚本退出码。
+拆成两个并行 job：`ci`（后端）每次 push 自动执行「构建 → 全新库 → SQL 严格检查 → 夹具 → M1 回归 → 各域验收
+→ **构建 Docker 镜像并验证两条静默失败防护**」，`frontend` 对两个 Vue 应用跑「`npm ci` → `vue-tsc -b && vite build`
+→ 断言 `dist/index.html` 存在」；判定全部来自脚本退出码。
+
+> `ci` 末尾那一步（V1.4）守的是两种「本该失败却没失败」：分层镜像少了 `--launcher`
+> 时 `docker build` **仍然成功**但镜像起不来；prod profile 缺 `DB_PASSWORD` 曾经**照样启动**
+> （Spring 占位符懒解析）。两条都配了**正向对照** —— 否则「通过」可能只是因为镜像本身是坏的。
+> 详见 [`docs/daily/Day-42-V1.4云部署前半段.md`](docs/daily/Day-42-V1.4云部署前半段.md)。
 
 ```bash
 cd backend/loadtest
@@ -452,7 +464,9 @@ V1.1 Redis + RabbitMQ                ✅ 完成（Day 37–41：商品/分类/�
 V1.2 性能优化                        ✅ 核心完成（Day 27–35：EXPLAIN 复盘、搜索修复 29x、15 号 trgm 补丁；读写分离未做）
 V1.3 Docker 容器化                   ✅ 完成（Day 25：deploy/ 三件套，非 root + healthcheck + 一键全栈）
 前端 FE1–FE4                          ✅ 完成（两个 Vue 3 应用 + 接入 CI；界面不再是 Swagger UI 一家）
-V1.4 云部署                          生产化：镜像瘦身、配置外置、可观测性
+V1.4 云部署                          🔄 前半段完成（Day 42）：镜像分层（改代码只需重建 549KB 的层）、
+                                     容器感知 JVM（MaxRAMPercentage）、prod 缺配置启动失败、actuator 探针
+                                     ⬜ 后半段：远端托管（CI/CD 到云、域名 + HTTPS、日志采集）
 V2.0 Spring Cloud Alibaba            微服务拆分（按当前模块边界）
 ```
 

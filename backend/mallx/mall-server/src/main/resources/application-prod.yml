@@ -1,0 +1,63 @@
+# ==============================================================================
+# 生产 profile（V1.4 · D42）
+# ------------------------------------------------------------------------------
+# 启用方式：SPRING_PROFILES_ACTIVE=prod（deploy/docker-compose.app.yml 已默认开启）
+#
+# ★★ 本文件与 application.yml 的写法有【本质区别】，这是本文件存在的全部理由：
+#
+#    application.yml  ：每一项都写成 `${X:默认值}` —— 为了「clone 下来就能跑」。
+#    application-prod ：关键项写成 `${X}`（**没有冒号兜底**）—— 缺失时 Spring 直接
+#                       启动失败（Could not resolve placeholder 'X'），而不是静默地
+#                       用开发默认值把服务拉起来。
+#
+#    「静默用默认值」是最危险的一类故障：服务看起来一切正常，数据却在连一个错的库、
+#    或者任何人都能用仓库里公开的密钥自己签一个管理员 token。**宁可起不来。**
+#
+# ★ 判据：**错了会「静默地用错值」的项，一律不给默认值**；错了会「明确报错 / 只是降级」
+#   的项可以给默认值。下面 Redis / RabbitMQ 属于后者（本项目对它们有降级路径），
+#   且默认值就是 compose 网络里的服务名，所以给默认值不会造成静默的数据错误。
+#
+# 验证方式（deploy/README.md 「缺配置必须启动失败」一节给了完整脚本）：
+#   带上全部变量 → 正常启动；去掉 DB_PASSWORD 或 JWT_SECRET → **必须起不来**。
+# ==============================================================================
+
+spring:
+  datasource:
+    # 这几项没有兜底：连错库 = 静默的数据事故，不许有默认值
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT:5432}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  # 可选依赖：懒连接 + 有降级路径（缓存读回源、关单有扫描兜底），
+  # 默认值 = compose 服务名，配好对应服务就能直接生效
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+      connect-timeout: 2s
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:rabbitmq}
+    port: ${RABBITMQ_PORT:5672}
+
+# 生产关掉接口文档：swagger-ui / api-docs 会把全部端点与数据结构公开给匿名访问者。
+# （本地/CI 仍然开着 —— 那是给开发者的界面，不是给互联网的）
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# 生产健康检查同样不展示细节（与 application.yml 一致，这里显式再写一遍是为了
+# 让「生产暴露什么」在一个文件里读完，不必翻基础配置）。
+management:
+  endpoint:
+    health:
+      show-details: never
+
+mallx:
+  jwt:
+    # 没有兜底：默认密钥 = 把「人人可自签管理员 token」写进生产
+    secret: ${JWT_SECRET}
+    expire-minutes: 120

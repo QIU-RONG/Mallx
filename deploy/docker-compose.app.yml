@@ -52,6 +52,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      # ★ V1.4 · D42：默认走【生产 profile】—— 它是「部署形态」的那份配置：
+      #   关键项（DB_* / JWT_SECRET）不给默认值，缺失即启动失败；并关掉 swagger-ui。
+      #   本地想让容器像开发机一样跑，就 `SPRING_PROFILES_ACTIVE=dev docker compose ... up`。
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       # ★ 容器内的 DB 地址是【服务名】postgres，不是 localhost ——
       #   localhost 在容器里指容器自己（这是 compose 最常见的第一个坑）
       DB_HOST: postgres
@@ -61,7 +65,25 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 未设置（请检查 deploy/.env）}
       # ★★ 必须覆盖：不换掉它，任何人都能用仓库里的开发密钥自己签一个管理员 token
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 未设置（请检查 deploy/.env）}
-      JAVA_OPTS: ${JAVA_OPTS:--Xmx512m -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC}
+      # 本文件只起 postgres + app ⇒ 下面两个地址连不上，走 D40/D41 的降级路径；
+      # ★ 它们【不算进 health】（见 application.yml 的 management.health 段），
+      #   所以「缓存/MQ 不可用」不会把容器判成 unhealthy。
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+      RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+      # ★ V1.4：这里【刻意不写 JAVA_OPTS】—— JVM 参数的单一来源是【镜像的 ENV】
+      #   （Dockerfile 里的容器感知参数）。
+      #   ⚠️ 原来是 `JAVA_OPTS: ${JAVA_OPTS:-某默认值}`，配合 deploy/.env 里那行
+      #      `JAVA_OPTS=-Xmx512m ...` ⇒ compose 永远会注入一个值，把镜像 ENV 整段盖掉
+      #      （本机实测：容器里 /proc/1/cmdline 仍是旧的 -Xmx512m，镜像里那套白写了）。
+      #      ← 这就是「同一件事有两处默认值」的典型后果：改了 A 处，B 处继续生效。
+      #   .env 里若还留着 JAVA_OPTS，它现在**不再被本文件引用**（compose 不再插值它）。
+      #   要覆盖：用 `docker run -e JAVA_OPTS=...`，或在这里显式加回一行。
+    # ★ V1.4：给容器一个真实的内存上限 —— 没有上限时 MaxRAMPercentage 只能按宿主内存算，
+    #   「容器感知」就成了摆设。384m 是「够跑 + 能证明 JVM 确实按限额算堆」的最小值
+    #   （验证：容器内 PrintFlagsFinal 的 MaxHeapSize 应为 384m×75% = 288m，见 docs/daily/Day-42）。
+    mem_limit: 384m
     ports:
       - "${APP_PORT:-8080}:8080"
     # 首次启动时 postgres 可能还在跑 initdb 初始化脚本；起早了先崩，restart 会把它拉回来

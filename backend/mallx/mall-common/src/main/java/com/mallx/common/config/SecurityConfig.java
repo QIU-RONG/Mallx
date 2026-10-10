@@ -59,6 +59,17 @@ public class SecurityConfig {
                 //      写 /** 之后这个前缀下将来新增的任何 GET 都会被【静默公开】
                 //      （与上面 /api/coupons 那条同一个坑，Day 20 实测过）。
                 .requestMatchers(HttpMethod.GET, "/api/brands").permitAll()
+                // ★ V1.4 · D42：actuator 探针白名单。**依然是精确路径**，理由同上一条 ——
+                //   ⚠️ 绝不能写 "/actuator/**"：那会把 metrics / env / configprops / heapdump
+                //      这类「暴露数据源地址、环境变量、堆转储」的端点一起【静默公开】。
+                //   只放行容器编排放健康检查要打的那几条（路径必须与 Dockerfile 的
+                //   HEALTHCHECK 逐字符一致，否则探针拿到 401 → 容器永远 unhealthy）。
+                //   ★ /actuator/info 只含 application.yml 里显式写入的 app.name/description
+                //     （management.info.env 默认关闭），不含任何环境细节。
+                .requestMatchers("/actuator/health",
+                                 "/actuator/health/liveness",
+                                 "/actuator/health/readiness",
+                                 "/actuator/info").permitAll()
                 .anyRequest().authenticated()
             )
             // ⑤ 认证失败返回 401、授权失败返回 403，统一 JSON（一次配全，别拆成两次调用）

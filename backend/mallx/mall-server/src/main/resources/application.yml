@@ -47,9 +47,49 @@ springdoc:
 
 mallx:
   jwt:
+    # ★ 这个开发默认值只在【本地/测试】生效：生产走 `application-prod.yml`，
+    #   那里是 `${JWT_SECRET}` 不带兜底 ⇒ 没设就启动失败（不会静默用这个密钥）。
     secret: ${JWT_SECRET:mallx-dev-secret-key-please-change-me-2026}
     expire-minutes: 120
   order:
     # D41：延迟关单消息的 TTL（毫秒）。与 OrderTimeoutTask 的 2 分钟扫描兜底对齐；
     # 验收时用 ORDER_CLOSE_DELAY_MS 环境变量压短（如 5000）来证明 MQ 路径快于扫描。
     close-delay-ms: ${ORDER_CLOSE_DELAY_MS:120000}
+
+# ==============================================================================
+# 可观测性（V1.4 · D42）
+# ------------------------------------------------------------------------------
+# ★ 只暴露 health / info 两个端点。metrics / env / configprops / heapdump 一律不暴露：
+#   它们会把数据源地址、环境变量、内部类名交给匿名访问者 —— 在「白名单式放行」的
+#   安全模型里，这类端点等于给攻击者送探测信息。要临时看细节就改这里 + 重启，
+#   不要图省事写 `include: "*"`。
+# ★ show-details: never ⇒ 匿名只能看到 UP/DOWN，看不到「哪个组件挂了、报了什么错」。
+# ★ probes.enabled: true ⇒ 多出 /actuator/health/liveness 与 readiness，两者语义【不同】：
+#     liveness  = 进程还活着吗    → 挂了就重启容器
+#     readiness = 现在能接流量吗  → 依赖没就绪就摘掉（不重启）
+#   容器里用的是 readiness，见 deploy/Dockerfile 的 HEALTHCHECK。
+# ==============================================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+  health:
+    # ★ 只把【硬依赖】算进健康判据：DB 连不上 = 服务真的干不了活 ⇒ DOWN。
+    #   Redis / RabbitMQ 在 D40/D41 已做降级（缓存读回源；MQ 关单有 2 分钟扫描兜底），
+    #   它们是【可选依赖】—— 算进 health 会把「服务其实可用」误报成 DOWN，
+    #   于是编排层摘流量甚至重启容器，**把可控降级升级成不可用**。
+    redis:
+      enabled: false
+    rabbit:
+      enabled: false
+
+info:
+  app:
+    name: ${spring.application.name}
+    description: MallX 企业级电商后端（模块化单体）

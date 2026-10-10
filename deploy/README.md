@@ -60,7 +60,15 @@ mvn -o install -DskipTests        # 依赖已缓存时用 -o；首次去掉 -o
 | `DB_PASSWORD` | — | ★★ **必须** | 用 `:?` 语法，未设置直接拒绝启动 |
 | `APP_PORT` | `8080` | 按需 | **宿主**端口；容器内固定 8080 |
 | `JWT_SECRET` | — | ★★★ **必须** | 签名密钥泄露 ⇒ 任何人可自签带任意权限码的 token，RBAC 归零 |
-| `JAVA_OPTS` | `-Xmx512m -XX:MaxMetaspaceSize=192m -XX:+UseSerialGC` | 按机器内存 | 容器内 JVM 参数 |
+| `SPRING_PROFILES_ACTIVE` | `prod` | 按需 | ★ V1.4：默认走**生产 profile**（关键项无默认值 + 关掉 swagger-ui）。想让它像开发机一样跑就设 `dev` |
+| `REDIS_HOST` / `REDIS_PORT` | `redis` / `6379` | 按需 | 可选依赖，连不上走降级（缓存读回源） |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` | `rabbitmq` / `5672` | 按需 | 可选依赖，连不上走 2 分钟扫描兜底 |
+
+> ★★ **`JAVA_OPTS` 已不在本表**（V1.4 变更）：JVM 参数的**单一来源是镜像的 `ENV`**
+> （容器感知的 `-XX:MaxRAMPercentage=75 ...`，见 §八④）。
+> 原来 compose 里写了 `JAVA_OPTS: ${JAVA_OPTS:-默认值}`，会**永远覆盖**镜像 ENV ——
+> 于是「改了 Dockerfile 里的参数却毫无效果」。要覆盖请用 `docker run -e JAVA_OPTS=...`。
+> `.env` 里若还留着 `JAVA_OPTS=` 那一行，它现在**不再被引用**，可以删掉。
 
 生成密钥：
 
@@ -104,6 +112,17 @@ python backend/loadtest/day25-compose-verify.py 8081
 | D | ★ 权限经**新库**真的生效：带超管 token 打 `/api/admin/roles` → 200；同一端点匿名 → **401** |
 
 > B 组与 D 组是这套脚本存在的理由（见 §六 坑 1）。
+
+**手工核对可观测性（V1.4）**：容器健康检查已从 `/api/hello` 换成 actuator 的 readiness 探针，
+因为 `/api/hello` 只要 Tomcat 起着就 200 —— **数据库断了它照样报健康**。
+
+```bash
+docker compose -f docker-compose.app.yml exec app wget -qO- http://127.0.0.1:8080/actuator/health
+# {"groups":["liveness","readiness"],"status":"UP"}     ← 注意：没有组件明细（show-details: never）
+```
+
+匿名访问 `/actuator/metrics`、`/actuator/env`、`/actuator/heapdump` **必须不是 200** ——
+它们既没被 `exposure.include` 暴露，也**没有**被白名单放行（白名单是精确路径，不是 `/actuator/**`）。
 
 ---
 
@@ -199,7 +218,7 @@ docker compose -f docker-compose.app.yml logs -f postgres   # 看着它把 01→
 
 ---
 
-## 八、两个刻意的设计决定
+## 八、四个刻意的设计决定
 
 **① 镜像不负责编译。** `deploy/Dockerfile` 只把**宿主已打好的 jar** 装进运行时镜像，
 不做「多阶段：容器内跑 mvn」。原因：
@@ -211,9 +230,69 @@ docker compose -f docker-compose.app.yml logs -f postgres   # 看着它把 01→
 **② 数据库不发布端口、容器非 root。** 数据库只有 app 需要它，`expose` 就够；
 应用容器用 `adduser -S mallx` 建的非特权用户运行，逃逸面小一个数量级。
 
+**③ 镜像内再拆一次层（V1.4）。** 镜像里多跑一步
+`java -Djarmode=tools -jar app.jar extract --layers --launcher`，把 fat jar 拆成四层分别 COPY：
+
+| 层 | 大小 | 什么时候变 |
+|---|---|---|
+| `dependencies` | 55.4 MB | 只有第三方依赖变 |
+| `spring-boot-loader` | 696 KB | 只有 Spring Boot 升版 |
+| `snapshot-dependencies` | 4.1 KB | 本项目没有 SNAPSHOT 第三方依赖 |
+| `application` | 549 KB | **每次改代码** |
+
+拆之前 `COPY app.jar` 是**一整层 51 MB** —— 改一行业务代码就要重传 51 MB。实测（`--progress=plain`）：
+改一个资源文件后重建，前三个 COPY 全部 `CACHED`，**只有 `application` 层重建**。
+
+> ⚠️ `--launcher` 不能省：不加它 `spring-boot-loader` 层会是**空目录**，
+> 镜像里就没有 `org.springframework.boot.loader.launch.JarLauncher` 能把应用拉起来（本机实测）。
+
+**④ JVM 参数容器感知，且只有一处默认值（V1.4）。**
+`-Xmx512m` 的问题是两个方向的：容器限额 1G 它只用 512m（浪费一半），限额 256m 它被 OOMKill ——
+**两种错都没人会主动发现**。改成 `-XX:MaxRAMPercentage=75`，堆上限跟着 cgroup 限额走。
+`docker-compose.app.yml` 里给了 `mem_limit: 384m`，所以这个「感知」是可验证的：
+容器内 `MaxHeapSize` = 384MB × 75% = **288 MB**（把百分比改成 25% 就变 96MB —— 对照组）。
+★ 参数的**单一来源是镜像 `ENV JAVA_OPTS`**；compose 里刻意不再写同名的键，
+否则它会永远覆盖镜像值（这正是 v1.4 之前的状态：改了 Dockerfile 却毫无效果）。
+
 ---
 
-## 九、排错速查
+## 九、缺配置必须启动失败（配置外置的判据）
+
+**判据不是「你有没有设环境变量」，而是「没设的时候服务会不会照样起来」。**
+
+`application-prod.yml` 把 `DB_*` 与 `JWT_SECRET` 写成 `${X}`（**没有** `:兜底`），
+但**光这样不够** —— 本机实测踩到过：
+
+```text
+docker run -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST=... （故意不给 DB_PASSWORD）
+  ⇒ state=running  exit=0  Started MallXApplication in 8.5s     ← 静默起来了！
+```
+
+原因：**Spring 的占位符是懒解析的**。Hikari 连接池懒初始化、MyBatis-Plus 启动期不碰库，
+于是「没人读 `spring.datasource.password` ⇒ 没人发现它缺 ⇒ 应用带着空密码起来了」，
+直到第一次查库才炸。**这恰好是最危险的一类故障：服务看起来是好的。**
+
+⇒ 补了 `ProdConfigGuard`（`mallx-server` 的 `com.mallx.server.config`，只在 `prod` profile 生效）：
+启动时**主动读一遍**必填项，任何一项缺失/为空就抛异常 ⇒ 上下文启动失败 ⇒ 进程非零退出。
+
+验证（三条，最后一条是**正向对照**，否则你不知道是不是「什么配置都起不来」）：
+
+```bash
+# ① 缺 DB_PASSWORD  -> 必须失败（exit=1，日志含「启动中止」）
+docker run --rm -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST=nope -e DB_NAME=nope \
+  -e DB_USERNAME=nope -e JWT_SECRET=<48字符> mallx-server:local
+# ② 缺 JWT_SECRET / 密钥太短 -> 必须失败（JwtUtil 构造时校验 >=256bit）
+# ③ 全部给齐 + DB 连不上 -> 进程【应该活着】（数据库懒连接），只是 readiness 为 DOWN
+```
+
+> ★ 顺带说明为什么 Redis / RabbitMQ **不算**必填：它们有降级路径（D40/D41），
+> 要求必填只会把「可降级」升级成「起不来」。**必填项的判据是**
+> 「错了会**静默地用错值**」（连错库、用公开密钥签 token），
+> 而「连不上会明确报错或降级」的不算。
+
+---
+
+## 十、排错速查
 
 | 现象 | 最可能的原因 | 处理 |
 |---|---|---|
@@ -225,10 +304,14 @@ docker compose -f docker-compose.app.yml logs -f postgres   # 看着它把 01→
 | app healthy 但接口 500 / 表不存在 | initdb 中途失败 | 看 `logs postgres` 的 FATAL 行（§六 坑 1） |
 | 改了 SQL 补丁但库没变 | initdb 只跑一次 | 手工应用补丁，或重建数据卷（§六(a) / §七） |
 | `docker stop` 要等 10 秒才停 | `exec` 从 `ENTRYPOINT` 掉了 | 已修：`ENTRYPOINT ["sh","-c","exec java ..."]`，PID 1 才收得到 SIGTERM |
+| 容器 **unhealthy**，但 `/api/hello` 明明 200 | 健康检查已换成 actuator readiness | V1.4 起探针是 `/actuator/health/readiness`：**DB 不可用 ⇒ 503 ⇒ unhealthy**（这是故意的，`/api/hello` 探不出数据库故障）。先修 DB，或 `docker logs app` |
+| 探针一直 **401** ⇒ 永远 unhealthy | 探针路径与 `SecurityConfig` 白名单不一致 | 两者的路径必须**逐字符**一致（`/actuator/health`、`/liveness`、`/readiness`、`/info`）。改路径要同时改 `SecurityConfig` 与 `Dockerfile` 的 HEALTHCHECK |
+| 改了 `Dockerfile` 的 `JAVA_OPTS` 但容器里没变 | 被 `docker-compose.app.yml` 的 `environment` 覆盖 | V1.4 已删掉 compose 里那行；`/proc/1/cmdline` 可核对实际参数 |
+| 改了代码但接口行为没变 | 镜像里的 jar 是旧的 | ★ 镜像**不负责编译**：先 `mvn install` 再 `up -d --build`（§八①） |
 
 ---
 
-## 十、安全清单（上线前逐条核对）
+## 十一、安全清单（上线前逐条核对）
 
 - [ ] `JWT_SECRET` 换成随机长串（**不是**仓库里的默认值）
 - [ ] `DB_PASSWORD` 换掉
@@ -238,3 +321,7 @@ docker compose -f docker-compose.app.yml logs -f postgres   # 看着它把 01→
 - [ ] `GET /api/admin/roles` 匿名访问返回 **401** 而不是 200
 - [ ] 受限管理员账号（`op_order` / `op_product`）**没有**拿到超管权限
       —— `06-day17-fixtures.sql` 是**可选**的验收夹具，正式环境不要执行
+- [ ] ★ V1.4：`SPRING_PROFILES_ACTIVE=prod`（关键项无默认值 + swagger-ui 关闭）
+- [ ] ★ V1.4：`ProdConfigGuard` 真的在拦 —— 抽掉一个 `DB_PASSWORD` 试启一次，**必须起不来**（§九）
+- [ ] ★ V1.4：actuator 只暴露 `health` / `info`，且 `/actuator/**` **没有**被整体放行：
+      匿名打 `/actuator/env`、`/actuator/metrics`、`/actuator/heapdump` 都**不能**是 200
