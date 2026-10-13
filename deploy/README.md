@@ -6,6 +6,7 @@
 |---|---|---|
 | `docker-compose.yml` | 只有 PostgreSQL 16（宿主 **5434**） | 本地/IDEA 里跑应用，只要一个数据库 |
 | `docker-compose.app.yml` | PostgreSQL 16 + mall-server 应用（宿主端口见 `APP_PORT`，默认 8080） | 一条命令起完整环境 / 给别人演示 / 验收 |
+| `docker-compose.prod.yml` | Caddy + 应用 + PG + Redis + RabbitMQ（**镜像从 registry pull**） | **远端服务器**（V1.4 后半段，见 §十二） |
 
 ```bash
 # 只要数据库
@@ -107,7 +108,7 @@ python backend/loadtest/day25-compose-verify.py 8081
 | 组 | 验什么 |
 |---|---|
 | A | 容器层：app / postgres 都 `healthy`；app 以**非 root**（`mallx`）运行 |
-| B | **initdb 链路**：22 张表建齐、`permissions` 恰好 41 行、最后一份补丁（`brand:*`）授权到位、`orders.discount_amount` 存在 |
+| B | **initdb 链路**：22 张表建齐、`permissions` 恰好 **46** 行（Day 46 新增 5 条退款权限）、最后一份补丁（`brand:*`）授权到位、`orders.discount_amount` 存在 |
 | C | 端到端：`/api/hello`、匿名 `/api/products`、管理员登录拿 token |
 | D | ★ 权限经**新库**真的生效：带超管 token 打 `/api/admin/roles` → 200；同一端点匿名 → **401** |
 
@@ -327,7 +328,7 @@ docker run --rm -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST=nope -e DB_NAME=nope \
 | `dial tcp ... connectex` / 拉不动镜像 | 凭据助手或网络 | 修 `PATH`（§六 坑 2）；`docker pull eclipse-temurin:21-jre-alpine` 单独试 |
 | `DB_PASSWORD 未设置（请检查 deploy/.env）` | 没复制 `.env` 或变量名拼错 | `cp .env.example .env`；变量名逐字核对 §三 |
 | app 容器反复重启 | 数据库还没好 | 看 `logs app`；`depends_on` 的 healthcheck 已在，通常等 10–20s 自愈 |
-| app 起来了但管理端接口 **403** | 权限行没进库（少数补丁丢了） | 查 `permissions` 行数是否为 41（§六 坑 1） |
+| app 起来了但管理端接口 **403** | 权限行没进库（少数补丁丢了） | 查 `permissions` 行数是否为 **46**（§六 坑 1） |
 | app healthy 但接口 500 / 表不存在 | initdb 中途失败 | 看 `logs postgres` 的 FATAL 行（§六 坑 1） |
 | 改了 SQL 补丁但库没变 | initdb 只跑一次 | 手工应用补丁，或重建数据卷（§六(a) / §七） |
 | `docker stop` 要等 10 秒才停 | `exec` 从 `ENTRYPOINT` 掉了 | 已修：`ENTRYPOINT ["sh","-c","exec java ..."]`，PID 1 才收得到 SIGTERM |
@@ -354,3 +355,56 @@ docker run --rm -e SPRING_PROFILES_ACTIVE=prod -e DB_HOST=nope -e DB_NAME=nope \
 - [ ] ★ V1.4：`ProdConfigGuard` 真的在拦 —— 抽掉一个 `DB_PASSWORD` 试启一次，**必须起不来**（§九）
 - [ ] ★ V1.4：actuator 只暴露 `health` / `info`，且 `/actuator/**` **没有**被整体放行：
       匿名打 `/actuator/env`、`/actuator/metrics`、`/actuator/heapdump` 都**不能**是 200
+
+---
+
+## 十二、远端托管（V1.4 后半段 · Day 47）
+
+本地全栈（`docker-compose.app.yml`）与远端托管是**两件事**，别混着用：
+
+| | 本地全栈 | 远端托管 |
+|---|---|---|
+| 镜像 | 本机 `build`（要源码 + jar） | 从 registry `pull`（CI 推的） |
+| 谁编译 | 宿主的 Maven | **不编译** —— 线上跑的必须是 CI 验收过的同一个 jar |
+| 对外入口 | 直接 8080 | Caddy（自动 HTTPS，且显式拒绝 `/actuator/**`） |
+| 数据 | 丢了重跑 initdb | 有 `backup-db.sh`（`pg_dump -Fc`，支持只恢复单表） |
+
+### 三步上线
+
+```bash
+# ① 服务器上：一份配置
+cd deploy && cp .env.prod.example .env      # ★ 逐项改：JWT_SECRET / DB_PASSWORD / APP_DOMAIN …
+
+# ② 仓库里：打 tag 触发发布流水线（推镜像到 GHCR，跑容器级冒烟）
+git tag v1.4.0 && git push origin v1.4.0
+
+# ③ 服务器上：拉 + 起（自带健康检查，失败自动回滚到上一个版本）
+export IMAGE_TAG=1.4.0
+./deploy.sh 1.4.0
+```
+
+回滚就是把它指回上一个版本：`./deploy.sh 1.3.9`。
+★ 前提正是**镜像 tag 必须具体、禁止 `latest`** —— 否则「回滚」等于回滚到你正在修的坏版本。
+
+### 五条为什么（每条都对应一类真实事故）
+
+1. **远端不编译**：镜像里编出来的东西，与跑过 434 条回归的不是同一个文件。
+2. **禁止 `:latest`**：它让「线上是哪一版」无法回答，也让回滚退化成伪命题。
+3. **中间件不发布端口**：公网可达的 PG / 无认证 Redis 不是配置风格问题，是事故。
+4. **`mem_limit` 必须有**：没有限额，`-XX:MaxRAMPercentage` 只能按宿主内存算，容器感知是摆设。
+5. **`up -d` 的退出码证明不了应用能用**：所以 `deploy.sh` 等的是容器 health（actuator readiness），
+   失败即自动退回上一版。
+
+### 护栏
+
+```bash
+python backend/loadtest/day47-prod-compose-guard.py      # 19 条静态判据，已进 CI
+python backend/loadtest/_d47_prod_ctrl.py                # 控制组 4 组，全部必须 FAIL
+```
+
+上面那五条**没有一条**会在编译、测试或 `docker compose up -d` 时报错 ——
+它们只会在上线后的某一天变成事故，所以只能靠静态判据提前拦。
+
+> ⚠️ 本目录交付的是**可部署的物料**，不是一台跑着的服务器：
+> 还需要一台云主机、一个域名，以及仓库 Secrets 里的 `DEPLOY_HOST` / `DEPLOY_USER` /
+> `DEPLOY_SSH_KEY` / `DEPLOY_PATH`（不配的话 release 流水线的部署段会**整段跳过**，不会变红）。

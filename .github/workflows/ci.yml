@@ -66,6 +66,20 @@ jobs:
             exit 1
           fi
 
+      # V1.4 后半段（远端托管）：生产编排静态护栏。
+      #   ★ 同样是纯静态、秒级 —— 它拦的那几类事故（数据库发布端口 / 镜像用 latest /
+      #     忘了 mem_limit / 部署脚本里 down -v）**没有一条**会在编译、测试或
+      #     `docker compose up -d` 时报错，只会在上线后的某一天变成事故。
+      #   控制组 4 组（本地 `python backend/loadtest/_d47_prod_ctrl.py`）全部命中、零误伤。
+      - name: Prod compose guard (暴露面 / 版本可回答 / 部署脚本不删库)
+        working-directory: backend/loadtest
+        run: |
+          if ! python day47-prod-compose-guard.py; then
+            echo "::error::生产编排不合规范 —— 报告尾部："
+            tail -30 day47-prod-compose-guard-report.txt || true
+            exit 1
+          fi
+
       # ★ 不再 -DskipTests（Day 44）：此前项目 189 个源文件、0 个测试类，
       #   「测试」全靠 81 个需要起全套基础设施的 Python 端到端脚本 —— 它们能证「链路通」，
       #   证不了「单个方法对」。现在补上真正的单元测试，install 会跑 test 阶段 ⇒ 失败即构建失败。

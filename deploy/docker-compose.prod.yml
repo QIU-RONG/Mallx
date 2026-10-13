@@ -1,0 +1,164 @@
+# ==============================================================================
+# MallX 生产编排（远端托管 · V1.4 后半段）
+# ------------------------------------------------------------------------------
+# ★ 与 docker-compose.app.yml（【本地全栈】）的分工：
+#
+#   | 文件                    | 镜像从哪来            | 用在哪         |
+#   |-------------------------|-----------------------|----------------|
+#   | docker-compose.app.yml  | 本地 build（要源码+jar）| 本机 / 演示    |
+#   | 本文件                  | registry 里 pull     | 远端服务器     |
+#
+# ★★ 本机 build 与远端 pull 必须分开，理由不是「方便」，是**可复现性**：
+#   远端机器上 build 出来的 jar，与 CI 里跑过 434 条回归的那一个不是同一个文件 ——
+#   「验收过的产物」和「线上跑的产物」一旦不是同一个，整套验收就失去意义。
+#
+# 用法（远端机器上，工作目录 = deploy/）：
+#     cp .env.prod.example .env      # ★ 然后改掉全部 ★必须★ 项
+#     export IMAGE_TAG=1.4.0
+#     docker compose -f docker-compose.prod.yml pull
+#     docker compose -f docker-compose.prod.yml up -d
+#     ./deploy.sh 1.4.0              # ★ 推荐走它：自带健康检查与失败回滚
+#
+# 回滚：
+#     ./deploy.sh 1.3.9              # 就是把 IMAGE_TAG 指回上一个版本再 up -d
+# ==============================================================================
+name: mallx-prod
+
+services:
+  # ---------------------------------------------------------------- 反向代理
+  # ★ 为什么单独放一个 Caddy 而不是让 app 直接对外：
+  #   ① 自动 HTTPS（ACME）—— 手写 certbot 续期是运维债，迟早有一天会忘；
+  #   ② ★★ 它是【公网 → 内网】的唯一收口点，能在这里**显式拒绝** /actuator/**；
+  #   ③ 应用只认 HTTP，TLS 终止的事不该让 Spring 管。
+  caddy:
+    image: caddy:2-alpine
+    container_name: mallx-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"          # HTTP/3
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN 未设置（例：mallx.example.com）}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data          # ★ 证书必须持久化：丢了会反复申请，触发 ACME 限流
+      - caddy-config:/config
+    depends_on:
+      - app
+    logging: &default-logging     # ★ 日志必须有上限：无限增长的 json.log 是「磁盘满」头号成因
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------- 应用
+  app:
+    # ★★ 镜像 tag 必须是【不可变的具体版本】，绝不能用 :latest
+    #   —— latest 让「线上跑的是哪一版」无法回答，也让「回滚」变成伪命题
+    #      （回滚到 latest = 回滚到同一个你正在修的坏版本）。
+    image: ${IMAGE_REGISTRY:-ghcr.io/qiu-rong/mallx-server}:${IMAGE_TAG:?IMAGE_TAG 未设置（例：1.4.0）}
+    container_name: mallx-app
+    restart: always
+    # 只把端口暴露给 compose 内部网络（Caddy 反代），**不**发布到宿主
+    expose:
+      - "8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: ${DB_NAME:-mallx}
+      DB_USERNAME: ${DB_USERNAME:-mallx}
+      # `:?` = 缺失即拒绝启动。★ 别图省事给默认值：默认密码是最容易被带进生产的那个坑
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 未设置（请检查 deploy/.env）}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET 未设置 —— 泄露它等于任何人可自签超管 token}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-mallx}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-mallx}
+      # ★ 与 app.yml 同一条纪律：这里刻意【不写 JAVA_OPTS】
+      #   —— JVM 参数的单一来源是镜像 ENV（容器感知 -XX:MaxRAMPercentage=75）
+      #   ⚠️ compose 的 environment 永远覆盖镜像 ENV，写在这里就等于让 Dockerfile 白改。
+    # ★ 给真实内存上限：没有限额，MaxRAMPercentage 只能按宿主内存算，「容器感知」就是摆设
+    mem_limit: ${APP_MEM_LIMIT:-768m}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      # ★ 探针用 actuator readiness 而不是 /api/hello：
+      #   /api/hello 只要 Tomcat 起着就 200，数据库断了它照样报健康（V1.4 起已换掉）。
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health/readiness || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    logging: *default-logging
+
+  # ---------------------------------------------------------------- 数据层
+  postgres:
+    image: postgres:16-alpine
+    container_name: mallx-postgres-prod
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mallx}
+      POSTGRES_USER: ${DB_USERNAME:-mallx}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD 未设置（请检查 deploy/.env）}
+      # ★ 生产库一律用 C 区域排序 + UTF8：initdb 一旦建好就改不了（要 dump/restore）
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # ★★ 数据库【不】发布端口（连 expose 都不必）：公网可达的 PG 就是勒索软件的靶子。
+    #   要进去 psql 就 `docker compose -f docker-compose.prod.yml exec postgres psql -U mallx -d mallx`
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: mallx-redis-prod
+    restart: always
+    # ★ Redis 必须设密码：无认证的 Redis 被扫到就是免费的 KV 存储（还会被写公钥）
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD 未设置}"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging: *default-logging
+
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: mallx-rabbitmq-prod
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-mallx}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-mallx}
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    logging: *default-logging
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitdata:
+  caddy-data:
+  caddy-config:

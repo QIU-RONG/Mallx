@@ -1,0 +1,42 @@
+# ==============================================================================
+# Caddyfile —— 公网与 MallX 之间【唯一】的收口点
+# ------------------------------------------------------------------------------
+# ★ 它存在的三个理由（不是「为了好看」）：
+#   ① 自动 HTTPS（ACME），证书自动续期 —— 手写 certbot cron 是典型的运维债；
+#   ② ★★ 在这里【显式拒绝】/actuator/**：那是运维端点，绝不该出现在公网；
+#   ③ TLS 终止在代理层，Spring 只认 HTTP（证书轮换不用重启应用）。
+#
+# ⚠️ 变量名 APP_DOMAIN 来自 docker-compose.prod.yml 的 environment。
+# ==============================================================================
+
+{$APP_DOMAIN} {
+	encode gzip
+
+	# ★ actuator 一律拒掉：它是**诊断**端点（health 被探针用了，但 env/metrics/
+	#   heapdump 任何一个漏到公网都是事故）。这里返回 404 而不是 403 ——
+	#   403 等于告诉对方「这个路径存在，只是你不许看」，404 才是不承认它存在。
+	@actuator path /actuator /actuator/*
+	respond @actuator 404
+
+	# ★ 同样处理 swagger：prod profile 下虽然已关，但代理层再挡一次更稳（双保险，
+	#   因为它一旦被打开，泄漏的是整个接口清单）。
+	@docs path /swagger-ui* /v3/api-docs*
+	respond @docs 404
+
+	# 反向代理到 compose 内部网络里的 app（★ 容器名/服务名，不是 localhost）
+	reverse_proxy app:8080
+
+	# 请求头：让应用拿到真实协议与客户端 IP（否则日志里全是代理的 172.x）
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
