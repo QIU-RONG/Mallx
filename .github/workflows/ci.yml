@@ -46,6 +46,24 @@ jobs:
         with:
           python-version: '3.12'
 
+      # D46-A（Day 46 事故收口）：权限总数【单一来源】护栏 —— 纯静态、秒级、不需要 DB/应用/Docker。
+      #   事故回放：Day 46 新增 5 条退款权限，总数 41→46，而这份事实被硬编码钉在 5 处，
+      #   改的时候只想起来一处 ⇒ 下面那条「Wait for initdb（permissions=41）」永远等不到 46
+      #   ⇒ 整条 pipeline 红，而红的位置离真因（SQL 里多了 5 行）有十万八千里。
+      # ★ 本护栏**不硬编码 46**：真值从 backend/sql/*.sql 的 INSERT INTO permissions 推导出来，
+      #   再逐处核对 ci.yml / day24 / day25-strict / day25-compose / day43-ps1 里的常量
+      #   ⇒ 以后加权限只需改 SQL；其余忘了改会被【点名是哪一处】；冒出第 6 处也会被 C2 段自动抓出。
+      #   控制组（4 组，本地 `python backend/loadtest/_d46a_ctrl.py`）：漏改一处红 1 条、
+      #   未登记声明点红 1 条、SQL 加一条权限红 9 条、判据写成 >= 红 2 条 —— 零误伤。
+      - name: Permission count guard (单一来源：SQL 推导 → 各处常量)
+        working-directory: backend/loadtest
+        run: |
+          if ! python day47-perm-count-guard.py; then
+            echo "::error::权限总数常量与 backend/sql 不一致，或出现了未登记的硬编码点 —— 报告尾部："
+            tail -30 day47-perm-count-guard-report.txt || true
+            exit 1
+          fi
+
       # ★ 不再 -DskipTests（Day 44）：此前项目 189 个源文件、0 个测试类，
       #   「测试」全靠 81 个需要起全套基础设施的 Python 端到端脚本 —— 它们能证「链路通」，
       #   证不了「单个方法对」。现在补上真正的单元测试，install 会跑 test 阶段 ⇒ 失败即构建失败。
