@@ -2,7 +2,9 @@
 # Day 43 · 一条命令跑完整栈联调（本机便捷入口，非跨平台脚本）
 # ------------------------------------------------------------------------------
 # 干什么：
-#   ① 探 Docker 引擎 + 起开发容器（postgres/redis/rabbitmq）并等 permissions=41
+#   ① 探 Docker 引擎 + 起开发容器（postgres/redis/rabbitmq）并等 permissions=46
+#      （Day 46 起权限总数 41 → 46；★ 与 ci.yml、day24-perm-apply.py、
+#        day25-sql-strict-check.py、day25-compose-verify.py 四个地方同源，一起改）
 #   ② 等【后端 8080 + 两个 dev server 5173/5174】就绪
 #   ③ day26 夹具（把库恢复成 M1 的 day26 常态）
 #   ④ 跑 day43-fe-full-stack-e2e.py（54 条断言，含跨端权限对照）
@@ -35,9 +37,9 @@ $pg = 0
 foreach ($i in 1..30) {
   Start-Sleep 3
   $pg = & $dk exec mallx-postgres psql -U mallx -d mallx -tAc "SELECT count(*) FROM permissions" 2>$null
-  if ("$pg".Trim() -eq "41") { break }
+  if ("$pg".Trim() -eq "46") { break }
 }
-L "dev_pg permissions=$pg (期望 41)"
+L "dev_pg permissions=$pg (期望 46)"
 
 # ---------- 2) 三个服务就绪（★ 探活用 localhost：Vite 8 只绑 IPv6） ----------
 $b = $false; $c = $false; $a = $false

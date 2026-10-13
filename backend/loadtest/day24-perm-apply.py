@@ -106,8 +106,11 @@ EXPECT_CROSS = {
     "granted_to_order_admin": 0,
 }
 
-EXPECT_PERM_MAX_ID = 41
-EXPECT_PERM_TOTAL = 41
+# ⚠️ Day 46 新增 5 条退款权限（id 42–46）：两个常量同步 41 → 46。
+#    ★ 同一份事实被钉在四处：本文件、day25-sql-strict-check.py、
+#      day25-compose-verify.py、ci.yml 那条「等 initdb」的判据 —— 改一处必须改四处。
+EXPECT_PERM_MAX_ID = 46
+EXPECT_PERM_TOTAL = 46
 
 lines = []
 say = lines.append

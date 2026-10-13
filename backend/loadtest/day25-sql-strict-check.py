@@ -6,14 +6,14 @@
   ⇒ 任何一个文件报错，初始化当场停止，排在它【后面】的补丁全部【静默跳过】。
   实测事故：09 号补丁里有一段「故意撞唯一约束」的自检，在交互式 psql 下没问题，
   但在 initdb 里直接掐断了整个初始化 ⇒ 10/11/12/13/14 号补丁一个都没跑，
-  容器里 permissions 只有 20 行（应 41）、品牌权限 39/40/41 缺失、
+  容器里 permissions 只有 20 行（当时应 41；Day 46 起权限总数是 46）、品牌权限 39/40/41 缺失、
   `GET /api/admin/roles` 带超管 token 也 403。而 `docker compose ps` 全绿、app healthy。
 
   ⇒ 判据：**容器 healthy 只证明进程活着，不证明业务可用。**
   ⇒ 本脚本把「全新库 + 按序 + ON_ERROR_STOP=1」这件事搬到一次运行里，
      并且**逐文件**给出退出码，让「是哪一个文件把链掐断的」一眼可见。
 
-做法：在运行中的 Postgres 容器里建一个【临时库】，把 01→14 按名字顺序灌进去，
+做法：在运行中的 Postgres 容器里建一个【临时库】，把 01→18 按名字顺序灌进去，
       全程 `-v ON_ERROR_STOP=1`；结束后删库。★ 不碰开发库的任何数据。
 
 运行：python day25-sql-strict-check.py
@@ -37,20 +37,23 @@ PROBE_DB = "mallx_strict_probe"    # ★ 临时库，跑完就删
 SQL_DIR = lp(r"D:\MallX\backend\sql")
 REPORT = lp(r"D:\MallX\backend\loadtest\day25-sql-strict-check-report.txt")
 
-# 15 份补丁的期望顺序（字典序恰好也是正确的执行序；15 = Day 28 搜索修复）
+# 18 份补丁的期望顺序（字典序恰好也是正确的执行序；15 = Day 28 搜索修复、17/18 = Day 46 退款售后）
 FILES = ["01-schema.sql", "02-index.sql", "03-data.sql", "04-review-constraints.sql",
          "05-admin-permissions.sql", "06-day17-fixtures.sql", "07-admin-permissions.sql",
          "08-marketing-permissions.sql", "09-user-coupons-unique.sql",
          "10-brand-permissions.sql", "11-order-discount.sql", "12-day22-permissions.sql",
          "13-day23-permissions.sql", "14-brand-crud-permissions.sql",
-         "15-search-trgm-indexes.sql", "16-drop-dead-indexes.sql"]
+         "15-search-trgm-indexes.sql", "16-drop-dead-indexes.sql",
+         "17-refunds.sql", "18-refund-permissions.sql"]
 
 # 满额护栏：文件清单被改动时立刻炸（防止「少跑一个文件却全绿」）
-EXPECTED_FILES = 16
+EXPECTED_FILES = 18
 # 满额护栏：断言条数（防止「有检查项根本没被执行到」被当成通过）
 EXPECTED_CHECKS = 16
 # 跑完全部补丁后的硬事实（与 day24-perm-apply.py 的 EXPECT_PERM_TOTAL 同源）
-EXPECT_PERM_TOTAL = 41
+# ⚠️ Day 46 新增 5 条退款权限（42–46）：41 → 46。改 backend/sql 里任何权限文件时，
+#    本常量、day24-perm-apply.py 的同名常量、以及 ci.yml 那条「等 initdb」的判据必须一起改。
+EXPECT_PERM_TOTAL = 46
 
 lines = []
 say = lines.append

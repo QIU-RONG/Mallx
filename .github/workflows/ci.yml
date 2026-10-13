@@ -5,7 +5,7 @@
 #     同一套 initdb 01→14）—— 63 个验收脚本一行不改即可在 runner 上运行；
 #     本地与 CI 的唯一差异：mvn 离线(-o) vs 在线、Windows docker 绝对路径 vs
 #     PATH 里的 docker（用 MALLX_DOCKER=docker 覆盖，见 loadtest/_paths.py 与各脚本）。
-#  2. 「等数据库就绪」必须用数据判据（permissions=41），不能用 pg_isready /
+#  2. 「等数据库就绪」必须用数据判据（permissions=46，Day 46 起），不能用 pg_isready /
 #     容器 healthy —— initdb 以 ON_ERROR_STOP=1 熔断，healthy 时补丁可能还没跑完
 #     （Day 25 事故判据，见 docs/daily/Day-25）。
 #  3. 全部判定来自脚本退出码（所有纳管脚本失败即 exit 1），CI 不 grep 人类可读文本。
@@ -61,22 +61,26 @@ jobs:
           docker compose down -v --remove-orphans || true
           docker compose up -d
 
-      - name: Wait for initdb (数据判据：permissions=41，而非 pg_isready)
+      # ⚠️ permissions 的期望值必须【跟着 backend/sql/ 里新增权限的文件一起改】：
+      #    Day 46 新增 5 条退款权限（42–46）后，这里仍写 41 ⇒ 判据永远等不到 ⇒ 整条 pipeline 红。
+      #    ★ 别写「>= 46」：那会让「只跑到 14 号文件、15–18 全熔断」这种半截初始化蒙混过关，
+      #      而这条判据存在的全部意义就是抓熔断。精确值才是判据。
+      - name: Wait for initdb (数据判据：permissions=46，而非 pg_isready)
         run: |
           n=0
           for i in $(seq 1 60); do
             n=$(docker exec mallx-postgres psql -U mallx -d mallx -tAc \
                 "SELECT count(*) FROM permissions" 2>/dev/null || echo 0)
             n=$(echo "$n" | tr -d '[:space:]')
-            if [ "$n" = "41" ]; then
+            if [ "$n" = "46" ]; then
               echo "initdb complete: permissions=$n"
               break
             fi
             echo "waiting for initdb... ($i) permissions=$n"
             sleep 3
           done
-          if [ "$n" != "41" ]; then
-            echo "::error::initdb 未完成（permissions=$n，期望 41）—— 01→14 有文件熔断"
+          if [ "$n" != "46" ]; then
+            echo "::error::initdb 未完成（permissions=$n，期望 46）—— 01→18 有文件熔断"
             docker logs mallx-postgres 2>&1 | tail -60
             exit 1
           fi

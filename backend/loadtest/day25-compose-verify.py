@@ -119,7 +119,9 @@ def main():
     chk("B1 核心表已建（public schema 表数 >= 22）", n_tab >= 22, "tables=%s" % n_tab)
     rc, out, _e = sql("SELECT count(*) FROM permissions")
     n_perm = int(out) if rc == 0 and out.isdigit() else -1
-    chk("B2 权限码全部补发到位（permissions = 41）", n_perm == 41, "permissions=%s" % n_perm)
+    # ⚠️ Day 46 新增 5 条退款权限（42–46）：41 → 46。改 backend/sql 里任何权限文件时，
+    #    这里的常量必须同步，否则「权限补发到位」这条判据会永远红（见 Day-25 事故）。
+    chk("B2 权限码全部补发到位（permissions = 46）", n_perm == 46, "permissions=%s" % n_perm)
     rc, out, _e = sql("SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id"
                       " WHERE p.code LIKE 'brand:%' AND rp.role_id = 1")
     chk("B3 最后一份补丁（14 号 · brand:*）的授权也在（超管持有 4 条 brand 权限）",
