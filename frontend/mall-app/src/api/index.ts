@@ -12,6 +12,7 @@ import type {
   PaymentVO,
   ProductDetailVO,
   ProductVO,
+  RefundVO,
   Result,
   UserCouponVO,
 } from '../types/api'
@@ -120,4 +121,37 @@ export function couponReceive(couponId: number) {
 
 export function couponMy(params: { page: number; size: number }) {
   return http.get<never, Result<PageResult<UserCouponVO>>>('/coupons/my', { params })
+}
+
+// ===================== FE3：售后 / 退款（Day 46） =====================
+/**
+ * C 端售后接口全部挂在 /api/refunds 下（不是 /api/admin/refunds —— 那是运营入口）。
+ *
+ * ★★ 为什么 C 端接口【一个 @PreAuthorize 都没有】：C 端 token 的 perms 是空集，
+ *   挂上权限码等于把所有买家全挡在门外。C 端的边界是【数据归属】——
+ *   每条 SQL 都带 `AND user_id = #{userId}`，别人的单在你这里就是「不存在」。
+ *   ⇒ 前端同理：这里不需要也【不能】做权限显隐，只需要按订单状态决定能不能申请。
+ */
+
+/** 申请售后 —— ★ 只传 orderId / type / reason，没有金额字段（退款额由服务端按订单实付算） */
+export function refundApply(payload: { orderId: number; type: string; reason: string }) {
+  return http.post<never, Result<number>>('/refunds', payload)
+}
+
+export function myRefunds(params: { page: number; size: number }) {
+  return http.get<never, Result<PageResult<RefundVO>>>('/refunds/my', { params })
+}
+
+export function refundDetail(id: number | string) {
+  return http.get<never, Result<RefundVO>>(`/refunds/${id}`)
+}
+
+/** 撤销申请（只在 APPLIED/APPROVED 有效，后端 CAS 挡） */
+export function refundCancel(id: number) {
+  return http.post<never, Result<void>>(`/refunds/${id}/cancel`)
+}
+
+/** 退货寄出：填物流单号（仅【退货退款】在【审核通过】后可用） */
+export function refundShip(id: number, trackingNo: string) {
+  return http.post<never, Result<void>>(`/refunds/${id}/ship`, { trackingNo })
 }

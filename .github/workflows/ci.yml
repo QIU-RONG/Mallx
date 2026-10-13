@@ -384,6 +384,21 @@ jobs:
             exit 1
           fi
 
+          # Day 47：退款/售后【跨端】链路。★ 复用上面这对 dev server（同一 step 内才活着）。
+          #   它与 day46 的分工：day46 直连 8080 验「后端对不对」（82 条 + DB 对账）；
+          #   本脚本走 5173/5174 代理，额外验「前端类型定义里声明的字段名对不对」——
+          #   字段名写错在前端只会静默显示空白，不报错，直连后端永远验不出来。
+          #   ★ 反向对照：op_product（商品管理员）全程 403（售后是订单域，见 18 号补丁第二节③）。
+          if ! python day47-refund-fe-e2e.py; then
+            echo "::error::Day 47 退款售后前端联调失败 —— 报告尾部："
+            tail -70 day47-refund-fe-e2e-report.txt || true
+            echo "::group::dev server 日志"
+            tail -20 /tmp/dev-mall.log || true
+            tail -20 /tmp/dev-admin.log || true
+            echo "::endgroup::"
+            exit 1
+          fi
+
       - name: Dump app log on failure
         if: failure()
         run: tail -100 /tmp/app.log || true

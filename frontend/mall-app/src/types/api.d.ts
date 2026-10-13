@@ -189,3 +189,32 @@ export interface PaymentVO {
   paidAt?: string
   createdAt?: string
 }
+
+// ===================== 售后 / 退款（Day 46） =====================
+/**
+ * 买家视角的售后单（RefundVO）。
+ *
+ * ★ 与 AdminRefundVO 的差别：管理端多 orderNo / userNickname，
+ *   这两个是【别人的信息】，C 端 VO 一律不带（与 OrderVO / AdminOrderVO 同构）。
+ *
+ * ⚠️ 五个时间戳都可空 —— 进度条靠它们画，没走到那一步就是 null。
+ */
+export interface RefundVO {
+  id: number
+  refundNo: string
+  orderId: number
+  type: 'REFUND_ONLY' | 'RETURN_REFUND'
+  status: 'APPLIED' | 'APPROVED' | 'REJECTED' | 'RETURNING' | 'REFUNDING' | 'SUCCESS' | 'CANCELLED'
+  /** ★ 服务端按 orders.pay_amount 算的快照 —— 前端传什么都不算数 */
+  amount: number
+  reason: string
+  /** 审核备注（拒绝原因） */
+  remark?: string
+  trackingNo?: string
+  appliedAt?: string
+  auditedAt?: string
+  shippedAt?: string
+  receivedAt?: string
+  refundedAt?: string
+  createdAt?: string
+}

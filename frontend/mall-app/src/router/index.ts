@@ -38,6 +38,12 @@ const router = createRouter({
       component: () => import('../views/Coupons.vue'),
       meta: { requiresAuth: true },
     },
+    {
+      path: '/refunds',
+      name: 'my-refunds',
+      component: () => import('../views/MyRefunds.vue'),
+      meta: { requiresAuth: true },
+    },
   ],
 })
 

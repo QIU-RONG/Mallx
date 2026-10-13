@@ -164,3 +164,35 @@ export interface BrandVO {
   name: string
   logo?: string
 }
+
+// ===================== 售后 / 退款（Day 46） =====================
+/**
+ * 管理端售后单行（AdminRefundVO = RefundVO + orderNo + userNickname）。
+ *
+ * ★ status 与 type 用联合类型而不是 string：写错一个字符在模板里不会报错，
+ *   只会静默显示空白（前端最典型的「看起来没坏」）。
+ * ⚠️ 五个业务时间戳全部可空 —— 售后进度条就是靠它们画的，
+ *   没走到那一步就是 null，前端必须判空而不是假定有序。
+ */
+export interface AdminRefundVO {
+  id: number
+  refundNo: string
+  orderId: number
+  /** 运营拿它去查订单详情 —— AdminRefundVO 比 C 端 VO 多的一列 */
+  orderNo: string
+  userNickname?: string
+  type: 'REFUND_ONLY' | 'RETURN_REFUND'
+  status: 'APPLIED' | 'APPROVED' | 'REJECTED' | 'RETURNING' | 'REFUNDING' | 'SUCCESS' | 'CANCELLED'
+  /** ★ 退款额是【服务端快照】，前端传什么都不算数 */
+  amount: number
+  reason: string
+  /** 审核备注（拒绝原因）—— 会展示给买家 */
+  remark?: string
+  trackingNo?: string
+  appliedAt?: string
+  auditedAt?: string
+  shippedAt?: string
+  receivedAt?: string
+  refundedAt?: string
+  createdAt?: string
+}

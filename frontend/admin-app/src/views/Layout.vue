@@ -22,6 +22,9 @@ async function onExit() {
         <el-menu-item index="/dashboard">概览</el-menu-item>
         <el-menu-item index="/products">商品管理</el-menu-item>
         <el-menu-item index="/orders">订单管理</el-menu-item>
+        <!-- ★ 售后入口按权限码显隐：没有 refund:list 的人连菜单都看不到
+             （只是体验 —— 直接敲 URL 也会被后端 @PreAuthorize 挡成 403） -->
+        <el-menu-item v-if="auth.hasPerm('refund:list')" index="/refunds">售后管理</el-menu-item>
       </el-menu>
     </el-aside>
 

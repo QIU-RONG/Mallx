@@ -26,6 +26,7 @@ function logout() {
       <el-menu-item index="/">首页</el-menu-item>
       <el-menu-item index="/coupons">优惠券</el-menu-item>
       <el-menu-item index="/orders">我的订单</el-menu-item>
+      <el-menu-item index="/refunds">我的售后</el-menu-item>
     </el-menu>
     <div class="spacer" />
     <el-badge :value="cartStore.selectedCount" :hidden="!cartStore.selectedCount" class="cart">

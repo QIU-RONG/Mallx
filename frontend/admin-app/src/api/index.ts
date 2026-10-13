@@ -1,6 +1,7 @@
 import http from './http'
 import type {
   AdminOrderVO,
+  AdminRefundVO,
   BrandVO,
   CategoryVO,
   DashboardOverviewVO,
@@ -76,6 +77,49 @@ export function adminOrderCancel(id: number | string) {
  */
 export function adminOrderShip(id: number | string) {
   return http.post<never, Result<void>>(`/orders/${id}/ship`)
+}
+
+// ===================== 售后 / 退款（Day 46） =====================
+/**
+ * 全部挂在 /api/admin/** 下 —— ★ 不是排版偏好，是安全要求：
+ * SecurityConfig 白名单里有 GET /api/products/** 与 /api/categories/** 的 permitAll，
+ * 管理端接口若挂到 C 端前缀下会【静默变成匿名可访问】。
+ *
+ * ⚠️ 四个写端点各一个权限码，后端不做「审核=打款」的合码
+ * （不相容职务分离）：approve / reject / receive / refund。
+ * 前端这里也只是【按钮显隐】，真正的边界在后端 @PreAuthorize。
+ */
+export function adminRefundList(params: {
+  page: number
+  size: number
+  status?: string
+  userId?: number
+}) {
+  return http.get<never, Result<PageResult<AdminRefundVO>>>('/admin/refunds', { params })
+}
+
+/** 审核通过：仅退款 → 可执行退款；退货退款 → 等买家寄回 */
+export function adminRefundApprove(id: number, remark?: string) {
+  return http.post<never, Result<void>>(`/admin/refunds/${id}/approve`, null, {
+    params: { remark },
+  })
+}
+
+/** 审核拒绝（终态）：★ remark 会展示给买家，所以入参必填（前端拦一次，后端不强制） */
+export function adminRefundReject(id: number, remark: string) {
+  return http.post<never, Result<void>>(`/admin/refunds/${id}/reject`, null, {
+    params: { remark },
+  })
+}
+
+/** 退货确认收货：已寄出 → 可执行退款 */
+export function adminRefundReceive(id: number) {
+  return http.post<never, Result<void>>(`/admin/refunds/${id}/receive`)
+}
+
+/** ★★★ 执行退款 —— 全项目唯一动钱的售后端点（订单→REFUNDED、库存回补、退券、负向流水） */
+export function adminRefundExecute(id: number) {
+  return http.post<never, Result<void>>(`/admin/refunds/${id}/refund`)
 }
 
 // ===================== 仪表盘 =====================
