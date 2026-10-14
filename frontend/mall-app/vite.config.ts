@@ -15,4 +15,11 @@ export default defineConfig({
       },
     },
   },
+  test: {
+    // ★ jsdom：auth store 要碰 localStorage、router 要碰 history，Node 环境没有这些
+    environment: 'jsdom',
+    // ★ 只扫 src 下的 *.spec.ts —— 与后端「测试不与实现混放」同一思路：
+    //   实现文件里不会因为叫 *.spec.ts 被误扫进来
+    include: ['src/**/*.spec.ts'],
+  },
 })

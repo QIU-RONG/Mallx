@@ -510,6 +510,19 @@ jobs:
       - name: Install (npm ci)
         run: npm ci --no-audit --no-fund
 
+      # ★ Day 48：ESLint（--max-warnings 0 ⇒ warn 也算失败）。
+      #   在此之前前端只有「类型 + 构建」两道关，代码干净是靠自觉，没有东西在 CI 里守着。
+      #   ⚠️ 只在 mall-app 上配了（见下）—— admin-app 的规则集与测试尚未同步，先不装门禁。
+      - name: Lint (ESLint, mall-app only)
+        if: matrix.app == 'mall-app'
+        run: npm run lint
+
+      # ★ Day 48：Vitest 单测（15 条，覆盖 http 拦截器 / auth store / router 守卫
+      #   —— 这三个是「改一处坏一片页面、而类型检查和构建都看不出来」的高危区）。
+      - name: Unit tests (Vitest, mall-app only)
+        if: matrix.app == 'mall-app'
+        run: npm run test
+
       - name: Type check + Build (vue-tsc -b && vite build)
         run: npm run build
 
