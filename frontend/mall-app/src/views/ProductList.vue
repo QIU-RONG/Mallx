@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { brandList, categoryTree, pageProducts } from '../api'
+import { ElMessage } from 'element-plus'
+import { brandList, cartAdd, categoryTree, pageProducts } from '../api'
+import { useAuthStore } from '../stores/auth'
+import { useCartStore } from '../stores/cart'
 import type { BrandVO, CategoryVO, ProductVO } from '../types/api'
 
 const router = useRouter()
+const auth = useAuthStore()
+const cartStore = useCartStore()
 
 const records = ref<ProductVO[]>([])
 const total = ref(0)
@@ -14,6 +19,8 @@ const keyword = ref('')
 const categoryId = ref<number | undefined>(undefined)
 const brandId = ref<number | undefined>(undefined)
 const loading = ref(false)
+/** ★ 正在加购的商品 id —— 只让那一张卡转圈，而不是整页 loading */
+const addingId = ref<number | null>(null)
 
 const categories = ref<CategoryVO[]>([])
 const brands = ref<BrandVO[]>([])
@@ -68,6 +75,37 @@ async function load() {
 function search() {
   current.value = 1
   load()
+}
+
+/**
+ * ★ 快捷加购（Day 48）：列表卡片直接加进购物车，不用先进详情选规格。
+ *
+ * <p>加的是 <b>defaultSkuId</b>（后端算好的「最便宜在售 SKU」），
+ * 与卡片上显示的「¥x 起」同源 —— 不会出现「看到 9999、加进去 12499」。
+ *
+ * <p>★ 未登录时【前端先拦】而不是让请求吃 401：
+ * http.ts 的 401 处理会清登录态 + 踢到登录页，用户会先看到一句
+ * 「请先登录」的报错再被跳走；这里直接给提示并跳转，体验顺一截。
+ * （后端那道 401 依然在，前端这层只是「别让他白跑一趟」。）
+ */
+async function quickAdd(p: ProductVO) {
+  if (p.defaultSkuId == null) {
+    ElMessage.warning('该商品暂无可购规格')
+    return
+  }
+  if (!auth.token) {
+    ElMessage.warning('请先登录')
+    router.push('/login')
+    return
+  }
+  addingId.value = p.id
+  try {
+    await cartAdd(p.defaultSkuId, 1)
+    cartStore.refresh()
+    ElMessage.success(`已加入购物车：${p.name}`)
+  } finally {
+    addingId.value = null
+  }
 }
 
 /** ★ 清掉某一个筛选后要重新查 —— 但「从第 1 页开始查」这件事只做一次，
@@ -161,6 +199,17 @@ onMounted(async () => {
             </span>
           </template>
           <span v-else class="price-none">暂无价格</span>
+          <!-- ★ 加购按钮：@click.stop 阻止冒泡到卡片的「进详情」 -->
+          <el-button
+            class="add-btn"
+            type="primary"
+            size="small"
+            :loading="addingId === p.id"
+            :disabled="p.defaultSkuId == null"
+            @click.stop="quickAdd(p)"
+          >
+            加入购物车
+          </el-button>
         </div>
         <div class="peek">查看详情 →</div>
       </el-card>
@@ -271,8 +320,12 @@ onMounted(async () => {
 .price-row {
   margin-top: 6px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 3px;
+}
+/* ★ 加购按钮推到最右：不与价格挤在一起，手指/鼠标容易命中 */
+.add-btn {
+  margin-left: auto;
 }
 .price {
   color: var(--brand-color);

@@ -176,7 +176,7 @@ onMounted(load)
         <el-button type="primary" @click="load">查询</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="rows" border style="margin-top: 12px">
+      <el-table v-loading="loading" :data="rows" border stripe style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="refundNo" label="售后单号" width="190" />
         <el-table-column prop="orderNo" label="订单号" width="190" />
@@ -199,7 +199,7 @@ onMounted(load)
           </template>
         </el-table-column>
         <el-table-column prop="appliedAt" label="申请时间" width="180" />
-        <el-table-column label="操作" min-width="220">
+        <el-table-column label="操作" min-width="220" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="((detail = row), (detailVisible = true))">
               详情

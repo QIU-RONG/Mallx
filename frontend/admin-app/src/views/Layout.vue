@@ -17,7 +17,11 @@ async function onExit() {
 <template>
   <el-container class="shell">
     <el-aside width="200px" class="aside">
-      <div class="brand">MallX 管理后台</div>
+      <!-- ★ 品牌区与 C 端同款（渐变方块 + 名称）：两个应用看起来要像一家公司的产品 -->
+      <div class="brand">
+        <span class="brand-mark">M</span>
+        <span class="brand-text">MallX 管理后台</span>
+      </div>
       <el-menu router :default-active="$route.path" class="menu">
         <el-menu-item index="/dashboard">概览</el-menu-item>
         <el-menu-item index="/products">商品管理</el-menu-item>
@@ -39,8 +43,12 @@ async function onExit() {
       </el-header>
 
       <el-main class="main">
-        <!-- 子路由出口 -->
-        <router-view />
+        <!-- 子路由出口（★ 与 C 端同一套过渡动画名，手感一致） -->
+        <router-view v-slot="{ Component }">
+          <transition name="brand-fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -55,16 +63,43 @@ async function onExit() {
 }
 .brand {
   height: 60px;
-  line-height: 60px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: #fff;
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   background: #171b24;
+}
+/* ★ 与 C 端同款品牌方块（CSS 渐变，不引图片资源） */
+.brand-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--brand-radius-sm);
+  background: var(--brand-gradient);
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.brand-text {
+  font-size: 14px;
 }
 .menu {
   border-right: none;
   background: #1f2430;
+}
+/* ★ 深色底上的选中态：用品牌色的浅档，纯品牌色在深底上对比过强、刺眼 */
+.menu :deep(.el-menu-item.is-active) {
+  color: var(--brand-color-light);
+  background: rgba(255, 106, 0, 0.1);
+}
+.menu :deep(.el-menu-item:hover) {
+  background: rgba(255, 255, 255, 0.06);
 }
 .header {
   display: flex;

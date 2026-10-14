@@ -23,11 +23,18 @@
 
       ★ GROUP BY product_id：一次查询拿回整页所有商品的价格区间，避免 N+1。
         没有任何在售 SKU 的商品【不会出现在结果里】⇒ 调用方按 null 处理。
+
+      ★ default_sku_id = 【最便宜的那个在售 SKU】：
+        array_agg(id ORDER BY price, id) 排序后取第一个。
+        排序键带 id 是为了「同价时结果稳定」—— 只按 price 排，同价 SKU 的顺序
+        由 PostgreSQL 自由决定，两次查询可能给出不同的 id（表现为「刷新一下加购变规格」）。
+        它与 min_price 同源，所以前端显示「¥9999 起」时加进车里的就是 9999 那个。
     -->
     <select id="selectPriceRange" resultType="com.mallx.product.vo.ProductPriceRangeVO">
-        SELECT product_id        AS product_id,
-               MIN(price)        AS min_price,
-               MAX(price)        AS max_price
+        SELECT product_id                                              AS product_id,
+               MIN(price)                                              AS min_price,
+               MAX(price)                                              AS max_price,
+               (array_agg(id ORDER BY price ASC, id ASC))[1]           AS default_sku_id
         FROM product_skus
         WHERE is_deleted = 0
           AND status = 1

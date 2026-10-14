@@ -1,0 +1,69 @@
+/**
+ * ★ MallX 管理端主题变量（Day 48 · 与 C 端 mall-app 同源，改一处必须改两处）。
+ *
+ * <p><b>为什么两个应用各留一份而不是抽公共包</b>：目前只有这几个变量，
+ * 抽包要走「本地 npm 包 / workspace」的构建配置，成本远高于收益；
+ * 与后端 {@code MAX_PAGE_SIZE} 那个判断同一条理由 ——
+ * <b>收益是静态的，代价是动态的</b>。等两边真的开始分叉（比如管理端要深色主题）
+ * 再抽，那时才知道该抽什么。
+ *
+ * <p>★ 与 Element Plus 的关系：不改 EP 自带的 {@code --el-*}，只在它之上加一层
+ * {@code --brand-*}，EP 升级时不会被覆盖。
+ */
+
+:root {
+  /* 品牌主色 */
+  --brand-color: #ff6a00;
+  --brand-color-light: #ff8c33;
+  --brand-color-dark: #e65f00;
+  --brand-gradient: linear-gradient(135deg, #ff8c33 0%, #ff6a00 100%);
+
+  /* 圆角 / 阴影 */
+  --brand-radius: 8px;
+  --brand-radius-sm: 4px;
+  --brand-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --brand-shadow-hover: 0 6px 20px rgba(255, 106, 0, 0.12);
+
+  --brand-header-h: 60px;
+}
+
+/**
+ * ★ 路由切换动画：与 C 端同名同效果（两边的「手感」要一致）。
+ */
+.brand-fade-enter-active,
+.brand-fade-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+.brand-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.brand-fade-leave-to {
+  opacity: 0;
+}
+
+/* ★ 全局滚动条 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--el-border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--el-border-color-darker);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/**
+ * ★ 表格里的金额一律等宽数字 —— 一列数字上下对齐才看得出量级，
+ * 比例字体下「9」和「1」宽度不同，列会参差不齐。
+ */
+.money-num {
+  font-variant-numeric: tabular-nums;
+}

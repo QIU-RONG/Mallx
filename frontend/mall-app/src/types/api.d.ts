@@ -32,6 +32,12 @@ export interface ProductVO {
    */
   minPrice?: number | null
   maxPrice?: number | null
+  /**
+   * ★ 默认 SKU id（= 最便宜的在售 SKU），供列表「快捷加购」用（Day 48 后端新增）。
+   * ⚠️ 与 minPrice 【同源】：显示「¥9999 起」时加进车里的就是 9999 那个规格。
+   * 同样可空 —— 与 minPrice 一起判。
+   */
+  defaultSkuId?: number | null
 }
 
 export interface SkuVO {

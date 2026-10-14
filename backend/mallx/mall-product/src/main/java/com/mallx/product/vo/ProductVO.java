@@ -39,4 +39,16 @@ public class ProductVO {
     private BigDecimal minPrice;
 
     private BigDecimal maxPrice;
+
+    /**
+     * ★ 默认 SKU id（= 最便宜的那个在售 SKU），供列表「快捷加购」用（Day 48）。
+     *
+     * <p>★ 它与 {@link #minPrice} <b>同源</b>：前端显示「¥9999 起」时，
+     * 一键加购进车里的就是 9999 那个规格 —— 取「第一个 SKU」会造成
+     * 「显示 9999、加进去 12499」的对不上账。
+     *
+     * <p>⚠️ 可为 null（没有在售 SKU 时），前端必须与 minPrice 一起判，
+     * 不能假定它一定有值。
+     */
+    private Long defaultSkuId;
 }

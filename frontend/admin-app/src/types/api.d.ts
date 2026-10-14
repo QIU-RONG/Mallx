@@ -36,6 +36,13 @@ export interface ProductVO {
   subtitle?: string
   mainImage?: string
   status: number
+  /**
+   * ★ 在售 SKU 的价格区间 + 默认 SKU（Day 48 后端新增，与 C 端 ProductVO 同源）。
+   * ⚠️ 三个都可空：商品没有在售 SKU 时全为 null ⇒ 表格要显示「无在售规格」而不是 ¥0。
+   */
+  minPrice?: number | null
+  maxPrice?: number | null
+  defaultSkuId?: number | null
 }
 
 export interface SkuVO {

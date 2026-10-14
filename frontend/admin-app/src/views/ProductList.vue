@@ -67,6 +67,15 @@ async function loadDict() {
   }
 }
 
+/** ★ 清除筛选（空状态里的出路）—— 与 C 端商品列表同一个思路：
+ *  空状态不能只告诉用户「没有」，要给他一个「怎么才有」的动作 */
+function resetQuery() {
+  query.keyword = ''
+  query.status = null
+  query.current = 1
+  load()
+}
+
 // ---------- 新增 ----------
 const createVisible = ref(false)
 const createForm = reactive({
@@ -196,11 +205,32 @@ onMounted(() => {
         </el-button>
       </div>
 
-      <el-table v-loading="loading" :data="rows" border style="margin-top: 12px">
+      <el-table v-loading="loading" :data="rows" border stripe style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
-        <el-table-column prop="name" label="商品" min-width="200" />
-        <el-table-column prop="categoryName" label="分类" width="120" />
-        <el-table-column prop="brandName" label="品牌" width="120" />
+        <el-table-column label="图" width="70">
+          <template #default="{ row }">
+            <img v-if="row.mainImage" :src="row.mainImage" class="thumb" alt="" />
+            <span v-else class="thumb thumb-none">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="商品" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="categoryName" label="分类" width="120" show-overflow-tooltip />
+        <el-table-column prop="brandName" label="品牌" width="110" />
+        <!-- ★ 价格列（Day 48 后端新增 minPrice / maxPrice）：管理端也终于看得到卖多少钱。
+             min == max 时只显示一个数，不做无意义的「~」 -->
+        <el-table-column label="在售价" width="150" align="right">
+          <template #default="{ row }">
+            <template v-if="row.minPrice != null">
+              <span class="money">
+                ¥{{ Number(row.minPrice).toFixed(2) }}
+                <template v-if="row.maxPrice != null && Number(row.maxPrice) > Number(row.minPrice)">
+                  ~ ¥{{ Number(row.maxPrice).toFixed(2) }}
+                </template>
+              </span>
+            </template>
+            <span v-else class="muted">无在售规格</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
             <el-tag :type="row.status === 1 ? 'success' : 'info'">
@@ -208,7 +238,8 @@ onMounted(() => {
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="240">
+        <!-- ★ fixed="right"：列一多表格就会横向滚动，操作按钮跟着跑出去 = 用户找不到 -->
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
             <el-button v-if="auth.hasPerm('product:update')" link type="primary" @click="toggleStatus(row)">
               {{ row.status === 1 ? '下架' : '上架' }}
@@ -221,6 +252,13 @@ onMounted(() => {
             </el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty description="没有匹配的商品">
+            <el-button v-if="query.keyword || query.status != null" size="small" @click="resetQuery">
+              清除筛选
+            </el-button>
+          </el-empty>
+        </template>
       </el-table>
 
       <el-pagination
@@ -324,5 +362,31 @@ onMounted(() => {
   margin-top: 6px;
   font-size: 12px;
   color: #909399;
+}
+/* ★ 缩略图：列表里能一眼认出是哪个商品，比只看名字快得多 */
+.thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--brand-radius-sm);
+  background: var(--el-fill-color-light);
+  display: block;
+}
+.thumb-none {
+  width: 40px;
+  height: 40px;
+  line-height: 40px;
+  text-align: center;
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+/* ★ 金额右对齐 + 等宽数字：一列数字要能上下对齐才看得出量级 */
+.money {
+  font-variant-numeric: tabular-nums;
+  color: var(--brand-color-dark);
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
 }
 </style>

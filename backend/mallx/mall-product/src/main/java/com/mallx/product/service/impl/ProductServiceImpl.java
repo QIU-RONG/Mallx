@@ -290,8 +290,10 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             if (r != null) {
                 voList.get(i).setMinPrice(r.getMinPrice());
                 voList.get(i).setMaxPrice(r.getMaxPrice());
+                // ★ 默认 SKU 与 minPrice 同源：前端显示「¥x 起」时，快捷加购进车的就是 x 那个规格
+                voList.get(i).setDefaultSkuId(r.getDefaultSkuId());
             }
-            // r == null ⇒ 该商品没有在售 SKU，两个字段保持 null（不是 0）
+            // r == null ⇒ 该商品没有在售 SKU，三个字段保持 null（不是 0）
         }
     }
 

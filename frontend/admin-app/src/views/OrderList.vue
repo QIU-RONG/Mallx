@@ -22,6 +22,33 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: '已取消',
 }
 
+/**
+ * ★ 状态 → tag 语义色（Day 48）。
+ *
+ * <p>改造前只有两档（CANCELLED=info、其余全是 success），于是
+ * 「待支付」和「已完成」在列表里长得一模一样 —— 运营要逐行读文字才能找异常单。
+ * 语义色是让状态<b>一眼可扫</b>，不是装饰：
+ * <ul>
+ *   <li>warning = 需要动作（待支付，会超时关单）</li>
+ *   <li>primary = 进行中（已支付待发货 / 已发货待收货）</li>
+ *   <li>success = 终态（完成）</li>
+ *   <li>info = 终止态（取消）</li>
+ * </ul>
+ */
+function statusTagType(status: string) {
+  switch (status) {
+    case 'PENDING_PAYMENT':
+      return 'warning'
+    case 'PAID':
+    case 'SHIPPED':
+      return 'primary'
+    case 'COMPLETED':
+      return 'success'
+    default:
+      return 'info'
+  }
+}
+
 async function load() {
   loading.value = true
   try {
@@ -82,7 +109,7 @@ onMounted(load)
         <el-button type="primary" @click="load">查询</el-button>
       </div>
 
-      <el-table v-loading="loading" :data="rows" border style="margin-top: 12px">
+      <el-table v-loading="loading" :data="rows" border stripe style="margin-top: 12px">
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column prop="orderNo" label="订单号" width="200" />
         <el-table-column label="买家" width="140">
@@ -92,17 +119,22 @@ onMounted(load)
             <span class="uid">#{{ row.userId }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="payAmount" label="应付" width="100" />
+        <!-- ★ 金额右对齐 + 等宽数字（.money-num 在 theme.css 里）：一列数字上下对齐才看得出量级 -->
+        <el-table-column prop="payAmount" label="应付" width="110" align="right">
+          <template #default="{ row }">
+            <span class="money-num">¥{{ Number(row.payAmount).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'CANCELLED' ? 'info' : 'success'">
+            <el-tag :type="statusTagType(row.status)">
               {{ STATUS_LABEL[row.status] || row.status }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="receiverName" label="收货人" width="100" />
         <el-table-column prop="createdAt" label="下单时间" width="180" />
-        <el-table-column label="操作" width="230">
+        <el-table-column label="操作" width="230" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
             <el-button
@@ -157,7 +189,7 @@ onMounted(load)
           <el-descriptions-item label="完成">{{ detail.completedAt || '-' }}</el-descriptions-item>
         </el-descriptions>
 
-        <el-table :data="detail.items" border style="margin-top: 12px">
+        <el-table :data="detail.items" border stripe size="small" style="margin-top: 12px">
           <el-table-column prop="productName" label="商品" min-width="180" />
           <el-table-column prop="skuName" label="规格" width="140" />
           <el-table-column prop="price" label="单价" width="100" />
