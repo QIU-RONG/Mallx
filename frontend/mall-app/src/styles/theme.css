@@ -1,30 +1,62 @@
 /**
- * ★ MallX 主题变量（Day 48 · 前端完善第三批）。
+ * ★ MallX C 端主题（Day 49 · 视觉统一）。
  *
- * <p><b>为什么用 CSS 变量而不是散落的硬编码色值</b>：改造前 16 个页面里
- * {@code #409eff}（Element Plus 默认蓝）出现了几十处 —— 改主题色要全文检索替换，
- * 而且总会漏。变量把「品牌色」这件事变成一处定义、处处引用。
+ * <p><b>这一版修的是什么</b>：上一版定义了 {@code --brand-*} 橙色，却
+ * 【没有覆盖 Element Plus 的 --el-color-primary】。于是同一屏里：
+ * 品牌方块 / 价格 / 菜单选中走橙，而搜索按钮 / 加入购物车 / 分页当前页 /
+ * 输入框聚焦边框 / 筛选 tag 全是 EP 默认蓝。两套主色互抢，是「看着乱」的第一来源。
  *
- * <p>★ 与 Element Plus 的关系：这里【不改】EP 自带的 {@code --el-*} 变量，
- * 只在它之上加一层 {@code --brand-*}。EP 升级时不会被覆盖，我们也不用逐条对齐它的命名。
+ * <p>★ 结论：<b>主色只能有一个来源</b>。这里直接覆盖 EP 的全套色阶，
+ * 让所有自带组件（按钮 / 链接 / 分页 / 输入框 / tag / 单选框）自动跟随品牌色 ——
+ * 而不是逐个组件写 {@code !important} 去压。
  *
- * <p>⚠️ 圆角/阴影同理：写死 {@code 4px} 的地方散落各处，将来要统一调圆角就得改一圈。
+ * <p>⚠️ 色阶不能只改一个：EP 的 light-3/5/7/8/9 有固定生成规律
+ * （light-N = 主色与白按 N/10 混合，dark-2 = 主色与黑按 2/10 混合）。
+ * 只改 {@code --el-color-primary} 的典型症状是<b>按钮 hover 时跳回蓝色</b>，
+ * 因为 hover 取的是 light-3。所以六个数必须成套改。
+ *
+ * <p>本文件的值由 {@code #3b5bdb = rgb(59,91,219)} 按上述规律推导：
+ * <pre>
+ *   light-3 = 59+196×.3, 91+164×.3, 219+36×.3 = 118,140,230 → #768ce6
+ *   light-5 = 157,173,237                                → #9daded
+ *   light-7 = 196,206,244                                → #c4cef4
+ *   light-8 = 216,222,248                                → #d8def8
+ *   light-9 = 235,239,251                                → #ebeffb
+ *   dark-2  = 主色 ×0.8 = 47,73,175                       → #2f49af
+ * </pre>
  */
 
 :root {
-  /* 品牌主色 —— 取比 EP 默认蓝略深的一档，白底上对比度更好 */
-  --brand-color: #ff6a00;
-  --brand-color-light: #ff8c33;
-  --brand-color-dark: #e65f00;
-  --brand-gradient: linear-gradient(135deg, #ff8c33 0%, #ff6a00 100%);
+  /* ── 品牌主色：深靛蓝 ──
+     比 EP 默认蓝 #409eff 更深、饱和度更低：白底上对比度够，长时间看不刺眼。
+     C 端显得干净，管理端显得专业。 */
+  --brand-color: #3b5bdb;
+  --brand-color-light: #768ce6;
+  --brand-color-dark: #2f49af;
+  --brand-gradient: linear-gradient(135deg, #4c6ce8 0%, #3b5bdb 100%);
+
+  /* ★★ EP 全套主色阶 —— 六个一组，少改一个就会在 hover / disabled / plain 时跳色 */
+  --el-color-primary: #3b5bdb;
+  --el-color-primary-light-3: #768ce6;
+  --el-color-primary-light-5: #9daded;
+  --el-color-primary-light-7: #c4cef4;
+  --el-color-primary-light-8: #d8def8;
+  --el-color-primary-light-9: #ebeffb;
+  --el-color-primary-dark-2: #2f49af;
+
+  /* ── 价格色 ──
+     ★ 价格【不】用品牌色：它和「可点的按钮」是两种语义。
+     同色会让用户扫一屏时把价格和操作混在一起。暖红也更贴合国内电商扫价习惯。 */
+  --brand-price: #e1251b;
 
   /* 圆角 / 阴影：一处定义，卡片、标签、弹窗共用 */
   --brand-radius: 8px;
   --brand-radius-sm: 4px;
   --brand-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  --brand-shadow-hover: 0 6px 20px rgba(255, 106, 0, 0.12);
+  /* ★ 这个阴影是【hover 专用】。上一版把它常驻在品牌方块上，
+     等于一直挂着一圈彩色发光 —— 静止状态有光晕会显脏。 */
+  --brand-shadow-hover: 0 6px 20px rgba(59, 91, 219, 0.16);
 
-  /* 顶栏高度：两个应用各自用，避免一边 60 一边 64 */
   --brand-header-h: 60px;
 }
 

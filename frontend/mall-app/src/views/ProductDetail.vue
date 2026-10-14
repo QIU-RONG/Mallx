@@ -107,8 +107,7 @@ async function addToCart() {
             <el-tag v-if="vo.categoryName" type="info" effect="plain" size="small">{{ vo.categoryName }}</el-tag>
           </div>
 
-          <!-- ★ 价格区：整页的视觉重心。选中哪个规格，这里就显示哪个的价格 ——
-               之前价格只藏在 SKU 小卡片里，用户得自己找 -->
+          <!-- ★ 价格区：整页的视觉重心。选中哪个规格，这里就显示哪个的价格 -->
           <div class="price-panel">
             <div class="price-main">
               <span class="cur">¥</span>
@@ -242,13 +241,15 @@ async function addToCart() {
   align-items: baseline;
   gap: 2px;
 }
+/* ★ 价格一律用 --brand-price（暖红），与品牌主色分开：
+   价格是「信息」、按钮是「操作」，同色会让人扫一屏时把两者混在一起。 */
 .cur {
-  color: var(--brand-color);
+  color: var(--brand-price);
   font-size: 18px;
   font-weight: 700;
 }
 .num {
-  color: var(--brand-color);
+  color: var(--brand-price);
   font-size: 30px;
   font-weight: 800;
   line-height: 1.1;
@@ -261,7 +262,7 @@ async function addToCart() {
 }
 .saved {
   margin-top: 4px;
-  color: var(--brand-color-dark);
+  color: var(--brand-price);
   font-size: 12px;
 }
 .sec-title {
@@ -286,13 +287,15 @@ async function addToCart() {
 }
 .sku.picked {
   border-color: var(--brand-color);
-  background: #fff7f0;
+  /* ⚠️ 原来是写死的 #fff7f0（橙色浅底）—— 品牌色换成靛蓝后它就成了孤岛。
+     改用 EP 的主色 light-9（= 主色与白按 9/10 混合），永远与主色同源。 */
+  background: var(--el-color-primary-light-9);
 }
 .sku-name {
   font-size: 13px;
 }
 .sku-price {
-  color: var(--brand-color);
+  color: var(--brand-price);
   font-weight: 700;
   margin-top: 2px;
 }

@@ -361,7 +361,7 @@ onMounted(() => {
 .hint {
   margin-top: 6px;
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 /* ★ 缩略图：列表里能一眼认出是哪个商品，比只看名字快得多 */
 .thumb {
@@ -383,7 +383,8 @@ onMounted(() => {
 /* ★ 金额右对齐 + 等宽数字：一列数字要能上下对齐才看得出量级 */
 .money {
   font-variant-numeric: tabular-nums;
-  color: var(--brand-color-dark);
+  /* ★ 用 --brand-price 而不是品牌色：金额是「信息」，不是「可点的东西」 */
+  color: var(--brand-price);
 }
 .muted {
   color: var(--el-text-color-placeholder);

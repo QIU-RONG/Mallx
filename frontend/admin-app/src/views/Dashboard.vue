@@ -114,15 +114,24 @@ onMounted(load)
             :y="H - PAD - ((Number(p.point.orderCount) || 0) / maxOrders) * (H - PAD * 2)"
             :width="barWidth"
             :height="((Number(p.point.orderCount) || 0) / maxOrders) * (H - PAD * 2)"
-            fill="#79bbff"
+            fill="var(--brand-color-light)"
             opacity="0.45"
           />
         </g>
         <!-- 折线：销售额 -->
-        <path :d="areaPath" fill="#409eff" opacity="0.12" />
-        <polyline :points="polyline" fill="none" stroke="#409eff" stroke-width="2" />
+        <!-- ★ 颜色改用 CSS 变量：原本写死 #409eff / #79bbff，主色一换这里就成了
+             唯一还蓝着的地方（图形不会跟着主题走，光看代码极难发现）。 -->
+        <path :d="areaPath" fill="var(--brand-color)" opacity="0.12" />
+        <polyline :points="polyline" fill="none" stroke="var(--brand-color)" stroke-width="2" />
         <g>
-          <circle v-for="p in points" :key="'c' + p.point.date" :cx="p.x" :cy="p.y" r="3" fill="#409eff" />
+          <circle
+            v-for="p in points"
+            :key="'c' + p.point.date"
+            :cx="p.x"
+            :cy="p.y"
+            r="3"
+            fill="var(--brand-color)"
+          />
         </g>
         <g>
           <text
@@ -132,7 +141,7 @@ onMounted(load)
             :y="H - 6"
             font-size="10"
             text-anchor="middle"
-            fill="#909399"
+            fill="var(--el-text-color-secondary)"
           >
             {{ p.point.date.slice(5) }}
           </text>
@@ -146,16 +155,19 @@ onMounted(load)
 <style scoped>
 .label {
   font-size: 13px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
 }
 .value {
   margin-top: 8px;
   font-size: 24px;
   font-weight: 600;
-  color: #303133;
+  color: var(--el-text-color-primary);
+  /* ★ 数字列等宽：销售额跳数时不会左右抖 */
+  font-variant-numeric: tabular-nums;
 }
+/* ★ 金额用 --brand-price（与 C 端同值），而不是随手一个红 */
 .value.money {
-  color: #f56c6c;
+  color: var(--brand-price);
 }
 .chart-card {
   margin-top: 16px;

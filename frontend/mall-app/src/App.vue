@@ -21,14 +21,13 @@ function logout() {
 
 <template>
   <el-header class="topbar">
-    <!-- ★ 品牌区：一个 CSS 画的方块图标 + 名称。之前只有一个纯文字 div，
-         整个应用没有任何「这是谁家的店」的视觉记忆点。 -->
+    <!-- ★ 品牌区：一个 CSS 画的方块图标 + 名称，提供「这是谁家的店」的视觉记忆点 -->
     <div class="brand" @click="router.push('/')">
       <span class="brand-mark">M</span>
       <span class="brand-name">MallX 商城</span>
     </div>
 
-    <!-- ★ :default-active 绑当前路由：原来写死 '/'，跳到订单页时首页仍高亮 -->
+    <!-- ★ :default-active 绑当前路由：写死 '/' 会导致跳到订单页时首页仍高亮 -->
     <el-menu
       mode="horizontal"
       :ellipsis="false"
@@ -43,12 +42,17 @@ function logout() {
     </el-menu>
 
     <div class="spacer" />
+
+    <!-- ★ 配色收敛：这里原本是 type="warning"（琥珀 #e6a23c）。
+         加上品牌色、登录蓝、退出红，顶栏一屏蹦出五种颜色，全在喊。
+         warning 与主色最冲突（同为暖色系却不同色相），改回 primary link 跟随主题。
+         购物车是转化入口，用主色强调是合理的，不再另起一个色。 -->
     <el-badge :value="cartStore.selectedCount" :hidden="!cartStore.selectedCount" class="cart">
-      <el-button link type="warning" @click="router.push('/cart')">购物车</el-button>
+      <el-button link type="primary" @click="router.push('/cart')">购物车</el-button>
     </el-badge>
     <template v-if="auth.token">
       <span class="user">{{ auth.nickname }}</span>
-      <el-button link type="danger" @click="logout">退出</el-button>
+      <el-button link @click="logout">退出</el-button>
     </template>
     <template v-else>
       <el-button link type="primary" @click="router.push('/login')">登录</el-button>
@@ -56,8 +60,7 @@ function logout() {
   </el-header>
 
   <!-- ★ 路由切换动画：<router-view v-slot> 拿当前组件，外包 transition。
-       名字对应 theme.css 里的 .brand-fade-系列。mode="out-in" 让旧的先走再进新的，
-       避免两页同时在场时布局跳动。 -->
+       mode="out-in" 让旧的先走再进新的，避免两页同时在场时布局跳动。 -->
   <router-view v-slot="{ Component }">
     <transition name="brand-fade" mode="out-in">
       <component :is="Component" />
@@ -71,12 +74,11 @@ function logout() {
   align-items: center;
   gap: 8px;
   background: #fff;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  /* ★ 贴一点阴影，让顶栏从白页面上「浮」起来 —— 之前是一条 1px 线，层次是平的 */
+  /* ★ 只留阴影，去掉 1px 边框 —— 两者同时存在是重复的层次表达，会显得脏 */
   box-shadow: var(--brand-shadow);
   height: var(--brand-header-h);
   padding: 0 16px;
-  /* ★ 吸顶：页面长的时候顶栏跟着走，不用回顶部才能换导航 */
+  /* ★ 吸顶：页面长的时候顶栏跟着走，不用回到顶部才能换导航 */
   position: sticky;
   top: 0;
   z-index: 100;
@@ -88,7 +90,9 @@ function logout() {
   cursor: pointer;
   user-select: none;
 }
-/* ★ 品牌图标：渐变方块 + 首字母。不引图片资源，改主题色时它跟着变 */
+/* ★ 品牌图标：渐变方块 + 首字母。不引图片资源，改主题色时它跟着变。
+   ⚠️ 这里【不再】常驻 box-shadow —— 上一版挂了 hover 阴影（还带彩色），
+   静止状态就有一圈发光，是「显脏」的来源之一。 */
 .brand-mark {
   width: 30px;
   height: 30px;
@@ -100,7 +104,6 @@ function logout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: var(--brand-shadow-hover);
 }
 .brand-name {
   font-size: 19px;
@@ -113,11 +116,8 @@ function logout() {
   flex: none;
   margin-left: 12px;
 }
-/* ★ 菜单选中色也走品牌色（EP 默认是蓝的，和橙色品牌打架） */
-.nav :deep(.el-menu-item.is-active) {
-  color: var(--brand-color);
-  border-bottom-color: var(--brand-color);
-}
+/* ★ 菜单选中色【不再】单独覆盖：--el-color-primary 已全局改成品牌色，
+   el-menu 的 active-color 默认就取它。少一处重复定义，就少一处将来会漂的地方。 */
 .spacer {
   flex: 1;
 }

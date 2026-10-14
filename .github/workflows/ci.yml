@@ -80,6 +80,23 @@ jobs:
             exit 1
           fi
 
+      # Day 49 视觉统一：主题一致性护栏。
+      #   ★ 它拦的是「主色被钉在 5 处，改一处漏四处」这一类漂移：
+      #     两个 theme.css 的 EP 色阶、两个 main.ts 的样式加载顺序、
+      #     两个应用的品牌色/价格色是否一致、源码里残留的硬编码色值。
+      #     这些错 eslint、vue-tsc、vite build【全都不报】—— 症状只是「页面看着不对劲」，
+      #     与上面两处「同一份事实钉在多处」是同一类问题。
+      #   ★ 最硬的一条按 Element Plus 的混色公式从主色【推导】六个色阶再比对，
+      #     所以只手改 --el-color-primary 会当场现形（症状：按钮 hover 跳回蓝色）。
+      #   控制组 6 组（本地 `python backend/loadtest/_d49_theme_ctrl.py`）全部命中、零误伤。
+      - name: Theme guard (主色单一来源 / 色阶成套 / import 顺序 / 无残留硬编码)
+        working-directory: backend/loadtest
+        run: |
+          if ! python day49-theme-guard.py; then
+            echo "::error::主题变量漂移 —— 报告见上方输出"
+            exit 1
+          fi
+
       # ★ 不再 -DskipTests（Day 44）：此前项目 189 个源文件、0 个测试类，
       #   「测试」全靠 81 个需要起全套基础设施的 Python 端到端脚本 —— 它们能证「链路通」，
       #   证不了「单个方法对」。现在补上真正的单元测试，install 会跑 test 阶段 ⇒ 失败即构建失败。

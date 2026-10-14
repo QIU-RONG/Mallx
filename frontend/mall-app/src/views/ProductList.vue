@@ -78,7 +78,7 @@ function search() {
 }
 
 /**
- * ★ 快捷加购（Day 48）：列表卡片直接加进购物车，不用先进详情选规格。
+ * ★ 快捷加购：列表卡片直接加进购物车，不用先进详情选规格。
  *
  * <p>加的是 <b>defaultSkuId</b>（后端算好的「最便宜在售 SKU」），
  * 与卡片上显示的「¥x 起」同源 —— 不会出现「看到 9999、加进去 12499」。
@@ -187,11 +187,17 @@ onMounted(async () => {
           <img :src="p.mainImage" class="pic" alt="" loading="lazy" />
         </div>
         <div class="name">{{ p.name }}</div>
-        <div class="subtitle">{{ p.subtitle }}</div>
-        <div class="meta">{{ p.categoryName }} · {{ p.brandName }}</div>
-        <!-- ★ 价格：电商列表最该有的数字，此前完全没有（后端 VO 就没这个字段）。
-             minPrice 为 null = 没有在售 SKU ⇒ 显示「暂无价格」而不是 ¥0。 -->
-        <div class="price-row">
+        <div v-if="p.subtitle" class="subtitle">{{ p.subtitle }}</div>
+        <!-- ★ 两段信息用 join 拼：任一为空时不会留下「分类 · 」这种半截分隔符 -->
+        <div v-if="p.categoryName || p.brandName" class="meta">
+          {{ [p.categoryName, p.brandName].filter(Boolean).join(' · ') }}
+        </div>
+
+        <!-- ★ 价格：电商列表最该有的数字。
+             minPrice 为 null = 没有在售 SKU ⇒ 显示「暂无价格」而不是 ¥0。
+             ⚠️ 这一版把价格从「和按钮同一行」里拿了出来：
+             17px 的价格紧贴一个主色按钮，两者都在喊，反而都不突出。 -->
+        <div class="price-block">
           <template v-if="p.minPrice != null">
             <span class="price">¥{{ Number(p.minPrice).toFixed(2) }}</span>
             <span v-if="p.maxPrice != null && Number(p.maxPrice) > Number(p.minPrice)" class="price-from">
@@ -199,19 +205,21 @@ onMounted(async () => {
             </span>
           </template>
           <span v-else class="price-none">暂无价格</span>
-          <!-- ★ 加购按钮：@click.stop 阻止冒泡到卡片的「进详情」 -->
-          <el-button
-            class="add-btn"
-            type="primary"
-            size="small"
-            :loading="addingId === p.id"
-            :disabled="p.defaultSkuId == null"
-            @click.stop="quickAdd(p)"
-          >
-            加入购物车
-          </el-button>
         </div>
-        <div class="peek">查看详情 →</div>
+
+        <!-- ★ 卡片只剩【一个】CTA。上一版这里有三个入口在抢：
+             整卡可点进详情 + hover 浮出的「查看详情 →」 + 这个按钮。
+             现在保留「整卡可点」+ 一个明确的主按钮，不再另挂提示文字。 -->
+        <el-button
+          class="add-btn"
+          type="primary"
+          size="small"
+          :loading="addingId === p.id"
+          :disabled="p.defaultSkuId == null"
+          @click.stop="quickAdd(p)"
+        >
+          加入购物车
+        </el-button>
       </el-card>
 
       <!-- ★ 空状态给出路：「没有匹配的商品」+ 一键清筛选，比一句话有用得多 -->
@@ -280,17 +288,27 @@ onMounted(async () => {
   height: 140px;
   margin-bottom: 12px;
 }
+
+/* ★ 卡片内部改成纵向 flex：让「价格 + 按钮」这一组贴到卡片底部，
+   同一行卡片无论文字长短，价格和按钮都在同一水平线上。 */
 .card {
   cursor: pointer;
   transition: transform 0.18s ease;
 }
-/* ★ hover 轻微上浮：比只有阴影多一层「可点」的暗示 */
+.card :deep(.el-card__body) {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+/* ★ hover 轻微上浮：幅度从 3px 收到 2px —— 越大越像在「跳」 */
 .card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
 }
 .pic-wrap {
   background: var(--el-fill-color-light);
-  border-radius: 4px;
+  border-radius: var(--brand-radius-sm);
   overflow: hidden;
 }
 .pic {
@@ -300,8 +318,16 @@ onMounted(async () => {
   display: block;
 }
 .name {
+  font-size: 14px;
   font-weight: 600;
-  margin-top: 8px;
+  line-height: 1.45;
+  margin-top: 10px;
+  /* ★ 最多两行 + 固定两行高度：否则长名字会把同一行的卡片撑得高低不齐 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 41px;
 }
 .subtitle {
   color: var(--el-text-color-secondary);
@@ -314,23 +340,26 @@ onMounted(async () => {
 .meta {
   color: var(--el-text-color-placeholder);
   font-size: 12px;
-  margin-top: 6px;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-/* ★ 价格区：主价用品牌色 + 加大加粗，是整个卡片视觉重心的落点 */
-.price-row {
-  margin-top: 6px;
+/* ★ 价格块：margin-top:auto 把它和按钮一起推到卡片底部 */
+.price-block {
+  margin-top: auto;
+  padding-top: 10px;
   display: flex;
-  align-items: center;
-  gap: 3px;
+  align-items: baseline;
+  gap: 2px;
 }
-/* ★ 加购按钮推到最右：不与价格挤在一起，手指/鼠标容易命中 */
-.add-btn {
-  margin-left: auto;
-}
+/* ★ 价格用【暖红】而不是品牌色：价格是「信息」，按钮是「操作」，
+   同色会让用户扫一屏时把两者混在一起。红色也更符合国内电商的扫价习惯。 */
 .price {
-  color: var(--brand-color);
-  font-size: 17px;
+  color: var(--brand-price);
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: -0.3px;
 }
 .price-from {
   color: var(--el-text-color-secondary);
@@ -340,15 +369,9 @@ onMounted(async () => {
   color: var(--el-text-color-placeholder);
   font-size: 13px;
 }
-/* ★ 默认隐藏、hover 浮现的「查看详情」—— 卡片整体可点这件事，之前没有任何提示 */
-.peek {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--brand-color);
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-.card:hover .peek {
-  opacity: 1;
+/* ★ 按钮整行宽：命中区域大、且与上面价格形成清晰的两层（信息 / 操作） */
+.add-btn {
+  width: 100%;
+  margin-top: 10px;
 }
 </style>
