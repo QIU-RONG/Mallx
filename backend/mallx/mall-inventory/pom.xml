@@ -19,5 +19,15 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
+
+        <!-- ★★ 单测依赖必须【在本模块再声明一次】，不能指望父 pom 的 <dependencies> 传递下来：
+             实测不声明时，src/test 下的类编译期找不到 JUnit / Mockito，
+             表现为「0 条测试静默跳过」—— 既不报错也不跑，是最难发现的一种假绿。
+             （mall-aftersale 的 pom 里有同一条说明，Day 46 踩过。） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>
