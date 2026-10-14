@@ -1,0 +1,64 @@
+/**
+ * ★ MallX 主题变量（Day 48 · 前端完善第三批）。
+ *
+ * <p><b>为什么用 CSS 变量而不是散落的硬编码色值</b>：改造前 16 个页面里
+ * {@code #409eff}（Element Plus 默认蓝）出现了几十处 —— 改主题色要全文检索替换，
+ * 而且总会漏。变量把「品牌色」这件事变成一处定义、处处引用。
+ *
+ * <p>★ 与 Element Plus 的关系：这里【不改】EP 自带的 {@code --el-*} 变量，
+ * 只在它之上加一层 {@code --brand-*}。EP 升级时不会被覆盖，我们也不用逐条对齐它的命名。
+ *
+ * <p>⚠️ 圆角/阴影同理：写死 {@code 4px} 的地方散落各处，将来要统一调圆角就得改一圈。
+ */
+
+:root {
+  /* 品牌主色 —— 取比 EP 默认蓝略深的一档，白底上对比度更好 */
+  --brand-color: #ff6a00;
+  --brand-color-light: #ff8c33;
+  --brand-color-dark: #e65f00;
+  --brand-gradient: linear-gradient(135deg, #ff8c33 0%, #ff6a00 100%);
+
+  /* 圆角 / 阴影：一处定义，卡片、标签、弹窗共用 */
+  --brand-radius: 8px;
+  --brand-radius-sm: 4px;
+  --brand-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --brand-shadow-hover: 0 6px 20px rgba(255, 106, 0, 0.12);
+
+  /* 顶栏高度：两个应用各自用，避免一边 60 一边 64 */
+  --brand-header-h: 60px;
+}
+
+/**
+ * ★ 路由切换动画：给 <router-view> 包一层 transition 后用。
+ * 只做「淡入 + 8px 上移」，刻意不做花哨的滑动 ——
+ * 后台类应用里，动画应该是「让注意力跟着内容走」，不是「表演」。
+ */
+.brand-fade-enter-active,
+.brand-fade-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+.brand-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.brand-fade-leave-to {
+  opacity: 0;
+}
+
+/* ★ 全局滚动条：默认那条在 Windows 上又粗又灰，和主题完全不搭 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--el-border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--el-border-color-darker);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}

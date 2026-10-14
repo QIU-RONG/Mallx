@@ -25,6 +25,13 @@ export interface ProductVO {
   subtitle?: string
   mainImage?: string
   status: number
+  /**
+   * ★ 在售 SKU 的价格区间（Day 48 后端新增）。
+   * ⚠️ 可空：商品所有 SKU 都停售/软删时，两个字段都是 null ——
+   * 前端要按「暂无价格」渲染，【不能】当 0（那会显示成「¥0」）。
+   */
+  minPrice?: number | null
+  maxPrice?: number | null
 }
 
 export interface SkuVO {

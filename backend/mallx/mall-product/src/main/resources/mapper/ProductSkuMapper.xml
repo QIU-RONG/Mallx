@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--
+  Day 48 · 商品价格区间（商品列表补价格）。
+
+  项目 XML 五铁律照旧：
+    ① 放在 resources/mapper/ 下（classpath*:mapper/**/*.xml 扫得到）
+    ② namespace 与方法名要和接口逐字符一致
+    ③ 注释里禁止连续两个减号
+    ④ SQL 里的 < 要写 &lt;
+    ⑤ 列别名一律下划线（map-underscore-to-camel-case 两个状态下都成立）
+-->
+<mapper namespace="com.mallx.product.mapper.ProductSkuMapper">
+
+    <!--
+      ★★ 手写 SQL【不受】@TableLogic 管，所以 is_deleted = 0 必须自己写。
+         少写它 = 把已软删的 SKU 价格算进来（可能比原价还低），而且不报错。
+
+      ★ status = 1 是在售（与 products.status 同构，见 01-schema.sql 里
+        product_skus.status SMALLINT NOT NULL DEFAULT 1）。
+        把停售 SKU 算进来，列表上会出现一个买不到的价格。
+
+      ★ GROUP BY product_id：一次查询拿回整页所有商品的价格区间，避免 N+1。
+        没有任何在售 SKU 的商品【不会出现在结果里】⇒ 调用方按 null 处理。
+    -->
+    <select id="selectPriceRange" resultType="com.mallx.product.vo.ProductPriceRangeVO">
+        SELECT product_id        AS product_id,
+               MIN(price)        AS min_price,
+               MAX(price)        AS max_price
+        FROM product_skus
+        WHERE is_deleted = 0
+          AND status = 1
+          AND product_id IN
+        <foreach collection="productIds" item="pid" open="(" separator="," close=")">
+            #{pid}
+        </foreach>
+        GROUP BY product_id
+    </select>
+
+</mapper>

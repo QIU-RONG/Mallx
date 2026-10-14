@@ -23,6 +23,7 @@ import com.mallx.product.mapper.ProductSkuMapper;
 import com.mallx.product.cache.CatalogCache;
 import com.mallx.product.service.ProductService;
 import com.mallx.product.vo.ProductDetailVO;
+import com.mallx.product.vo.ProductPriceRangeVO;
 import com.mallx.product.vo.ProductSearchVO;
 import com.mallx.product.vo.ProductVO;
 import com.mallx.product.vo.SkuVO;
@@ -95,6 +96,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             voList.add(vo);
         }
         fillNames(voList, records);
+        fillPrices(voList, records);
 
         // 换壳：total/current/size 必须搬到新 Page 上，否则前端看到 total=0
         Page<ProductVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
@@ -128,6 +130,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             voList.add(vo);
         }
         fillNames(voList, records);
+        fillPrices(voList, records);
         Page<ProductVO> voPage = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
         voPage.setRecords(voList);
         // ★ 返回 voPage 而不是 page：后者是 Page<Product>，类型不对，也没补 categoryName/brandName
@@ -245,6 +248,50 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             Product p = records.get(i);
             voList.get(i).setCategoryName(categoryNames.get(p.getCategoryId()));
             voList.get(i).setBrandName(brandNames.get(p.getBrandId()));
+        }
+    }
+
+    /**
+     * ★ 补「价格区间」（Day 48）—— 与 {@link #fillNames} 完全同款的三步：
+     * 收集 id → 一次批量查 → 内存配对。
+     *
+     * <p><b>为什么必须单独一步</b>：{@code products} 表没有价格列，价格在 SKU 上，
+     * 所以要在 SKU 表上做一次 {@code GROUP BY product_id} 的聚合
+     * （见 {@code ProductSkuMapper#selectPriceRange}）。这是 C 端商品列表
+     * 从「没有数字的卡片」变成「¥199 起」的唯一办法。
+     *
+     * <p>★ <b>查不到就留 null，不要兜成 0</b>：
+     * 一个商品可能所有 SKU 都停售/软删（聚合 SQL 里会被过滤掉）⇒ 结果集里就没有它。
+     * 兜成 {@code BigDecimal.ZERO} 会让前端显示「¥0」——那比「暂无价格」糟糕得多。
+     *
+     * <p>★ 空集合先挡：{@code IN ()} 是语法错误，不是空结果。
+     * （{@code records} 为空时 fillNames 已有同样的守卫，这里独立再判一次 ——
+     *  两个方法各自对自己负责，别依赖调用顺序。）
+     */
+    private void fillPrices(List<ProductVO> voList, List<Product> records) {
+        if (records.isEmpty()) {
+            return;
+        }
+        Set<Long> productIds = new HashSet<>();
+        for (Product p : records) {
+            productIds.add(p.getId());
+        }
+        if (productIds.isEmpty()) {
+            return;
+        }
+
+        Map<Long, ProductPriceRangeVO> ranges = new HashMap<>();
+        for (ProductPriceRangeVO r : productSkuMapper.selectPriceRange(productIds)) {
+            ranges.put(r.getProductId(), r);
+        }
+
+        for (int i = 0; i < records.size(); i++) {
+            ProductPriceRangeVO r = ranges.get(records.get(i).getId());
+            if (r != null) {
+                voList.get(i).setMinPrice(r.getMinPrice());
+                voList.get(i).setMaxPrice(r.getMaxPrice());
+            }
+            // r == null ⇒ 该商品没有在售 SKU，两个字段保持 null（不是 0）
         }
     }
 
