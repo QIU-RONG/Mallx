@@ -1,5 +1,8 @@
+// ★ 从 vitest/config 而不是 vite 导入 defineConfig —— Vite 自己的 UserConfigExport
+//   【不含 test 字段】，直接写 test 会让 vue-tsc 报 TS2769（'test' does not exist in type）。
+//   vitest/config 的 defineConfig 是同一个函数的类型增强版，vite build 完全不受影响。
+import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
