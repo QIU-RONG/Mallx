@@ -13,9 +13,10 @@ Java 206 文件 / 17.6k 行   ·   Controller 26 个   ·   Mapper XML 13 份   
 验收脚本 82 个（`backend/loadtest/day*.py`）＋ 静态护栏 2 个（权限常量 17 条 / 生产编排 19 条，各带 4 组控制组）
 回归基线：**M1 全链路 434 条断言**（3 链 + 4 读侧 + 2 写侧；Day 43 名单 5→9）＋ 各域验收脚本见 §测试与回归末表，
 每次改动必跑（CI 每次 push 自动跑同一套；D43 起 day41 与前端 e2e 也已进 CI）
-**＋ Java 单元测试 72 条**（Day 45 起；`mvn test` 约 15 秒，不依赖 DB/Redis/MQ，CI 每次必跑）
-　　JwtUtil 9 · Coupon 32 · Refund 10 · **Inventory 21（Day 48）**；另 14 条购物车骨架已就位（`@Disabled`，填一条解锁一条）
-　　每个测试类都配了控制组脚本：拿故意改坏的实现回跑，必须红（Day 48 库存 7 组，见 `backend/loadtest/_d48_inv_ctrl.py`）
+**＋ Java 单元测试 88 条**（Day 45 起；`mvn test` 约 20 秒，不依赖 DB/Redis/MQ，CI 每次必跑）
+　　JwtUtil 9 · Coupon 32 · Refund 10 · **Inventory 21（Day 48）** · **Cart 16（Day 48）**
+　　每个测试类都配了控制组脚本：拿故意改坏的实现回跑，必须红
+　　（Day 48 库存 7 组 / 购物车 6 组，见 `backend/loadtest/_d48_inv_ctrl.py` / `_d48_cart_ctrl.py`）
 ```
 
 第一次来？直接跳到 **[快速开始](#快速开始)**，或先看 **[接口文档](#接口文档)**。
