@@ -13,6 +13,7 @@ import com.mallx.inventory.mapper.InventoryMapper;
 import com.mallx.inventory.service.InventoryService;
 import com.mallx.inventory.vo.InventoryLogVO;
 import com.mallx.inventory.vo.InventoryVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 调用方后续失败时库存就回不来了 —— 这是绝不能碰的线。
  */
 @Service
+@Slf4j
 public class InventoryServiceImpl implements InventoryService {
 
     /**
@@ -74,6 +76,14 @@ public class InventoryServiceImpl implements InventoryService {
             // 返回 null = 影响 0 行，有两种可能：SKU 没有库存行，或 available_stock < quantity。
             // 对客户端而言都是「买不到」，统一报同一个错，不泄露内部结构。
             // ★ 此刻还没有写流水，抛异常让整个事务回滚，不会留下孤儿流水。
+            // ★ Day 48：这条用 WARN —— 它是【并发下真正失败】的地方，
+            //   也是「用户投诉库存不足」时唯一能看到"差多少"的日志
+            //   （OrderServiceImpl 那次提前提示读得到 availableStock，
+            //     但并发下它往往还没读到就被别人抢走了，见那边的注释）。
+            //   ⚠️ 成功路径【刻意不记 INFO】：这个方法每次下单都会调，
+            //     记 INFO 会把日志淹掉，而且成功是常态、没有排障价值。
+            //     想看成功路径的库存变化，inventory_logs 表本身就是账本。
+            log.warn("库存扣减失败（CAS 影响 0 行）skuId={} want={}", skuId, quantity);
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "库存不足");
         }
         // available 减少了 quantity，所以 change = -quantity
@@ -98,6 +108,11 @@ public class InventoryServiceImpl implements InventoryService {
     public void moveLockedToSold(Long skuId, int quantity, Long orderId) {
         Integer after = inventoryMapper.moveLockedToSold(skuId, quantity);
         if (after == null) {
+            // ★ Day 48：账目不一致是【服务端异常】，ERROR 级（不是 WARN）——
+            //   WARN 留给「用户可理解的业务拒绝」，ERROR 留给「必须有人来看的系统故障」。
+            //   这条一旦出现，意味着库存与订单两本账对不上，是比任何业务失败都严重的事件。
+            log.error("库存状态不一致：moveLockedToSold 影响 0 行（订单说锁着、库存说没锁）skuId={} want={} orderId={}",
+                    skuId, quantity, orderId);
             throw new BusinessException(ResultCode.FAIL.getCode(), "库存锁定状态异常，支付已回滚");
         }
         // available 一动不动，所以 change = 0（RETURNING 出来的值就是转移前的值）
@@ -123,6 +138,10 @@ public class InventoryServiceImpl implements InventoryService {
     public void releaseLocked(Long skuId, int quantity, Long orderId) {
         Integer after = inventoryMapper.releaseLocked(skuId, quantity);
         if (after == null) {
+            // ★ Day 48：与 moveLockedToSold 同族 —— 账目不一致，ERROR 级。
+            //   取消/关单时出现这条，说明「锁着的货」在库存里找不到对应格子。
+            log.error("库存状态不一致：releaseLocked 影响 0 行 skuId={} want={} orderId={}",
+                    skuId, quantity, orderId);
             throw new BusinessException(ResultCode.FAIL.getCode(), "库存锁定状态异常，取消已回滚");
         }
         // available 增加了 quantity，所以 change = +quantity

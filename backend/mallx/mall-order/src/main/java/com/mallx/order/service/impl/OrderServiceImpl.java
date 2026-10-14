@@ -109,6 +109,10 @@ public class OrderServiceImpl implements OrderService {
         AddressForOrderVO addr = orderMapper.selectAddressForOrder(dto.getAddressId(), userId);
         if (addr == null) {
             // 「不存在」与「不是你的」统一 404 —— 不能泄露「这个 id 有效」
+            // ★ Day 48：带 userId + addressId。用户报障时说「我有地址啊」时，
+            //   这条日志能立刻分清是「传错 id」还是「地址被删了/不属于他」——
+            //   光靠响应里的 404 区分不了这三件事。
+            log.warn("下单被拒：地址不存在 userId={} addressId={}", userId, dto.getAddressId());
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "地址不存在");
         }
 
@@ -136,6 +140,13 @@ public class OrderServiceImpl implements OrderService {
                 // ⚠️ 这里只是「说人话」的提前提示，不是防线 ——
                 //    并发下这一行刚读完，库存就可能被别的事务抢走。
                 //    真正的防线是 ⑤ 的条件 UPDATE（WHERE available_stock >= n）。
+                // ★ Day 48：库存不足是最常见的用户投诉，必须留下「差多少」。
+                //   注意这里【有意不记日志】在 ⑤ 的失败分支（并发下真正失败的地方）
+                //   —— 那里只拿得到 skuId 和 quantity，读不到 availableStock，
+                //   再查一次会多一次往返。想对账并发失败，去看 InventoryServiceImpl
+                //   的「库存不足」WARN（它在 UPDATE 之后，两边的上下文刚好互补）。
+                log.warn("下单被拒：库存不足 userId={} skuId={} product={} want={} available={}",
+                        userId, s.getSkuId(), s.getProductName(), s.getQuantity(), s.getAvailableStock());
                 throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
                         "「" + s.getProductName() + "」库存不足（仅剩 " + s.getAvailableStock() + " 件）");
             }
@@ -233,6 +244,14 @@ public class OrderServiceImpl implements OrderService {
         //    ★ 发布失败（MQ 宕机）只打 warn 不抛：订单照常存在，@Scheduled 扫描兜底关单
         //      —— MQ 是加速，不是正确性的前提。
         final Long placedOrderId = order.getId();
+        // ★ Day 48：下单成功是核心业务节点，INFO 级（低频、关键）。
+        //   ★ 六个字段各有用途：userId 定位人，orderId/orderNo 定位单，
+        //     payAmount 是事后对账的锚点，itemCount 用于判断是不是异常大单，
+        //     couponId 让「用券的订单出了问题」能立刻筛出来（不用去 join 数据库）。
+        log.info("下单成功 userId={} orderId={} orderNo={} payAmount={} itemCount={} couponId={}",
+                userId, placedOrderId, order.getOrderNo(), order.getPayAmount(),
+                orderItemMapper.selectCount(null) >= 0 ? sources.size() : sources.size(),
+                use == null ? null : use.getUserCouponId());
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
@@ -279,6 +298,15 @@ public class OrderServiceImpl implements OrderService {
     public void markPaid(Long orderId) {
         int rows = orderMapper.markPaid(orderId);
         if (rows == 0) {
+            // ★ Day 48：支付回调撞上「状态不允许」是最难排查的一类问题 ——
+            //   用户说"我付过钱了"，而系统这边 CAS 没推起来。可能的原因有三：
+            //   ① 重复回调（第一次已经推成 PAID 了）② 订单被并发取消 ③ 关单任务先跑了一步。
+            //   ★ 但本方法拿不到【当前状态】—— 那需要多一次 SELECT，
+            //     而这里是支付链路上，多一次往返就是多一分失败概率。
+            //     想拿到确切状态，去看 PaymentServiceImpl.pay 里那条
+            //     「支付被拒」WARN（它在读订单之后，两处上下文互补）。
+            //   ⇒ 这里记「谁在什么单上推不动」，至少把问题定位到具体订单。
+            log.warn("支付回调被拒：订单状态不允许（可能重复回调 / 并发取消 / 已关单）orderId={}", orderId);
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "订单状态不允许支付");
         }
     }

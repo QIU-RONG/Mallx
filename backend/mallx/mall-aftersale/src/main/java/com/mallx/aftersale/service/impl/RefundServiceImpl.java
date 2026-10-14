@@ -19,6 +19,7 @@ import com.mallx.order.service.OrderService;
 import com.mallx.order.vo.OrderRefundContext;
 import com.mallx.order.vo.OrderRefundItem;
 import com.mallx.payment.service.PaymentService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +46,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * 审计时只需要读一处；出问题时也只有一处可疑。
  */
 @Service
+@Slf4j
 public class RefundServiceImpl implements RefundService {
 
     /** 分页上限 —— 与其余模块同一个值、同一套夹紧规则（本项目第 7 份拷贝） */
@@ -124,9 +126,20 @@ public class RefundServiceImpl implements RefundService {
             //     第二条的 INSERT 撞上 uk_refunds_active_order 抛出本异常。
             //     不接住它 ⇒ 冒泡到 GlobalExceptionHandler 的 Exception.class 兜底
             //     ⇒ 前端看到 HTTP 200 + code 500「系统异常」，而实际是「你已经申请过了」。
+            // ★ Day 48：这条 WARN 是【索引真的兜住了一次并发】的证据 ——
+            //   ③那条 SELECT 命中不了的概率很低（要两个请求同时通过），
+            //   所以平时这条几乎不出现；一旦出现，说明当时真有并发重复申请。
+            //   没有它，你无法区分「索引从没被触发过」和「索引被触发了但没人知道」。
+            log.warn("售后重复申请被唯一索引兜住（并发 TOCTOU）userId={} orderId={} refundNo={}",
+                    userId, dto.getOrderId(), refund.getRefundNo());
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
                     "该订单已有进行中的售后单，不能重复申请");
         }
+        // ★ Day 48：申请成功是售后链路的起点，INFO 级。
+        //   amount 是服务端按实付算的快照 —— 记下来，事后争议时能证明「当时算的就是这个数」。
+        log.info("售后申请成功 userId={} orderId={} refundId={} refundNo={} type={} amount={} reason={}",
+                userId, ctx.getId(), refund.getId(), refund.getRefundNo(),
+                refund.getType(), refund.getAmount(), refund.getReason());
         return refund.getId();
     }
 
@@ -179,17 +192,27 @@ public class RefundServiceImpl implements RefundService {
     @Override
     public void approve(Long refundId, String remark) {
         if (refundMapper.approve(refundId, remark) == 0) {
+            // ★ Day 48：审核是人工操作，失败几乎都是「手滑」——
+            //   两个人同时开着一张单，一个先审了，另一个再点就撞这里。
+            //   日志要能回答「是谁、审的是哪张单、当时它已经是什么状态」。
+            log.warn("售后审核被拒（通过）refundId={} remark={}", refundId, remark);
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
                     "该售后单不存在，或已不在「待审核」状态");
         }
+        // ★ 审核通过是售后链路的第一个状态跃迁，INFO 级（低频、关键）。
+        log.info("售后审核通过 refundId={} remark={}", refundId, remark);
     }
 
     @Override
     public void reject(Long refundId, String remark) {
         if (refundMapper.reject(refundId, remark) == 0) {
+            log.warn("售后审核被拒（拒绝）refundId={} remark={}", refundId, remark);
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
                     "该售后单不存在，或已不在「待审核」状态");
         }
+        // ★ 拒绝同样要留痕，而且 remark 更重要：它会展示给买家，
+        //   是客诉争议时唯一能查到「官方当时给的理由」的地方。
+        log.info("售后审核拒绝 refundId={} remark={}", refundId, remark);
     }
 
     @Override
@@ -233,6 +256,13 @@ public class RefundServiceImpl implements RefundService {
 
         // ⑤ 负向支付流水（金额存负数 ⇒ 对账退化成 SUM(amount)）
         paymentService.recordRefund(refund.getOrderId(), refund.getAmount());
+
+        // ★ Day 48：退款成功是资金链路的终点，也是唯一一条【钱真的动出去】的路径 ⇒ INFO 级。
+        //   ⚠️ 这里刻意不记「回补了几个 SKU、各多少件」—— 那些信息 inventory_logs
+        //     已经逐 SKU 记了（REFUND_RETURN 流水），重复一遍只会让两处口径有机会不一致。
+        //     日志记「发生了什么」，账本细节交给账本。
+        log.info("退款执行成功 refundId={} orderId={} userId={} amount={}",
+                refundId, refund.getOrderId(), refund.getUserId(), refund.getAmount());
     }
 
     // ================================================================

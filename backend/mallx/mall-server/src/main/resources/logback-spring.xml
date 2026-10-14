@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Day 48 · 日志改进第一批：给日志加【请求身份】。
+
+  改造前（Spring Boot 默认 pattern）：
+    2026-10-14 15:40:01.123  WARN ... OrderServiceImpl : 业务异常：code=400,message=库存不足
+  ↑ 不知道是谁的哪一次请求。并发一高，同一毫秒十几条，对不上。
+
+  改造后：
+    2026-10-14 15:40:01.123  WARN [http-nio-8080-exec-3] [a1b2c3d4] [POST /api/orders] OrderServiceImpl : ...
+                                                                  ↑ traceId      ↑ method + uri
+
+  ★ %X{...} 是 MDC 占位符 —— 键由 TraceIdFilter 在请求入口放入，
+    该线程后续所有日志（Controller / Service / Mapper / 框架）自动带上。
+
+  ⚠️ 异步线程（MQ 消费者、定时任务）【不继承 MDC】⇒ 那里 traceId 为空。
+    这是预期行为，不是 bug：异步场景本来就没有"一次请求"，
+    靠业务日志里显式写的 orderId / refundNo 定位。
+
+  ⚠️ 文件名必须是 logback-spring.xml（不是 logback.xml）：
+    前者由 Spring Boot 加载、支持 <springProfile> 按环境差异化；
+    后者由 logback 自己更早加载，用不了 spring 扩展。
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <!-- 控制台：开发期一眼看到全部信息 -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %d{yyyy-MM-dd HH:mm:ss.SSS} %5p [%15.15t] [%X{traceId}] [%X{uri}] %-40.40logger{39} : %m%n
+            </pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- ★ 业务包默认 INFO，【不是】DEBUG。
+         第一版写的是 DEBUG，实测当天就翻车：MyBatis-Plus 的 SQL 日志用的 logger 名
+         就是 mapper 的全类名（com.mallx.order.mapper.OrderMapper ...），
+         也在 com.mallx 这棵树下 ⇒ 设成 DEBUG 等于把每条 SQL 连参数一起打出来，
+         一次下单刷几十行，真正的业务日志被淹掉。
+         ⇒ 业务日志（INFO/WARN/ERROR）不受影响，SQL 日志默认关闭。
+         真要临时看 SQL：把这个值改成 DEBUG 重启，或（将来若暴露 loggers 端点）动态调。 -->
+    <logger name="com.mallx" level="INFO"/>
+
+    <!-- 把默认级别压回 INFO，避免第三方库（Tomcat / HikariCP / Spring）的 DEBUG 淹没业务日志 -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

@@ -19,6 +19,7 @@ import com.mallx.payment.entity.Payment;
 import com.mallx.payment.mapper.PaymentMapper;
 import com.mallx.payment.service.PaymentService;
 import com.mallx.payment.vo.PaymentVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +51,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * 自动加入本事务，不需要任何额外配置。
  */
 @Service
+@Slf4j
 public class PaymentServiceImpl implements PaymentService {
 
     /**
@@ -128,6 +130,11 @@ public class PaymentServiceImpl implements PaymentService {
         if (items.isEmpty()) {
             // 正常流程不可能发生（下单那一刻就写了明细）；真发生了说明数据被旁路改过 →
             // 服务端异常态，重试无意义，用 FAIL(500) 而不是 400。
+            // ★ Day 48：这条属于「服务端数据不一致」，日志必须留全上下文 ——
+            //   它出现时通常意味着更严重的旁路写入（绕过服务的裸 UPDATE），
+            //   而这条日志就是追查的起点。
+            log.error("支付被拒：订单明细缺失（数据被旁路改过？）userId={} orderId={} status={} payAmount={}",
+                    userId, order.getId(), order.getStatus(), order.getPayAmount());
             throw new BusinessException(ResultCode.FAIL.getCode(), "订单明细缺失");
         }
 
@@ -143,7 +150,16 @@ public class PaymentServiceImpl implements PaymentService {
 
         // ④ CAS 抢资格：抢不到就抛异常 → 整个事务回滚 → ③ 插的支付单一起消失。
         //    ★ 放在 ⑤ 之前：④ 是「抢资格」，抢不到就没必要去动库存（少做无用功）。
-        orderService.markPaid(order.getId());
+        //    ★ Day 48：这里补 WARN —— 与 OrderServiceImpl#markPaid 里那条形成互补：
+        //      那边只拿得到 orderId，这边能读到【支付前的订单状态】，
+        //      于是"状态为什么不对"终于有了答案（重复回调 / 并发取消 / 关单先跑）。
+        try {
+            orderService.markPaid(order.getId());
+        } catch (BusinessException e) {
+            log.warn("支付被拒：CAS 抢不到资格 userId={} orderId={} statusBeforePay={} amount={} reason={}",
+                    userId, order.getId(), order.getStatus(), order.getPayAmount(), e.getMessage());
+            throw e;
+        }
 
         // ⑤ 逐个 SKU 把 locked 搬进 sold（★★ available_stock 一动不动）
         //    ★ 用 moveLockedToSold 而不是 deductForOrder —— 后者会动 available，
@@ -154,6 +170,12 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         // ⑥ 组装返回（因为 ③ 的回填，这里 id / paymentNo / paidAt 都是真值）
+        //    ★ Day 48：支付成功是资金链路的核心节点，INFO 级。
+        //      paymentNo + amount 是事后与支付渠道对账的锚点；
+        //      method 用于统计渠道分布。三者缺一个，对账就得回数据库翻。
+        log.info("支付成功 userId={} orderId={} orderNo={} paymentNo={} amount={} method={}",
+                userId, order.getId(), order.getOrderNo(), payment.getPaymentNo(),
+                payment.getAmount(), payment.getMethod());
         return new PaymentVO(payment.getId(), payment.getPaymentNo(), order.getId(),
                 order.getOrderNo(), payment.getAmount(), payment.getMethod(),
                 payment.getStatus(), payment.getPaidAt());
