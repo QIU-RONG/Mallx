@@ -1,69 +1,70 @@
 /**
- * ★ MallX C 端主题（Day 49 · 视觉统一）。
+ * ★ MallX C 端主题（Day 50 · 向「官方商城」的设计语言靠拢）。
  *
- * <p><b>这一版修的是什么</b>：上一版定义了 {@code --brand-*} 橙色，却
- * 【没有覆盖 Element Plus 的 --el-color-primary】。于是同一屏里：
- * 品牌方块 / 价格 / 菜单选中走橙，而搜索按钮 / 加入购物车 / 分页当前页 /
- * 输入框聚焦边框 / 筛选 tag 全是 EP 默认蓝。两套主色互抢，是「看着乱」的第一来源。
+ * <p><b>这一版为什么从靛蓝改回暖色</b>：靛蓝是「干净专业」，适合管理后台；
+ * 但作为<b>消费者商城</b>，华为商城（正红 {@code #cf0a2c}）与小米商城（橙 {@code #ff6700}）
+ * 的共同点恰恰是 <b>暖色主色 + 冷灰底</b> —— 暖色在 C 端自带购买暗示，
+ * 这也是国内电商几十年形成的一致选择。本次取小米橙。
  *
- * <p>★ 结论：<b>主色只能有一个来源</b>。这里直接覆盖 EP 的全套色阶，
- * 让所有自带组件（按钮 / 链接 / 分页 / 输入框 / tag / 单选框）自动跟随品牌色 ——
- * 而不是逐个组件写 {@code !important} 去压。
+ * <p>⚠️ 换主色【只需要改这一个文件】（两个应用各一份），因为：
+ * ① Element Plus 的组件色全部从 {@code --el-color-primary} 派生；
+ * ② {@code day49-theme-guard.py} 的色阶断言是按公式<b>从主色推导</b>的，不是比对硬编码值。
+ * 想换回靛蓝、或换华为红 {@code #cf0a2c}，改这几行即可，护栏会自动校验色阶是否成套。
  *
  * <p>⚠️ 色阶不能只改一个：EP 的 light-3/5/7/8/9 有固定生成规律
  * （light-N = 主色与白按 N/10 混合，dark-2 = 主色与黑按 2/10 混合）。
  * 只改 {@code --el-color-primary} 的典型症状是<b>按钮 hover 时跳回蓝色</b>，
  * 因为 hover 取的是 light-3。所以六个数必须成套改。
  *
- * <p>本文件的值由 {@code #3b5bdb = rgb(59,91,219)} 按上述规律推导：
+ * <p>本文件的值由 {@code #ff6700 = rgb(255,103,0)} 按上述规律推导：
  * <pre>
- *   light-3 = 59+196×.3, 91+164×.3, 219+36×.3 = 118,140,230 → #768ce6
- *   light-5 = 157,173,237                                → #9daded
- *   light-7 = 196,206,244                                → #c4cef4
- *   light-8 = 216,222,248                                → #d8def8
- *   light-9 = 235,239,251                                → #ebeffb
- *   dark-2  = 主色 ×0.8 = 47,73,175                       → #2f49af
+ *   light-3 = 255, 149,  76 → #ff954c
+ *   light-5 = 255, 179, 128 → #ffb380
+ *   light-7 = 255, 209, 178 → #ffd1b2
+ *   light-8 = 255, 225, 204 → #ffe1cc
+ *   light-9 = 255, 240, 230 → #fff0e6
+ *   dark-2  = 204,  82,   0 → #cc5200
  * </pre>
  */
 
 :root {
-  /* ── 品牌主色：深靛蓝 ──
-     比 EP 默认蓝 #409eff 更深、饱和度更低：白底上对比度够，长时间看不刺眼。
-     C 端显得干净，管理端显得专业。 */
-  --brand-color: #3b5bdb;
-  --brand-color-light: #768ce6;
-  --brand-color-dark: #2f49af;
-  --brand-gradient: linear-gradient(135deg, #4c6ce8 0%, #3b5bdb 100%);
+  /* ── 品牌主色：小米橙 ──
+     C 端要「购买欲」，暖色比冷色直接。 */
+  --brand-color: #ff6700;
+  --brand-color-light: #ff954c;
+  --brand-color-dark: #cc5200;
+  --brand-gradient: linear-gradient(135deg, #ff8a33 0%, #ff6700 100%);
 
   /* ★★ EP 全套主色阶 —— 六个一组，少改一个就会在 hover / disabled / plain 时跳色 */
-  --el-color-primary: #3b5bdb;
-  --el-color-primary-light-3: #768ce6;
-  --el-color-primary-light-5: #9daded;
-  --el-color-primary-light-7: #c4cef4;
-  --el-color-primary-light-8: #d8def8;
-  --el-color-primary-light-9: #ebeffb;
-  --el-color-primary-dark-2: #2f49af;
+  --el-color-primary: #ff6700;
+  --el-color-primary-light-3: #ff954c;
+  --el-color-primary-light-5: #ffb380;
+  --el-color-primary-light-7: #ffd1b2;
+  --el-color-primary-light-8: #ffe1cc;
+  --el-color-primary-light-9: #fff0e6;
+  --el-color-primary-dark-2: #cc5200;
 
   /* ── 价格色 ──
-     ★ 价格【不】用品牌色：它和「可点的按钮」是两种语义。
-     同色会让用户扫一屏时把价格和操作混在一起。暖红也更贴合国内电商扫价习惯。 */
+     ★ 价格【不】用主色：主色已经是橙，价格再用橙就与「加购按钮」同色了。
+     用更重的暖红，扫价时最跳（京东红 / 小米橙，价格永远是页面上最"重"的数字）。 */
   --brand-price: #e1251b;
 
-  /* 圆角 / 阴影：一处定义，卡片、标签、弹窗共用 */
+  /* 圆角 / 阴影 —— 官方商城的卡片圆角都偏小（4~8px），大圆角会显得像玩具 */
   --brand-radius: 8px;
   --brand-radius-sm: 4px;
   --brand-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  /* ★ 这个阴影是【hover 专用】。上一版把它常驻在品牌方块上，
-     等于一直挂着一圈彩色发光 —— 静止状态有光晕会显脏。 */
-  --brand-shadow-hover: 0 6px 20px rgba(59, 91, 219, 0.16);
+  /* ★ 这个阴影是【hover 专用】。常驻在元素上会一直挂着一圈彩色发光，显脏。 */
+  --brand-shadow-hover: 0 6px 20px rgba(255, 103, 0, 0.16);
 
-  --brand-header-h: 60px;
+  --brand-header-h: 64px;
+  /* ★ 商城顶栏是【两层】的：上面一条浅灰工具条（订单 / 券 / 登录），
+     下面才是主导航（logo + 品类 + 搜索 + 购物车）。这是国内商城的通用结构。 */
+  --brand-utility-h: 34px;
 }
 
 /**
  * ★ 路由切换动画：给 <router-view> 包一层 transition 后用。
- * 只做「淡入 + 8px 上移」，刻意不做花哨的滑动 ——
- * 后台类应用里，动画应该是「让注意力跟着内容走」，不是「表演」。
+ * 只做「淡入 + 8px 上移」，刻意不做花哨的滑动。
  */
 .brand-fade-enter-active,
 .brand-fade-leave-active {

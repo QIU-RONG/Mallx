@@ -91,20 +91,22 @@ def git_dirty():
 
 
 CASES = [
+    # ⚠️ 这里的 old 字符串是【真实文件内容】，换主色后必须同步（day50 换小米橙时改过一次）。
+    #    下面 main() 里有一道「变异模式预检」——失配会立刻报错，而不是跑到那一组才莫名失败。
     ("① 删掉 mall-app 的 --el-color-primary 覆盖（＝上一版的状态：只定义品牌色、不管组件）",
      MALL_THEME,
-     "  --el-color-primary: #3b5bdb;\n", "",
+     "  --el-color-primary: #ff6700;\n", "",
      ["A1", "A2", "A3"]),
 
     ("② 只把 light-3 改回 EP 的 #79bbff（＝「只手改 primary 不改色阶」的反面）",
      MALL_THEME,
-     "  --el-color-primary-light-3: #768ce6;",
+     "  --el-color-primary-light-3: #ff954c;",
      "  --el-color-primary-light-3: #79bbff;",
      ["A2"]),
 
     ("③ 把 admin 的品牌色改成另一个值（两应用主色分叉）",
      ADMIN_THEME,
-     "  --brand-color: #3b5bdb;",
+     "  --brand-color: #ff6700;",
      "  --brand-color: #112233;",
      ["A3"]),
 
@@ -140,6 +142,17 @@ def main():
         print("★ 基线不绿 ⇒ 控制组无意义，先修护栏")
         return 2
     print("  ⇒ 基线全绿，可以做变异\n")
+
+    # ── 前置：所有变异模式必须能在目标文件里【命中】 ──
+    #    ★ 换主题色 / 改文案之后，控制组里的 old 字符串会失配。
+    #      预检让它【立刻】报出该更新哪一条，而不是跑到那一组才抛 AssertionError ——
+    #      这是 D47「变异必须落在真实文件形态上」那条规矩的机器化版本。
+    miss = [title for title, rel, old, _n, _w in CASES if old not in backup(rel)]
+    if miss:
+        print("★ 变异模式未命中（多半是被测文件改了、控制组没跟上）：")
+        for m in miss:
+            print("   -", m)
+        return 2
 
     bad = 0
     for title, rel, old, new, want in CASES:

@@ -109,9 +109,10 @@ async function onExit() {
   --el-menu-hover-bg-color: rgba(255, 255, 255, 0.06);
   --el-menu-active-color: #fff;
 }
-/* ★ 选中项：浅色块 + 左侧 3px 指示条（深色侧栏上的通用做法，比只改文字色明确得多） */
+/* ★ 选中项：浅色块 + 左侧 3px 指示条（深色侧栏上的通用做法，比只改文字色明确得多）
+   ⚠️ 这里的半透明色是【跟着主色走】的 —— 主色换橙后必须同步，否则选中块还是旧的靛蓝。 */
 .menu :deep(.el-menu-item.is-active) {
-  background: rgba(118, 140, 230, 0.18);
+  background: rgba(255, 103, 0, 0.18);
   position: relative;
 }
 .menu :deep(.el-menu-item.is-active)::before {

@@ -1,15 +1,15 @@
 /**
- * ★ MallX 管理端主题（Day 49 · 与 C 端 mall-app 同源，**改一处必须改两处**）。
+ * ★ MallX 管理端主题（Day 50 · 与 C 端 mall-app **同源，改一处必须改两处**）。
  *
- * <p><b>这一版修的是什么</b>：与 C 端同一个病 —— 定义了 {@code --brand-*}
- * 却【没有覆盖 Element Plus 的 --el-color-primary】。结果侧边栏选中项、品牌方块
- * 走橙，而表格里的按钮/链接/分页/输入框聚焦全是 EP 默认蓝。两套主色同屏。
+ * <p><b>为什么两端必须同色</b>：它们是一个产品的两个面。C 端换了品牌色，
+ * 管理端还留着旧色，会像「两家公司」。
+ * 护栏 {@code day49-theme-guard.py} 的 A1 断言就是钉这件事（两应用 primary 同值）。
  *
- * <p>★ 覆盖 EP 全套色阶后，管理端所有自带组件自动跟随品牌色，
- * 不需要逐组件压 {@code !important}。
+ * <p>★ 管理端用暖色主色不奇怪 —— 京东商家后台、小米有品的运营后台都是同一个
+ * 品牌色系。真正该"专业"的是**信息密度和层级**，不是把颜色调冷。
  *
  * <p>⚠️ 六个数必须成套改（light-3/5/7/8/9 + dark-2）：只改 primary 的话，
- * 按钮 hover 取的是 light-3，会**跳回蓝色**。推导见 C 端同名文件的注释。
+ * 按钮 hover 取的是 light-3，会跳回蓝色。推导见 C 端同名文件的注释。
  *
  * <p>为什么不抽公共包：目前只有这几个变量，抽包要走「本地 npm 包 / workspace」
  * 构建配置，成本远高于收益 —— 与后端 {@code MAX_PAGE_SIZE} 同一条理由，
@@ -17,37 +17,36 @@
  */
 
 :root {
-  /* ── 品牌主色：深靛蓝（与 C 端同值，不能各取各的） ── */
-  --brand-color: #3b5bdb;
-  --brand-color-light: #768ce6;
-  --brand-color-dark: #2f49af;
-  --brand-gradient: linear-gradient(135deg, #4c6ce8 0%, #3b5bdb 100%);
+  /* ── 品牌主色：小米橙（与 C 端同值，不能各取各的） ── */
+  --brand-color: #ff6700;
+  --brand-color-light: #ff954c;
+  --brand-color-dark: #cc5200;
+  --brand-gradient: linear-gradient(135deg, #ff8a33 0%, #ff6700 100%);
 
   /* ★★ EP 全套主色阶 —— 六个一组 */
-  --el-color-primary: #3b5bdb;
-  --el-color-primary-light-3: #768ce6;
-  --el-color-primary-light-5: #9daded;
-  --el-color-primary-light-7: #c4cef4;
-  --el-color-primary-light-8: #d8def8;
-  --el-color-primary-light-9: #ebeffb;
-  --el-color-primary-dark-2: #2f49af;
+  --el-color-primary: #ff6700;
+  --el-color-primary-light-3: #ff954c;
+  --el-color-primary-light-5: #ffb380;
+  --el-color-primary-light-7: #ffd1b2;
+  --el-color-primary-light-8: #ffe1cc;
+  --el-color-primary-light-9: #fff0e6;
+  --el-color-primary-dark-2: #cc5200;
 
   /* ── 价格 / 金额色 ──
-     ★ 与 C 端同值（两边的金额必须长得一样，否则像两个产品）。
-     国内电商/财务习惯：金额用暖红，与「可点的按钮」在语义上分开。 */
+     ★ 与 C 端同值（两边的金额必须长得一样，否则像两个产品）。 */
   --brand-price: #e1251b;
 
   /* ── 侧边栏深色 ──
-     ★ 从上一版的【中性炭灰】改为带靛蓝倾向的深色：
-     侧栏与主色同色系时，整体才像「一套设计」，而不是「白底里插了块黑」。 */
-  --admin-aside-bg: #1e2433;
-  --admin-aside-bg-deep: #191f2c;
+     ★ 改成【中性深灰】：主色换成暖色后，侧栏再带蓝倾向就会和主色打架。
+     "暖主色 + 中性深灰侧栏"是后台类产品的稳妥搭配（Ant Design Pro 同理）。 */
+  --admin-aside-bg: #232427;
+  --admin-aside-bg-deep: #1b1c1f;
 
   /* 圆角 / 阴影 */
   --brand-radius: 8px;
   --brand-radius-sm: 4px;
   --brand-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  --brand-shadow-hover: 0 6px 20px rgba(59, 91, 219, 0.16);
+  --brand-shadow-hover: 0 6px 20px rgba(255, 103, 0, 0.16);
 
   --brand-header-h: 60px;
 }
