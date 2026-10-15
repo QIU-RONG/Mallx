@@ -112,10 +112,10 @@ onMounted(load)
             {{ STATUS_META[vo.status].label }}
           </el-tag>
         </el-descriptions-item>
-        <el-descriptions-item label="商品总额">￥{{ vo.totalAmount }}</el-descriptions-item>
+        <el-descriptions-item label="商品总额">¥{{ vo.totalAmount }}</el-descriptions-item>
         <el-descriptions-item label="优惠">
-          ￥{{ vo.discountAmount }}
-          <span class="hint">（实付 = 总额 − 优惠 = ￥{{ vo.payAmount }}）</span>
+          ¥{{ vo.discountAmount }}
+          <span class="hint">（实付 = 总额 − 优惠 = ¥{{ vo.payAmount }}）</span>
         </el-descriptions-item>
         <el-descriptions-item label="收货人">
           {{ vo.receiverName }} {{ vo.receiverPhone }}
@@ -144,17 +144,17 @@ onMounted(load)
             </template>
           </el-table-column>
           <el-table-column label="单价" width="120">
-            <template #default="{ row }">￥{{ row.price }}</template>
+            <template #default="{ row }">¥{{ row.price }}</template>
           </el-table-column>
           <el-table-column label="数量" width="90" prop="quantity" />
           <el-table-column label="小计" width="120">
-            <template #default="{ row }">￥{{ row.totalAmount }}</template>
+            <template #default="{ row }">¥{{ row.totalAmount }}</template>
           </el-table-column>
         </el-table>
       </el-card>
 
       <div class="actions">
-        <el-button v-if="vo.status === 'PENDING_PAYMENT'" type="danger" @click="pay">立即支付</el-button>
+        <el-button v-if="vo.status === 'PENDING_PAYMENT'" type="primary" @click="pay">立即支付</el-button>
         <el-button v-if="vo.status === 'PENDING_PAYMENT'" @click="cancel">取消订单</el-button>
         <el-button v-if="vo.status === 'SHIPPED'" type="success" @click="confirm">确认收货</el-button>
         <!-- ★ 只有「付过钱且还没退过」的订单能申请售后 -->
@@ -180,7 +180,7 @@ onMounted(load)
         </el-form-item>
       </el-form>
       <div class="hint">
-        退款金额由系统按订单实付金额（￥{{ vo?.payAmount }}）计算，不支持自行填写。
+        退款金额由系统按订单实付金额（¥{{ vo?.payAmount }}）计算，不支持自行填写。
       </div>
       <template #footer>
         <el-button @click="applyVisible = false">取消</el-button>
@@ -192,7 +192,7 @@ onMounted(load)
 
 <style scoped>
 .wrap {
-  max-width: 1000px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 16px;
   min-height: 260px;

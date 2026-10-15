@@ -77,8 +77,8 @@ onMounted(load)
       </el-table-column>
       <el-table-column label="金额" width="120">
         <template #default="{ row }">
-          <div>￥{{ row.payAmount }}</div>
-          <div v-if="row.discountAmount > 0" class="hint">省了 ￥{{ row.discountAmount }}</div>
+          <div>¥{{ row.payAmount }}</div>
+          <div v-if="row.discountAmount > 0" class="hint">省了 ¥{{ row.discountAmount }}</div>
         </template>
       </el-table-column>
       <el-table-column label="收货人" width="160">
@@ -88,7 +88,7 @@ onMounted(load)
       <el-table-column label="操作" width="220">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/orders/${row.id}`)">详情</el-button>
-          <el-button v-if="row.status === 'PENDING_PAYMENT'" link type="danger" @click="pay(row)">
+          <el-button v-if="row.status === 'PENDING_PAYMENT'" link type="primary" @click="pay(row)">
             支付
           </el-button>
           <el-button v-if="row.status === 'PENDING_PAYMENT'" link @click="cancel(row)">取消</el-button>
@@ -111,7 +111,7 @@ onMounted(load)
 
 <style scoped>
 .wrap {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 16px;
   min-height: 260px;

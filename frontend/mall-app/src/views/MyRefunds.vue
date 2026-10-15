@@ -138,7 +138,6 @@ onMounted(load)
           <el-button
             v-if="row.status === 'APPLIED' || row.status === 'APPROVED'"
             link
-            type="danger"
             @click="cancel(row)"
           >
             撤销
@@ -165,7 +164,7 @@ onMounted(load)
           <el-descriptions-item label="类型">
             {{ TYPE_LABEL[detail.type] || detail.type }}
           </el-descriptions-item>
-          <el-descriptions-item label="退款额">￥{{ detail.amount }}</el-descriptions-item>
+          <el-descriptions-item label="退款额">¥{{ detail.amount }}</el-descriptions-item>
           <el-descriptions-item label="申请原因" :span="2">{{ detail.reason }}</el-descriptions-item>
           <el-descriptions-item label="商家备注" :span="2">
             {{ detail.remark || '-' }}
@@ -187,7 +186,7 @@ onMounted(load)
 
 <style scoped>
 .wrap {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 16px;
 }

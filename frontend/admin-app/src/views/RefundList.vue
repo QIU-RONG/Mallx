@@ -114,7 +114,7 @@ async function doReceive(row: AdminRefundVO) {
 /** ★★★ 动钱的动作：二次确认必须写清后果，并说明它【不可撤销】 */
 async function doExecute(row: AdminRefundVO) {
   await ElMessageBox.confirm(
-    `将向买家退还 ￥${row.amount}，并回补库存 / 退还优惠券。\n该操作不可撤销，确定继续？`,
+    `将向买家退还 ¥${row.amount}，并回补库存 / 退还优惠券。\n该操作不可撤销，确定继续？`,
     '执行退款',
     { type: 'warning', confirmButtonText: '确认退款', cancelButtonText: '再想想' },
   ).catch(() => null)
@@ -242,7 +242,7 @@ onMounted(load)
           <el-descriptions-item label="类型">
             {{ TYPE_LABEL[detail.type] || detail.type }}
           </el-descriptions-item>
-          <el-descriptions-item label="退款额">￥{{ detail.amount }}</el-descriptions-item>
+          <el-descriptions-item label="退款额">¥{{ detail.amount }}</el-descriptions-item>
           <el-descriptions-item label="买家">{{ detail.userNickname || '-' }}</el-descriptions-item>
           <el-descriptions-item label="物流单号">{{ detail.trackingNo || '-' }}</el-descriptions-item>
           <el-descriptions-item label="申请原因" :span="2">{{ detail.reason }}</el-descriptions-item>

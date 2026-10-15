@@ -45,7 +45,7 @@ onMounted(load)
       <el-card v-for="c in mine" :key="c.id" shadow="hover" class="cp" :class="{ dim: c.expired || c.status !== 'UNUSED' }">
         <div class="name">{{ c.couponName }}</div>
         <div class="face">
-          <template v-if="c.discountAmount">￥{{ c.discountAmount }}</template>
+          <template v-if="c.discountAmount">¥{{ c.discountAmount }}</template>
           <template v-else-if="c.discountRate">{{ c.discountRate }} 折</template>
         </div>
         <div class="hint">满 {{ c.minAmount }} 可用</div>
@@ -65,14 +65,14 @@ onMounted(load)
       <el-card v-for="c in available" :key="c.id" shadow="hover" class="cp">
         <div class="name">{{ c.name }}</div>
         <div class="face">
-          <template v-if="c.discountAmount">￥{{ c.discountAmount }}</template>
+          <template v-if="c.discountAmount">¥{{ c.discountAmount }}</template>
           <template v-else-if="c.discountRate">{{ c.discountRate }} 折</template>
         </div>
         <div class="hint">{{ face(c) }}</div>
         <div class="hint">
           剩余 {{ (c.totalCount ?? 0) - (c.receivedCount ?? 0) }} / {{ c.totalCount ?? 0 }}
         </div>
-        <el-button type="danger" size="small" style="width: 100%" @click="receive(c)">
+        <el-button type="primary" size="small" style="width: 100%" @click="receive(c)">
           立即领取
         </el-button>
       </el-card>
@@ -82,7 +82,7 @@ onMounted(load)
 
 <style scoped>
 .wrap {
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 16px;
   min-height: 260px;

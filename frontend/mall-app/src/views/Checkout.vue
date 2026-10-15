@@ -98,8 +98,8 @@ async function submit() {
     <el-card shadow="never">
       <div class="summary">
         <span>共 {{ quantity }} 件</span>
-        <span class="amount">应付 ￥{{ amount }}</span>
-        <el-button type="danger" size="large" :loading="submitting" @click="submit">
+        <span class="amount">应付 ¥{{ amount }}</span>
+        <el-button type="primary" size="large" :loading="submitting" @click="submit">
           提交订单
         </el-button>
       </div>
