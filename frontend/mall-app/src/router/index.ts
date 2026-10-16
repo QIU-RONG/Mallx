@@ -5,6 +5,9 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', name: 'login', component: () => import('../views/Login.vue') },
+    // Day 52：注册页。★ 刻意【不加】requiresAuth —— 走到这里的用户还没有身份，
+    //   加守卫会把他弹回登录页，与「未注册 → 去注册」形成死循环。
+    { path: '/register', name: 'register', component: () => import('../views/Register.vue') },
     { path: '/', name: 'home', component: () => import('../views/ProductList.vue') },
     { path: '/product/:id', name: 'product-detail', component: () => import('../views/ProductDetail.vue') },
     // FE2：交易链路（全部需要登录）

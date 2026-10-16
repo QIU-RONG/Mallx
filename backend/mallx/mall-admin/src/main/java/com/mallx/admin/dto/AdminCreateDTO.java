@@ -11,8 +11,10 @@ import lombok.Data;
  * 表里种子行写的是 {@code {noop}admin123}（{@code 03-data.sql:149}），
  * 那是 {@code DelegatingPasswordEncoder} 的「明文前缀」—— 照抄它 = 明文入库。
  * 实现侧必须 {@code passwordEncoder.encode(dto.getPassword())}，
- * 落库结果是 {@code $2a$…}（BCrypt）。
- * ⇒ 验收里唯一的真证明不是「看库里是不是 $2a$ 开头」，
+ * 落库结果是 {@code {bcrypt}$2a$…} —— ★ 带 {@code {id}} 算法前缀，
+ * <b>不是</b>裸 {@code $2a$…}（这句曾写成「{@code $2a$…}」，与 day23 的实测断言打架，
+ * 并直接误导了 day52 的第一版断言 —— 单点真源见 {@code day23-rbac-verify.py} 的 B2）。
+ * ⇒ 验收里唯一的真证明不是「看库里是不是哈希」，
  * 而是 <b>拿新密码去 {@code /api/auth/admin/login} 能登进来</b>
  * （后者顺带证明 encoder 的 encode/matches 是同一套算法）。
  *

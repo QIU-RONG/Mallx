@@ -47,6 +47,15 @@ public class SecurityConfig {
             // ④ 白名单 + 其余全部要登录（顺序重要：anyRequest 必须放最后）
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/login", "/api/auth/admin/login","/api/hello","/api/redis-check","/error").permitAll()
+                // ★ Day 52：手机号验证码登录 / 注册的三条路径。
+                //   ⚠️ 依然【逐条精确路径】，绝不写 "/api/auth/sms/**" ——
+                //      白名单只认「路径 + 方法」，写成通配之后，这个前缀下将来新增的任何接口
+                //      都会被【静默公开】。本项目在 /api/coupons、/api/brands、/actuator
+                //      上已经踩过三次同一个坑，不再踩第四次。
+                .requestMatchers(HttpMethod.POST,
+                                 "/api/auth/sms/send",
+                                 "/api/auth/sms/login",
+                                 "/api/auth/sms/register").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
                 // ★ Day 20：优惠券「可领列表」公开。注意这里是【精确路径】，不是 "/api/coupons/**" ——

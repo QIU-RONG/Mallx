@@ -19,5 +19,14 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-common</artifactId>
         </dependency>
+
+        <!-- ★ Day 52：短信验证码要存 Redis（TTL 过期 + 60 秒发送限流，两件事都天然契合）。
+             ⚠️ redis starter 只声明在 mall-server —— 那对【运行期注入】够用，
+             但本模块【编译期】要用 StringRedisTemplate ⇒ 必须在这里再声明一次。
+             （与 D38 的 mall-product 同一个理由，别指望父 pom 传下来。） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
     </dependencies>
 </project>

@@ -27,6 +27,25 @@ http.interceptors.request.use((cfg) => {
   return cfg
 })
 
+/**
+ * 业务失败错误（HTTP 200 + body.code != 200）。
+ *
+ * ★★ 为什么要单独一个类：拦截器原来 reject 的是普通 `Error`，调用方只能靠
+ *   message 字符串去猜业务码 —— 而「按文案分支」是脆的：后端改一个字，
+ *   前端的跳转就**静默失效**，且没有任何东西会报错。
+ *   带上数字 code 之后，调用方可以写 `e instanceof BizError && e.code === 4041`。
+ *
+ * ★ 继承 `Error` 而不是自造普通对象：既有的 `catch (e) { e.message }` 写法全部照旧可用。
+ */
+export class BizError extends Error {
+  readonly code: number
+  constructor(code: number, message: string) {
+    super(message)
+    this.name = 'BizError'
+    this.code = code
+  }
+}
+
 function gotoLogin(reason: string) {
   const auth = useAuthStore()
   auth.logout()
@@ -46,7 +65,7 @@ http.interceptors.response.use(
       } else {
         ElMessage.error(body.message || `操作失败（code=${body.code}）`)
       }
-      return Promise.reject(new Error(body.message || `code=${body.code}`))
+      return Promise.reject(new BizError(body.code, body.message || `操作失败（code=${body.code}）`))
     }
     // ★ 直接返回 Result 骨架：调用方拿 j.data
     //（axios 拦截器签名要求 AxiosResponse —— 这里刻意换成 Result 骨架，类型断言收敛）

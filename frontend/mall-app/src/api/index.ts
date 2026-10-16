@@ -14,12 +14,42 @@ import type {
   ProductVO,
   RefundVO,
   Result,
+  SmsSendData,
   UserCouponVO,
 } from '../types/api'
 
 // ---------- 认证 ----------
 export function login(username: string, password: string) {
   return http.post<never, Result<LoginData>>('/auth/login', { username, password })
+}
+
+// ---------- Day 52：手机号验证码登录 / 注册 ----------
+/**
+ * ★ 旧的「用户名 + 密码」登录【保留】，不是忘了删：
+ *   ① 它是种子用户（demo / demo123）唯一的进门方式，删掉等于删掉演示路径；
+ *   ② day43 / 46 / 47 那批端到端脚本全部靠 `/auth/login` 拿 C 端 token，
+ *      删掉会让它们集体变红 —— 而它们验的是订单 / 售后 / 前端契约，跟登录方式无关。
+ *   ⇒ 登录页把两种方式并列，手机号是默认那个。
+ *
+ * ★ 这三条都不带 Authorization：它们正是「还没有 token」时用的。
+ */
+export function smsSend(phone: string) {
+  return http.post<never, Result<SmsSendData>>('/auth/sms/send', { phone })
+}
+
+/**
+ * 手机号 + 验证码登录。
+ *
+ * ★★ 未注册时后端返回业务码 **4041**（不是普通 400），前端据此带上手机号跳注册页 ——
+ *   所以要按 `e instanceof BizError && e.code === 4041` 判断，**别去匹配文案**。
+ */
+export function smsLogin(phone: string, code: string) {
+  return http.post<never, Result<LoginData>>('/auth/sms/login', { phone, code })
+}
+
+/** 手机号注册；成功后后端【直接返回 token】（注册即登录，不用再回登录页重走一遍） */
+export function smsRegister(phone: string, code: string, nickname: string) {
+  return http.post<never, Result<LoginData>>('/auth/sms/register', { phone, code, nickname })
 }
 
 // ---------- 商品（白名单只读，匿名可看） ----------

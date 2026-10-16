@@ -31,4 +31,25 @@ public interface UserService extends IService<User> {
      * @param nickname 已由 {@code NicknameUpdateDTO} 的 {@code @NotBlank/@Size} 校验过
      */
     void updateMyNickname(Long userId, String nickname);
+
+    /**
+     * 按手机号查用户（Day 52 · 手机号验证码登录用）。
+     *
+     * <p>★ 返回 {@code null} = 没查到，这是<b>正常分支</b>而不是异常：
+     * 调用方正是靠它分流「已注册 ⇒ 登录」与「未注册 ⇒ 引导注册」。
+     *
+     * <p>⚠️ 注意本方法<b>不带 userId</b>，与本接口「只服务『我的』语义」的约定看似冲突 ——
+     * 这是刻意开口的例外：登录时<b>还没有身份</b>，谈不上「谁在问」。
+     * 它只被登录链路调用，返回的 {@code User} 也不出 Controller（只用于签 token）。
+     */
+    User findByPhone(String phone);
+
+    /**
+     * 手机号注册（Day 52）。
+     *
+     * @param nickname 可空；为空时由实现兜底一个默认昵称
+     * @return 新建的用户（id 已回填，供调用方签 token）
+     * @throws com.mallx.common.exception.BusinessException 手机号已注册（含并发撞唯一约束）
+     */
+    User registerByPhone(String phone, String nickname);
 }
