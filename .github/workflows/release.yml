@@ -122,10 +122,20 @@ jobs:
   deploy:
     needs: image
     runs-on: ubuntu-latest
-    # ★ 没配 secrets 就整个跳过 —— 没有服务器不该让发布变红
-    if: ${{ github.event_name == 'push' && secrets.DEPLOY_HOST != '' }}
+    # ★★ 为什么 secrets 先落到 job 级 env，而不是直接写进下面的 if：
+    #    `secrets` 上下文在 `jobs.<id>.if` 里【不可用】—— 写了会让 GitHub 判定
+    #    「整个 workflow 文件无效」。症状极具误导性：
+    #      · 每次 push 都出现一个 **0 jobs 的失败 run**（启动阶段就失败）
+    #      · 该 run 的 name 退化成 **文件路径** `.github/workflows/release.yml`
+    #      · 而且 `push.tags: ['v*']` 的过滤**不再生效** ⇒ main 的每次 push 都会冒一条
+    #        （2026-10-15 起一直在冒，被误当成「重复事件」）
+    #    ⇒ job 级 `env` 在 step 的 `if` 里是合法的，所以先落到 env 再判断。
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
     steps:
       - name: Deploy over SSH
+        # ★ 没配 secrets 就跳过这一步 —— 没有服务器不该让发布变红
+        if: ${{ github.event_name == 'push' && env.DEPLOY_HOST != '' }}
         run: |
           set -e
           mkdir -p ~/.ssh
