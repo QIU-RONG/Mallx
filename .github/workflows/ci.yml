@@ -552,17 +552,23 @@ jobs:
       - name: Install (npm ci)
         run: npm ci --no-audit --no-fund
 
-      # ★ Day 48：ESLint（--max-warnings 0 ⇒ warn 也算失败）。
+      # ★ Day 48/53：ESLint（--max-warnings 0 ⇒ warn 也算失败）。
       #   在此之前前端只有「类型 + 构建」两道关，代码干净是靠自觉，没有东西在 CI 里守着。
-      #   ⚠️ 只在 mall-app 上配了（见下）—— admin-app 的规则集与测试尚未同步，先不装门禁。
-      - name: Lint (ESLint, mall-app only)
-        if: matrix.app == 'mall-app'
+      #   ★ Day 53 起【两个应用都配上了】（此前只有 mall-app，admin-app 那两步用
+      #     `if: matrix.app == 'mall-app'` 挡着 —— 宁可没有，也不做假绿）。
+      #   两份 eslint.config.mjs 规则相同、理由不同（管理端渲染别人提交的文本 + 手里有 perms），
+      #   所以是两份文件而不是共享一份。
+      - name: Lint (ESLint)
         run: npm run lint
 
-      # ★ Day 48：Vitest 单测（15 条，覆盖 http 拦截器 / auth store / router 守卫
-      #   —— 这三个是「改一处坏一片页面、而类型检查和构建都看不出来」的高危区）。
-      - name: Unit tests (Vitest, mall-app only)
-        if: matrix.app == 'mall-app'
+      # ★ Vitest 单测：mall-app 15 条 / admin-app 21 条。
+      #   两个应用测的是同三个高危区（http 拦截器 / auth store / router 守卫），
+      #   但【语义相反】，所以是两套测试而不是复制：
+      #     · C 端 403 → 只提示（未登录才踢）
+      #     · 管理端 403 是【常态】（超管之外本来就少码）⇒ 绝不能 logout / 跳登录，
+      #       否则运营点错一个菜单就被踢出后台，且不报错、不告警
+      #     · 管理端多一条 decodePerms 的 `type === 'ADMIN'` 闸门（拦 C 端 token 混进后台）
+      - name: Unit tests (Vitest)
         run: npm run test
 
       - name: Type check + Build (vue-tsc -b && vite build)

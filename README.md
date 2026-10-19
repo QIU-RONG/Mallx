@@ -9,8 +9,10 @@
 ```text
 状态：后端 V1.0–V1.4 完成（Day 01–52）  ·  前端 FE1–FE4 完成 + 全栈联调跑通（Day 43）  ·  待办：V2.0 微服务
 端点 116 个   ·   权限码 46 个   ·   核心表 25 张   ·   后端模块 12 个   ·   前端应用 2 个（17 个页面）
-前端质量门禁（Day 48，mall-app 已配齐）：`vue-tsc` 类型 + `vite build` 构建 + **ESLint（4 条规则，warn 也算失败）**
-+ **Vitest 15 条**（http 拦截器 / auth store / router 守卫 —— 「改一处坏一片页面」的三个高危区）
+前端质量门禁（**两个应用都已配齐**，Day 48 / Day 53）：`vue-tsc` 类型 + `vite build` 构建 + **ESLint（4 条规则，warn 也算失败）**
++ **Vitest 36 条**（mall-app 15 / admin-app 21；同测三个高危区 —— http 拦截器 / auth store / router 守卫）
+　　但两边**语义相反**，所以是两套测试而不是复制：管理端 **403 是常态**（超管之外本来就少码），
+　　　绝不能 logout / 跳登录，否则运营点错一个菜单就被踢出后台；另多一条 `type === 'ADMIN'` 闸门拦 C 端 token 混进后台
 Java 218 文件 / 19.4k 行   ·   Controller 26 个   ·   Mapper XML 13 份   ·   SQL 脚本 18 份
 验收脚本 84 个（`backend/loadtest/day*.py`）＋ 静态护栏 3 个（权限常量 17 条 / 生产编排 19 条 / 主题色阶 6 条，各带控制组）
 回归基线：**M1 全链路 434 条断言**（3 链 + 4 读侧 + 2 写侧；Day 43 名单 5→9）＋ 各域验收脚本见 §测试与回归末表，
