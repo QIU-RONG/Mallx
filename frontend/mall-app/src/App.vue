@@ -164,13 +164,13 @@ function doSearch() {
   border-bottom: 1px solid var(--mx-line);
 }
 .topbar-inner {
-  max-width: 1200px;
+  max-width: 1320px;
   margin: 0 auto;
   height: var(--mx-topbar-h);
-  padding: 0 20px;
+  padding: 0 24px;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 22px;
 }
 
 /* ───── 品牌 ───── */
@@ -183,13 +183,13 @@ function doSearch() {
   flex: none;
 }
 .brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   background: var(--mx-ink);
   color: #fff;
   font-family: Georgia, 'Times New Roman', serif;
-  font-size: 16px;
+  font-size: 18px;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -198,13 +198,13 @@ function doSearch() {
 }
 .brand-word {
   font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
-  font-size: 20px;
+  font-size: 23px;
   font-weight: 600;
   letter-spacing: 0.01em;
   color: var(--mx-ink);
 }
 .brand-sub {
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.18em;
   color: var(--mx-ink-3);
 }
@@ -215,7 +215,7 @@ function doSearch() {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -225,8 +225,8 @@ function doSearch() {
 .cat {
   position: relative;
   flex: none;
-  padding: 6px 0;
-  font-size: 13px;
+  padding: 8px 0;
+  font-size: 14px;
   letter-spacing: 0.02em;
   color: var(--mx-ink-2);
   cursor: pointer;
@@ -260,7 +260,7 @@ function doSearch() {
   border-radius: var(--mx-btn-r);
   background: var(--mx-surface);
   overflow: hidden;
-  width: 210px;
+  width: 260px;
   transition: border-color 0.18s var(--mx-ease);
 }
 .search:focus-within {
@@ -269,22 +269,22 @@ function doSearch() {
 .search :deep(.el-input__wrapper) {
   box-shadow: none !important;
   background: transparent;
-  padding: 2px 10px;
+  padding: 2px 12px;
 }
 .search :deep(.el-input__inner) {
-  font-size: 13px;
+  font-size: 14px;
 }
 .search :deep(.el-input__prefix) {
   color: var(--mx-ink-3);
 }
 .search-go {
-  height: 34px;
-  padding: 0 14px;
+  height: 40px;
+  padding: 0 16px;
   border: none;
   border-left: 1px solid var(--mx-line);
   background: transparent;
   color: var(--mx-ink);
-  font-size: 13px;
+  font-size: 14px;
   /* ★ 必须 nowrap：搜索框只有 230px 时按钮会被挤成「搜 / 索」两行（实测踩到） */
   white-space: nowrap;
   flex: none;
@@ -303,7 +303,7 @@ function doSearch() {
   gap: 16px;
 }
 .a-link {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--mx-ink-2);
   cursor: pointer;
   white-space: nowrap;
@@ -320,13 +320,13 @@ function doSearch() {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 34px;
-  padding: 0 14px;
+  height: 40px;
+  padding: 0 16px;
   border: 1px solid var(--mx-line);
   border-radius: 999px;
   background: var(--mx-surface);
   color: var(--mx-ink);
-  font-size: 12px;
+  font-size: 13px;
   cursor: pointer;
   transition:
     border-color 0.18s var(--mx-ease),
@@ -348,10 +348,10 @@ function doSearch() {
     gap: 14px;
   }
   .cat {
-    font-size: 12.5px;
+    font-size: 13px;
   }
   .search {
-    width: 200px;
+    width: 190px;
   }
   /* ★ 中等宽度先收「退出」（个人中心左侧导航里也有退出），保留「个人中心」；
      未登录的「登录 / 注册」必须保留 —— 那是匿名用户唯一的入口。 */
@@ -364,13 +364,16 @@ function doSearch() {
 }
 @media (max-width: 1080px) {
   .topbar-inner {
-    gap: 14px;
+    gap: 12px;
   }
   .cats {
     gap: 12px;
   }
+  .cat {
+    font-size: 12.5px;
+  }
   .search {
-    width: 180px;
+    width: 170px;
   }
   .a-link--account {
     display: none;
