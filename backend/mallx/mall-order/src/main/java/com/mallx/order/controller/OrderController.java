@@ -146,13 +146,14 @@ public class OrderController {
      * <p>⚠️ 不写 defaultValue 的话，不传参时 Spring 对基本类型 long 会直接抛异常（400）；
      * 写了 defaultValue 才是「可不传」。
      */
-    @Operation(summary = "我的订单列表（分页，size 上限 100）")
+    @Operation(summary = "我的订单列表（分页，size 上限 100；status 可选）")
     @GetMapping
     public Result<PageResult<OrderVO>> list(Authentication authentication,
                                             @RequestParam(defaultValue = "1") long page,
-                                            @RequestParam(defaultValue = "10") long size) {
+                                            @RequestParam(defaultValue = "10") long size,
+                                            @RequestParam(required = false) String status) {
         Long userId = (Long) authentication.getPrincipal();
-        return Result.ok(orderService.listMyOrders(userId, page, size));
+        return Result.ok(orderService.listMyOrders(userId, page, size, status));
     }
 
     /**

@@ -29,7 +29,7 @@ const STATUS_META: Record<OrderStatus, { label: string; type: 'info' | 'warning'
 async function load() {
   loading.value = true
   try {
-    const j = await orderList({ current: current.value, size: size.value, status: status.value || undefined })
+    const j = await orderList({ page: current.value, size: size.value, status: status.value || undefined })
     records.value = j.data.records || []
     total.value = j.data.total
   } finally {

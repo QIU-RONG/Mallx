@@ -131,6 +131,17 @@ export interface AddressVO {
   isDefault?: boolean
 }
 
+/** 「我的资料」（`GET /api/users/me`）—— ★ 不含密码哈希，出参白名单由后端 UserVO 保证 */
+export interface UserVO {
+  id: number
+  username: string
+  nickname?: string
+  phone?: string
+  email?: string
+  status: number
+  createdAt?: string
+}
+
 export interface OrderItemVO {
   id: number
   orderId: number

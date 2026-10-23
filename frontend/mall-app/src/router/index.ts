@@ -41,6 +41,22 @@ const router = createRouter({
       component: () => import('../views/Coupons.vue'),
       meta: { requiresAuth: true },
     },
+    // ★ Day 58：个人中心。左侧导航 + 子路由；订单/售后/券【复用现有页面组件】，
+    //   不复制一份 —— 同一份数据、同一套交互，改一处两边都变。
+    {
+      path: '/account',
+      component: () => import('../views/Account.vue'),
+      meta: { requiresAuth: true },
+      redirect: '/account/overview',
+      children: [
+        { path: 'overview', component: () => import('../views/AccountHome.vue') },
+        { path: 'orders', component: () => import('../views/OrderList.vue') },
+        { path: 'refunds', component: () => import('../views/MyRefunds.vue') },
+        { path: 'coupons', component: () => import('../views/Coupons.vue') },
+        { path: 'addresses', component: () => import('../views/AccountAddresses.vue') },
+        { path: 'profile', component: () => import('../views/AccountProfile.vue') },
+      ],
+    },
     {
       path: '/refunds',
       name: 'my-refunds',

@@ -16,6 +16,7 @@ import type {
   Result,
   SmsSendData,
   UserCouponVO,
+  UserVO,
 } from '../types/api'
 
 // ---------- 认证 ----------
@@ -109,6 +110,31 @@ export function addressCreate(payload: Omit<AddressVO, 'id'>) {
   return http.post<never, Result<number>>('/addresses', payload)
 }
 
+/** 修改地址（局部/全量都行；页面按整表单提交） */
+export function addressUpdate(id: number, payload: Omit<AddressVO, 'id'>) {
+  return http.put<never, Result<void>>(`/addresses/${id}`, payload)
+}
+
+export function addressDelete(id: number) {
+  return http.delete<never, Result<void>>(`/addresses/${id}`)
+}
+
+/** 设为默认：后端会把该用户的其它地址取消默认（互斥由服务端保证） */
+export function addressSetDefault(id: number) {
+  return http.put<never, Result<void>>(`/addresses/${id}/default`)
+}
+
+// ---------- 个人中心（Day 58） ----------
+/** 我的资料：UserVO 白名单，不含 password */
+export function userMe() {
+  return http.get<never, Result<UserVO>>('/users/me')
+}
+
+/** 改昵称：@NotBlank + 最长 50（后端 NicknameUpdateDTO），空串会被挡 */
+export function userUpdateNickname(nickname: string) {
+  return http.put<never, Result<void>>('/users/me/nickname', { nickname })
+}
+
 // ===================== FE2：订单 =====================
 /** ★ 买什么只认购物车里 selected 的行，入参只有 addressId（+ 可选 userCouponId） */
 export function orderCreate(addressId: number, userCouponId?: number | null) {
@@ -118,7 +144,12 @@ export function orderCreate(addressId: number, userCouponId?: number | null) {
   })
 }
 
-export function orderList(params: { current: number; size: number; status?: string }) {
+/**
+ * ★ 参数名是 `page`（后端 OrderController 的口径），不是 `current`。
+ * Day 58 之前这里写的是 `current` + 后端没有 status —— 两个参数都被静默忽略：
+ * 翻页永远停在第 1 页、状态筛选点了没反应（页面看起来"只是没数据"）。
+ */
+export function orderList(params: { page: number; size: number; status?: string }) {
   return http.get<never, Result<PageResult<OrderVO>>>('/orders', { params })
 }
 

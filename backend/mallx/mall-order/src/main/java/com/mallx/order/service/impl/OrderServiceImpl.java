@@ -701,13 +701,18 @@ public class OrderServiceImpl implements OrderService {
      * 和分页参数是两件独立的事：前者防越权，后者防资源滥用。
      */
     @Override
-    public PageResult<OrderVO> listMyOrders(Long userId, long page, long size) {
+    public PageResult<OrderVO> listMyOrders(Long userId, long page, long size, String status) {
         long safePage = Math.max(page, 1);
         long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        // ★ 空串 = 不筛（与 listAllOrders 的归一化同一口径）。非法状态值只会筛出空列表，
+        //   不抛 400 —— 这一点与「按关键词搜不到」的语义一致，不需要额外分支。
+        String safeStatus = (status == null || status.isBlank()) ? null : status;
 
         IPage<Order> result = orderMapper.selectPage(new Page<>(safePage, safeSize),
                 new LambdaQueryWrapper<Order>()
                         .eq(Order::getUserId, userId)
+                        .eq(safeStatus != null, Order::getStatus, safeStatus)
                         .orderByDesc(Order::getCreatedAt)
                         // ★ 兜底排序：createdAt 精度可能相同（同一毫秒下的压测订单），
                         //   再按 id 倒序，才能保证分页「不重不漏」而不是随机翻页。

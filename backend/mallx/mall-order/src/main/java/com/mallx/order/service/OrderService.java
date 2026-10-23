@@ -44,8 +44,11 @@ public interface OrderService {
      *
      * @param page 页码，从 1 开始
      * @param size 每页条数，最终落在 1..100
+     * @param status 可选：按订单状态过滤（★ Day 58 新增）。null / 空串 = 不筛。
+     *               ★ 与 {@code listAllOrders} 同一口径：不在这里做白名单校验，
+     *               非法值只会在 SQL 里匹配不到任何行（与「筛不出来」的语义一致）。
      */
-    PageResult<OrderVO> listMyOrders(Long userId, long page, long size);
+    PageResult<OrderVO> listMyOrders(Long userId, long page, long size, String status);
 
     /**
      * 订单详情（订单头 + 明细快照）。
@@ -183,7 +186,7 @@ public interface OrderService {
     /**
      * ★★★ 管理端订单列表：<b>全站</b>订单分页（不按归属过滤）。
      *
-     * <p>★★ 与 {@link #listMyOrders(Long, long, long)} 的差别<b>不是少写一行校验</b>，
+     * <p>★★ 与 {@link #listMyOrders(Long, long, long, String)} 的差别<b>不是少写一行校验</b>，
      * 而是<b>防线整体上移了一层</b>：
      * <pre>
      *                 C 端 listMyOrders            管理端 listAllOrders

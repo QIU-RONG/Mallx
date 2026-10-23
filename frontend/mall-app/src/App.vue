@@ -105,9 +105,7 @@ function doSearch() {
 
       <div class="actions">
         <template v-if="auth.token">
-          <a class="a-link a-link--account" @click="router.push('/orders')">订单</a>
-          <a class="a-link a-link--account" @click="router.push('/refunds')">售后</a>
-          <a class="a-link a-link--account" @click="router.push('/coupons')">券</a>
+          <a class="a-link a-link--account" @click="router.push('/account')">个人中心</a>
           <a class="a-link a-link--account" @click="logout">退出</a>
         </template>
         <template v-else>
