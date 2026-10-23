@@ -2,9 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { cartAdd, productDetail, productReviews } from '../api'
+import { cartAdd, pageProducts, productDetail, productReviews } from '../api'
 import ProductThumb from '../components/ProductThumb.vue'
-import type { ProductDetailVO, ReviewVO, SkuVO } from '../types/api'
+import type { ProductDetailVO, ProductVO, ReviewVO, SkuVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
 
 const route = useRoute()
@@ -64,6 +64,23 @@ function moreReviews() {
   loadReviews()
 }
 
+/** 评价锚点：价格区的「N 条评价 ↓」滚到评价区 */
+function jumpToReviews() {
+  document.querySelector('.reviews-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+// ---------------- 相关推荐（同分类，排除自己） ----------------
+const related = ref<ProductVO[]>([])
+
+async function loadRelated(categoryId?: number, excludeId?: number) {
+  try {
+    const j = await pageProducts({ current: 1, size: 8, categoryId })
+    related.value = (j.data.records || []).filter((p) => p.id !== excludeId).slice(0, 4)
+  } catch {
+    related.value = []
+  }
+}
+
 function fmtTime(s?: string) {
   return s ? s.replace('T', ' ').slice(0, 16) : ''
 }
@@ -75,12 +92,14 @@ onMounted(async () => {
     vo.value = j.data
     pics.value = [j.data.mainImage, ...j.data.images].filter((x): x is string => !!x)
     mainPic.value = pics.value[0] || ''
+    // ★ 规格没有「上下架」字段（后端 SkuVO 只给价格/编码），默认选第一个
     chosenSkuId.value = j.data.skus[0]?.id ?? null
   } finally {
     loading.value = false
   }
-  // ★ 评价是公开接口，不阻塞商品主体渲染失败
+  // ★ 评价与相关推荐是公开接口，不阻塞商品主体渲染
   loadReviews(true)
+  if (vo.value) loadRelated(vo.value.categoryId, vo.value.id)
 })
 
 function pickMain(url: string) {
@@ -112,7 +131,10 @@ async function addToCart() {
     <template v-if="vo">
       <el-breadcrumb separator="/" class="crumb">
         <el-breadcrumb-item :to="{ path: '/' }">首页</el-breadcrumb-item>
-        <el-breadcrumb-item>{{ vo.categoryName }}</el-breadcrumb-item>
+        <!-- ★ 分类可点：直接带着 categoryId 回列表，比只显示文字有用 -->
+        <el-breadcrumb-item :to="{ path: '/', query: { categoryId: String(vo.categoryId) } }">
+          {{ vo.categoryName }}
+        </el-breadcrumb-item>
         <el-breadcrumb-item>{{ vo.name }}</el-breadcrumb-item>
       </el-breadcrumb>
 
@@ -149,6 +171,9 @@ async function addToCart() {
               <span v-if="saved > 0" class="orig">¥{{ Number(chosenSku?.originalPrice).toFixed(2) }}</span>
             </div>
             <div v-if="saved > 0" class="saved">立省 ¥{{ saved.toFixed(2) }}</div>
+            <button class="review-link" type="button" @click="jumpToReviews">
+              {{ reviewCount }} 条评价 ↓
+            </button>
           </div>
 
           <div class="divider" />
@@ -186,10 +211,11 @@ async function addToCart() {
           </div>
 
           <ul class="promise">
-            <li>正品保障</li>
-            <li>极速发货</li>
-            <li>七天无理由退换</li>
+            <li><span class="tick">✓</span>正品保障</li>
+            <li><span class="tick">✓</span>极速发货</li>
+            <li><span class="tick">✓</span>七天无理由退换</li>
           </ul>
+          <p class="delivery-note">下单后 48 小时内发货 · 满 ¥99 免运费 · 支持货到付款</p>
         </div>
       </div>
 
@@ -228,6 +254,32 @@ async function addToCart() {
           <button v-if="reviews.length < reviewTotal" class="more-btn" type="button" @click="moreReviews">
             查看更多评价（{{ reviews.length }} / {{ reviewTotal }}）
           </button>
+        </div>
+      </section>
+
+      <!-- ═══════ 相关推荐（同分类） ═══════ -->
+      <section v-if="related.length" class="related-section">
+        <div class="related-head">
+          <p class="sec-label">看了又看</p>
+          <router-link class="more-link" :to="{ path: '/', query: { categoryId: String(vo.categoryId) } }">
+            更多{{ vo.categoryName }} →
+          </router-link>
+        </div>
+        <div class="related-grid">
+          <article
+            v-for="p in related"
+            :key="p.id"
+            class="related-card"
+            @click="router.push(`/product/${p.id}`)"
+          >
+            <div class="related-pic">
+              <ProductThumb :src="p.mainImage" :name="p.name" :seed="p.id" />
+            </div>
+            <div class="related-name">{{ p.name }}</div>
+            <div v-if="p.minPrice != null" class="related-price mx-serif">
+              ¥{{ Number(p.minPrice).toFixed(2) }}
+            </div>
+          </article>
         </div>
       </section>
     </template>
@@ -437,11 +489,106 @@ async function addToCart() {
   display: flex;
   gap: 20px;
   font-size: 12px;
+  color: var(--mx-ink-2);
+}
+.promise li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tick {
+  color: var(--mx-accent);
+  font-size: 12px;
+}
+.delivery-note {
+  margin: 12px 0 0;
+  font-size: 12px;
   color: var(--mx-ink-3);
 }
-.promise li::before {
-  content: '·';
-  margin-right: 6px;
+
+/* 已下架规格（暂未启用：后端 SkuVO 没有上下架字段，留作扩展） */
+
+/* 价格区旁的「N 条评价 ↓」锚点 */
+.review-link {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  color: var(--mx-ink-3);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.review-link:hover {
+  color: var(--mx-ink);
+}
+
+/* ───── 相关推荐 ───── */
+.related-section {
+  margin-top: 56px;
+  padding-top: 32px;
+  border-top: 1px solid var(--mx-line);
+}
+.related-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.more-link {
+  font-size: 12px;
+  color: var(--mx-ink-3);
+  text-decoration: none;
+}
+.more-link:hover {
+  color: var(--mx-ink);
+}
+.related-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px;
+}
+.related-card {
+  cursor: pointer;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-card-r);
+  background: var(--mx-surface);
+  padding: 12px;
+  transition:
+    border-color 0.18s var(--mx-ease),
+    transform 0.18s var(--mx-ease);
+}
+.related-card:hover {
+  border-color: var(--mx-ink-3);
+  transform: translateY(-2px);
+}
+.related-pic {
+  aspect-ratio: 4 / 5;
+  border-radius: var(--mx-media-r);
+  overflow: hidden;
+  background: var(--mx-line-soft);
+}
+.related-name {
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mx-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.related-price {
+  margin-top: 6px;
+  font-size: 15px;
+  color: var(--mx-ink);
+}
+
+@media (max-width: 900px) {
+  .related-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .desc-section {
