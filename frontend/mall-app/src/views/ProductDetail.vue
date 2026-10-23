@@ -163,6 +163,15 @@ async function addToCart() {
           <p class="eyebrow">{{ vo.brandName || 'MALLX' }} · {{ vo.categoryName }}</p>
           <h1 class="title">{{ vo.name }}</h1>
           <p v-if="vo.subtitle" class="subtitle">{{ vo.subtitle }}</p>
+          <!-- ★ Day 64：店铺归属（展示层）。没有店铺的商品不显示，而不是写「平台自营」 -->
+          <p v-if="vo.shopName" class="shop-line">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+              stroke-width="1.6" stroke-linejoin="round">
+              <path d="M4 9h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9Z" />
+              <path d="M3 9l1.5-4.5h15L21 9M9 20v-6h6v6" />
+            </svg>
+            <span class="shop-name">{{ vo.shopName }}</span>
+          </p>
 
           <div class="price-panel">
             <div class="price-main">
@@ -368,6 +377,21 @@ async function addToCart() {
   margin: 10px 0 0;
   font-size: 14px;
   color: var(--mx-ink-2);
+}
+.shop-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 4px 10px;
+  border: 1px solid var(--mx-line);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--mx-ink-2);
+  background: var(--mx-surface);
+}
+.shop-name {
+  color: var(--mx-ink);
 }
 
 /* ★ 价格不再铺浅色块：一块灰底会把「价格」降级成标签。

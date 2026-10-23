@@ -25,6 +25,9 @@ import type {
   RoleDetailVO,
   RoleUpdateDTO,
   RoleVO,
+  ShopCreateDTO,
+  ShopUpdateDTO,
+  ShopVO,
   TrendPointVO,
   UserVO,
 } from '../types/api'
@@ -167,6 +170,21 @@ export function adminReviewPage(params: {
  */
 export function adminReviewUpdateStatus(id: number | string, status: number) {
   return http.put<never, Result<void>>(`/admin/reviews/${id}/status`, { status })
+}
+
+// ===================== 店铺（Day 64） =====================
+/** 店铺列表（含停用的；没有删除 —— 用停用代替，避免商品失去归属说明） */
+export function adminShopList() {
+  return http.get<never, Result<ShopVO[]>>('/admin/shops')
+}
+
+/** 新建店铺：店名 UNIQUE，重复由后端翻成 400 */
+export function adminShopCreate(payload: ShopCreateDTO) {
+  return http.post<never, Result<number>>('/admin/shops', payload)
+}
+
+export function adminShopUpdate(id: number | string, payload: ShopUpdateDTO) {
+  return http.put<never, Result<void>>(`/admin/shops/${id}`, payload)
 }
 
 // ===================== 字典（商品表单用） =====================

@@ -21,6 +21,7 @@ describe('admin menu · visibleMenus', () => {
       'coupon:list',
       'user:list',
       'role:list',
+      'shop:list',
     ]
     expect(visibleMenus(all)).toHaveLength(ADMIN_MENUS.length)
   })
@@ -47,7 +48,7 @@ describe('admin menu · visibleMenus', () => {
     expect(paths.every((p) => p.startsWith('/'))).toBe(true)
   })
 
-  it('★ 挂 perm 的项数固定为 7（多出来的入口必须显式登记，不能偷偷绕过权限）', () => {
-    expect(ADMIN_MENUS.filter((m) => m.perm).length).toBe(7)
+  it('★ 挂 perm 的项数固定为 8（多出来的入口必须显式登记，不能偷偷绕过权限）', () => {
+    expect(ADMIN_MENUS.filter((m) => m.perm).length).toBe(8)
   })
 })

@@ -15,11 +15,13 @@ import com.mallx.product.entity.Category;
 import com.mallx.product.entity.Product;
 import com.mallx.product.entity.ProductImage;
 import com.mallx.product.entity.ProductSku;
+import com.mallx.product.entity.Shop;
 import com.mallx.product.mapper.BrandMapper;
 import com.mallx.product.mapper.CategoryMapper;
 import com.mallx.product.mapper.ProductImageMapper;
 import com.mallx.product.mapper.ProductMapper;
 import com.mallx.product.mapper.ProductSkuMapper;
+import com.mallx.product.mapper.ShopMapper;
 import com.mallx.product.cache.CatalogCache;
 import com.mallx.product.service.ProductService;
 import com.mallx.product.vo.ProductDetailVO;
@@ -59,15 +61,18 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     /** 关联表无业务规则，直接注入 Mapper */
     private final CategoryMapper categoryMapper;
     private final BrandMapper brandMapper;
+    private final ShopMapper shopMapper;
     private final ProductSkuMapper productSkuMapper;
     private final ProductImageMapper productImageMapper;
     private final CatalogCache catalogCache;
 
     public ProductServiceImpl(CategoryMapper categoryMapper, BrandMapper brandMapper,
+                              ShopMapper shopMapper,
                               ProductSkuMapper productSkuMapper, ProductImageMapper productImageMapper,
                               CatalogCache catalogCache) {
         this.categoryMapper = categoryMapper;
         this.brandMapper = brandMapper;
+        this.shopMapper = shopMapper;
         this.productSkuMapper = productSkuMapper;
         this.productImageMapper = productImageMapper;
         this.catalogCache = catalogCache;
@@ -380,6 +385,15 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
             Brand brand = brandMapper.selectById(product.getBrandId());
             if (brand != null) {
                 vo.setBrandName(brand.getName());
+            }
+        }
+
+        // Day 64：店铺名（展示层）。没有店铺的商品保持 null，不编一个「平台自营」
+        if (product.getShopId() != null) {
+            Shop shop = shopMapper.selectById(product.getShopId());
+            if (shop != null) {
+                vo.setShopId(shop.getId());
+                vo.setShopName(shop.getName());
             }
         }
 

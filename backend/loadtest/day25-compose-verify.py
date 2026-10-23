@@ -121,7 +121,7 @@ def main():
     n_perm = int(out) if rc == 0 and out.isdigit() else -1
     # ⚠️ Day 55 新增 2 条评价权限（47–48）：46 → 48。改 backend/sql 里任何权限文件时，
     #    这里的常量必须同步，否则「权限补发到位」这条判据会永远红（见 Day-25 事故）。
-    chk("B2 权限码全部补发到位（permissions = 48）", n_perm == 48, "permissions=%s" % n_perm)
+    chk("B2 权限码全部补发到位（permissions = 51）", n_perm == 51, "permissions=%s" % n_perm)
     rc, out, _e = sql("SELECT count(*) FROM role_permissions rp JOIN permissions p ON p.id=rp.permission_id"
                       " WHERE p.code LIKE 'brand:%' AND rp.role_id = 1")
     chk("B3 最后一份补丁（14 号 · brand:*）的授权也在（超管持有 4 条 brand 权限）",

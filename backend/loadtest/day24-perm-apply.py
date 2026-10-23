@@ -110,8 +110,8 @@ EXPECT_CROSS = {
 #    ★ 同一份事实被钉在四处：本文件、day25-sql-strict-check.py、
 #      day25-compose-verify.py、ci.yml 那条「等 initdb」的判据 —— 改一处必须改四处。
 #      （Day 47 起有 day47-perm-count-guard.py 统一核对，漏改会精确点名。）
-EXPECT_PERM_MAX_ID = 48
-EXPECT_PERM_TOTAL = 48
+EXPECT_PERM_MAX_ID = 51
+EXPECT_PERM_TOTAL = 51
 
 lines = []
 say = lines.append

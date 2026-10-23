@@ -20,6 +20,9 @@ public class Product {
 
     private Long brandId;
 
+    /** 所属店铺（Day 64）；可空 = 未归属（历史商品） */
+    private Long shopId;
+
     private String name;
 
     private String subtitle;

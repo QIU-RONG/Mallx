@@ -129,7 +129,7 @@ def main():
 
     st, j = http("GET", "/api/admin/permissions", token=admin)
     perms = j.get("data") or []
-    chk("A.10 权限字典共 48 条（Day 55 新增 47/48 已生效）", len(perms) == 48, "n=%d" % len(perms))
+    chk("A.10 权限字典共 51 条（Day 55 评价 2 条 + Day 64 店铺 3 条）", len(perms) == 51, "n=%d" % len(perms))
     codes = {p.get("code") for p in perms}
     chk("A.11 review:list / review:status 都在字典里",
         {"review:list", "review:status"} <= codes, "missing=%s" %

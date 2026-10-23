@@ -54,6 +54,9 @@ export interface ProductDetailVO extends ProductVO {
   description?: string
   skus: SkuVO[]
   images: string[]
+  /** 所属店铺（Day 64）；没有店铺的商品两个字段都可能为空 */
+  shopId?: number | null
+  shopName?: string | null
 }
 
 export interface CategoryVO {

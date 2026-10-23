@@ -207,6 +207,30 @@ export interface BrandUpdateDTO {
   status?: number
 }
 
+// ---------- 店铺（Day 64） ----------
+export interface ShopVO {
+  id: number
+  name: string
+  logo?: string
+  description?: string
+  /** 1 = 启用 0 = 停用（停用只影响 C 端展示） */
+  status: number
+}
+
+export interface ShopCreateDTO {
+  name: string
+  logo?: string
+  description?: string
+  status?: number
+}
+
+export interface ShopUpdateDTO {
+  name?: string
+  logo?: string
+  description?: string
+  status?: number
+}
+
 // ===================== 售后 / 退款（Day 46） =====================
 /**
  * 管理端售后单行（AdminRefundVO = RefundVO + orderNo + userNickname）。
