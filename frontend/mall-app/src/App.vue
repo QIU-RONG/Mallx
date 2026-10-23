@@ -5,6 +5,7 @@ import { useAuthStore } from './stores/auth'
 import { useCartStore } from './stores/cart'
 import { useCatalogStore } from './stores/catalog'
 import AiChat from './components/AiChat.vue'
+import { addSearchHistory, clearSearchHistory, getSearchHistory } from './utils/history'
 
 const router = useRouter()
 const route = useRoute()
@@ -43,7 +44,37 @@ function goHome(query: Record<string, string | undefined> = {}) {
 }
 
 function doSearch() {
-  goHome({ kw: kw.value.trim() || undefined })
+  const w = kw.value.trim()
+  addSearchHistory(w)
+  goHome({ kw: w || undefined })
+}
+
+// ---------------- 搜索历史（Day 69） ----------------
+const searchHistory = ref<string[]>([])
+const searchOpen = ref(false)
+
+function onSearchFocus() {
+  searchHistory.value = getSearchHistory()
+  searchOpen.value = true
+}
+
+/** 延迟关闭：给「点历史词」留出 click 时间（面板内用 mousedown.prevent 兜底） */
+function onSearchBlur() {
+  window.setTimeout(() => {
+    searchOpen.value = false
+  }, 120)
+}
+
+function pickHistory(word: string) {
+  kw.value = word
+  addSearchHistory(word)
+  searchOpen.value = false
+  goHome({ kw: word })
+}
+
+function clearHistory() {
+  clearSearchHistory()
+  searchHistory.value = []
 }
 </script>
 
@@ -78,30 +109,53 @@ function doSearch() {
         </a>
       </nav>
 
-      <div class="search">
-        <el-input
-          v-model="kw"
-          placeholder="搜索商品"
-          clearable
-          @keyup.enter="doSearch"
-          @clear="doSearch"
-        >
-          <template #prefix>
-            <svg
-              viewBox="0 0 24 24"
-              width="15"
-              height="15"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
+      <div class="search-wrap">
+        <div class="search">
+          <el-input
+            v-model="kw"
+            placeholder="搜索商品"
+            clearable
+            @focus="onSearchFocus"
+            @blur="onSearchBlur"
+            @keyup.enter="doSearch"
+            @clear="doSearch"
+          >
+            <template #prefix>
+              <svg
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+              >
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.2-3.2" />
+              </svg>
+            </template>
+          </el-input>
+          <button class="search-go" type="button" @click="doSearch">搜索</button>
+        </div>
+
+        <!-- 最近搜索：聚焦时展开，点词直接搜；空历史不弹 -->
+        <div v-if="searchOpen && searchHistory.length" class="search-pop" @mousedown.prevent>
+          <div class="pop-head">
+            <span>最近搜索</span>
+            <button class="pop-clear" type="button" @click="clearHistory">清空</button>
+          </div>
+          <div class="pop-chips">
+            <button
+              v-for="w in searchHistory"
+              :key="w"
+              class="pop-chip"
+              type="button"
+              @click="pickHistory(w)"
             >
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.2-3.2" />
-            </svg>
-          </template>
-        </el-input>
-        <button class="search-go" type="button" @click="doSearch">搜索</button>
+              {{ w }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="actions">
@@ -252,6 +306,10 @@ function doSearch() {
 }
 
 /* ───── 搜索 ───── */
+.search-wrap {
+  position: relative;
+  flex: none;
+}
 .search {
   flex: none;
   display: flex;
@@ -293,6 +351,68 @@ function doSearch() {
 }
 .search-go:hover {
   background: var(--mx-line-soft);
+}
+
+/* 最近搜索下拉：与搜索框同宽，浮在内容之上 */
+.search-pop {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  padding: 14px 16px 16px;
+  background: var(--mx-surface);
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-card-r);
+  box-shadow: 0 16px 40px rgba(25, 23, 20, 0.1);
+  z-index: 101;
+}
+.pop-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mx-ink-3);
+}
+.pop-clear {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  color: var(--mx-ink-3);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pop-clear:hover {
+  color: var(--mx-ink);
+}
+.pop-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.pop-chip {
+  max-width: 100%;
+  padding: 5px 12px;
+  border: 1px solid var(--mx-line);
+  border-radius: 999px;
+  background: var(--mx-paper);
+  color: var(--mx-ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    border-color 0.18s var(--mx-ease),
+    color 0.18s var(--mx-ease);
+}
+.pop-chip:hover {
+  border-color: var(--mx-ink-3);
+  color: var(--mx-ink);
 }
 
 /* ───── 右侧操作 ───── */

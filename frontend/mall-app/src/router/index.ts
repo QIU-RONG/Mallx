@@ -54,6 +54,7 @@ const router = createRouter({
         { path: 'refunds', component: () => import('../views/MyRefunds.vue') },
         { path: 'coupons', component: () => import('../views/Coupons.vue') },
         { path: 'reviews', component: () => import('../views/MyReviews.vue') },
+        { path: 'history', component: () => import('../views/AccountHistory.vue') },
         { path: 'addresses', component: () => import('../views/AccountAddresses.vue') },
         { path: 'profile', component: () => import('../views/AccountProfile.vue') },
       ],

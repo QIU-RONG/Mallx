@@ -6,6 +6,7 @@ import { cartAdd, pageProducts, productDetail, productReviews } from '../api'
 import ProductThumb from '../components/ProductThumb.vue'
 import type { ProductDetailVO, ProductVO, ReviewVO, SkuVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
+import { addViewHistory } from '../utils/history'
 
 const route = useRoute()
 const router = useRouter()
@@ -90,6 +91,14 @@ onMounted(async () => {
   try {
     const j = await productDetail(route.params.id as string)
     vo.value = j.data
+    // Day 69：记一条浏览历史（本地，最多 20 条）
+    // ★ 价格取第一个 SKU：详情接口的 minPrice 不一定有值（区别于列表的聚合结果）
+    addViewHistory({
+      id: j.data.id,
+      name: j.data.name,
+      image: j.data.mainImage,
+      price: j.data.skus[0]?.price ?? j.data.minPrice,
+    })
     pics.value = [j.data.mainImage, ...j.data.images].filter((x): x is string => !!x)
     mainPic.value = pics.value[0] || ''
     // ★ 规格没有「上下架」字段（后端 SkuVO 只给价格/编码），默认选第一个
