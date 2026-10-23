@@ -14,6 +14,9 @@ public class ProductCreateDTO {
     private Long categoryId;
     private Long brandId;
 
+    /** 所属店铺（Day 64）；不传 = 不归属任何店铺 */
+    private Long shopId;
+
     @NotBlank(message = "名称不能为空")
     @Size(max = 100,message = "商品名称不能超过100字")
     private String name;

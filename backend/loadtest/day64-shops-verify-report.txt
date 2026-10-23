@@ -1,14 +1,16 @@
 [OK] A1 C 端商品详情带 shopId   shopId=3
 [OK] A2 C 端商品详情带 shopName   shopName=Apple 官方旗舰店
-[OK] B1 管理端店铺列表 ≥3 家   n=4
+[OK] B1 管理端店铺列表 ≥3 家   n=3
 [OK] B2 列表含状态字段   keys=['description', 'id', 'logo', 'name', 'status']
-[OK] C1 新建店铺   id=5
+[OK] C1 新建店铺   id=6
 [OK] C2 重名 → 400 人话（不是 500）   code=400 msg=店铺名已存在
 [OK] C3 编辑（改说明 + 停用）   code=200
-[OK] C4 编辑结果落库   {'description': '改过', 'id': 5, 'logo': None, 'name': 'D64 验收店', 'status': 0}
+[OK] C4 编辑结果落库   {'description': '改过', 'id': 6, 'logo': None, 'name': 'D64 验收店', 'status': 0}
 [OK] C5 编辑不存在的店 → 业务码 404   code=404
+[OK] E1 管理端商品列表带 shopName   first=Apple 官方旗舰店
+[OK] E2 改商品归属店铺生效   before=3 after=2
 [OK] D1 C 端 token 打管理端店铺 → 403   http=403
 [OK] D2 匿名打管理端店铺 → 401   http=401
 
-ASSERTIONS: 11 / 11 passed
+ASSERTIONS: 13 / 13 passed
 VERDICT: OK

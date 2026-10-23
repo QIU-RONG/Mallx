@@ -8,11 +8,12 @@ import {
   adminProductCreate,
   adminProductDelete,
   adminProductUpdate,
+  adminShopList,
 } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { confirmAction } from '../utils/confirm'
 import { flattenCategories } from '../utils/tree'
-import type { BrandVO, CategoryVO, ProductVO, SkuCreateDTO } from '../types/api'
+import type { BrandVO, CategoryVO, ProductVO, ShopVO, SkuCreateDTO } from '../types/api'
 
 const auth = useAuthStore()
 
@@ -23,6 +24,7 @@ const loading = ref(false)
 
 const categories = ref<CategoryVO[]>([])
 const brands = ref<BrandVO[]>([])
+const shops = ref<ShopVO[]>([])
 
 /** 树拍平后给 el-select 用（父在前、子级全角空格缩进）—— 与分类管理页同一个实现 */
 const flatCategories = computed(() => flattenCategories(categories.value))
@@ -57,6 +59,12 @@ async function loadDict() {
   } catch {
     brands.value = []
   }
+  // ★ 店铺字典（Day 64）：与分类/品牌一样，失败不阻断商品列表
+  try {
+    shops.value = (await adminShopList()).data
+  } catch {
+    shops.value = []
+  }
 }
 
 /** ★ 清除筛选（空状态里的出路）—— 与 C 端商品列表同一个思路：
@@ -73,6 +81,7 @@ const createVisible = ref(false)
 const createForm = reactive({
   categoryId: undefined as number | undefined,
   brandId: null as number | null,
+  shopId: null as number | null,
   name: '',
   subtitle: '',
   mainImage: '',
@@ -84,6 +93,7 @@ function openCreate() {
   Object.assign(createForm, {
     categoryId: undefined,
     brandId: null,
+    shopId: null,
     name: '',
     subtitle: '',
     mainImage: '',
@@ -110,6 +120,7 @@ async function submitCreate() {
   const id = (await adminProductCreate({
     categoryId: createForm.categoryId,
     brandId: createForm.brandId,
+    shopId: createForm.shopId,
     name: createForm.name,
     subtitle: createForm.subtitle || undefined,
     mainImage: createForm.mainImage || undefined,
@@ -123,13 +134,14 @@ async function submitCreate() {
 
 // ---------- 编辑（★ 局部更新：只发要改的字段） ----------
 const editVisible = ref(false)
-const editForm = reactive({ id: 0, name: '', subtitle: '', status: 1 })
+const editForm = reactive({ id: 0, name: '', subtitle: '', status: 1, shopId: null as number | null })
 
 function openEdit(row: ProductVO) {
   editForm.id = row.id
   editForm.name = row.name
   editForm.subtitle = row.subtitle || ''
   editForm.status = row.status
+  editForm.shopId = row.shopId ?? null
   editVisible.value = true
 }
 
@@ -138,6 +150,8 @@ async function submitEdit() {
     name: editForm.name,
     subtitle: editForm.subtitle,
     status: editForm.status,
+    // ★ null 会被后端当「不动」；这里只在选了店铺时下发
+    shopId: editForm.shopId ?? undefined,
   })
   ElMessage.success('已保存')
   editVisible.value = false
@@ -216,6 +230,9 @@ onMounted(() => {
         <el-table-column prop="name" label="商品" min-width="180" show-overflow-tooltip />
         <el-table-column prop="categoryName" label="分类" width="120" show-overflow-tooltip />
         <el-table-column prop="brandName" label="品牌" width="110" />
+        <el-table-column label="店铺" width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.shopName || '未归属' }}</template>
+        </el-table-column>
         <!-- ★ 价格列（Day 48 后端新增 minPrice / maxPrice）：管理端也终于看得到卖多少钱。
              min == max 时只显示一个数，不做无意义的「~」 -->
         <el-table-column label="在售价" width="150" align="right">
@@ -284,6 +301,12 @@ onMounted(() => {
             <el-option v-for="b in brands" :key="b.id" :value="b.id" :label="b.name" />
           </el-select>
         </el-form-item>
+        <el-form-item label="店铺">
+          <el-select v-model="createForm.shopId" clearable filterable style="width: 100%"
+            placeholder="不选 = 不归属任何店铺">
+            <el-option v-for="s in shops" :key="s.id" :value="s.id" :label="s.name" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="名称" required>
           <el-input v-model="createForm.name" maxlength="100" />
         </el-form-item>
@@ -327,6 +350,12 @@ onMounted(() => {
         </el-form-item>
         <el-form-item label="副标题">
           <el-input v-model="editForm.subtitle" maxlength="200" />
+        </el-form-item>
+        <el-form-item label="店铺">
+          <el-select v-model="editForm.shopId" clearable filterable style="width: 100%"
+            placeholder="不选 = 保持原归属">
+            <el-option v-for="s in shops" :key="s.id" :value="s.id" :label="s.name" />
+          </el-select>
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="editForm.status">

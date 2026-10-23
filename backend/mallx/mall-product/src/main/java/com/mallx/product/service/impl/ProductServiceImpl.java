@@ -221,18 +221,22 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         return ids;
     }
 
-    /** 批量补齐 categoryName / brandName，避免 N+1 */
+    /** 批量补齐 categoryName / brandName / shopName，避免 N+1 */
     private void fillNames(List<ProductVO> voList, List<Product> records) {
         if (records.isEmpty()) {
             return;
         }
-        // 1. 收集本页出现过的 id（去重）；brand_id 可空要挡
+        // 1. 收集本页出现过的 id（去重）；brand_id / shop_id 可空要挡
         Set<Long> categoryIds = new HashSet<>();
         Set<Long> brandIds = new HashSet<>();
+        Set<Long> shopIds = new HashSet<>();
         for (Product p : records) {
             categoryIds.add(p.getCategoryId());
             if (p.getBrandId() != null) {
                 brandIds.add(p.getBrandId());
+            }
+            if (p.getShopId() != null) {
+                shopIds.add(p.getShopId());
             }
         }
 
@@ -247,12 +251,19 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
                 brandNames.put(b.getId(), b.getName());
             }
         }
+        Map<Long, String> shopNames = new HashMap<>();
+        if (!shopIds.isEmpty()) {
+            for (Shop s : shopMapper.selectByIds(shopIds)) {
+                shopNames.put(s.getId(), s.getName());
+            }
+        }
 
         // 3. 内存配对（voList 与 records 下标一一对应）
         for (int i = 0; i < records.size(); i++) {
             Product p = records.get(i);
             voList.get(i).setCategoryName(categoryNames.get(p.getCategoryId()));
             voList.get(i).setBrandName(brandNames.get(p.getBrandId()));
+            voList.get(i).setShopName(shopNames.get(p.getShopId()));
         }
     }
 

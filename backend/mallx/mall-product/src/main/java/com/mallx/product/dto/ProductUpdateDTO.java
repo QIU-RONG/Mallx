@@ -27,6 +27,9 @@ import java.util.List;
 @Data
 public class ProductUpdateDTO {
 
+    /** 所属店铺（Day 64）：null = 不动（局部更新语义；暂不支持清空归属） */
+    private Long shopId;
+
     @Size(max = 100, message = "商品名称不能超过 100 字")
     private String name;
 

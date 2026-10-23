@@ -15,6 +15,11 @@ public class ProductVO {
 
     private String brandName;
 
+    /** Day 64：所属店铺（可空）；shopName 由列表批量补齐，避免 N+1 */
+    private Long shopId;
+
+    private String shopName;
+
     private String name;
 
     private String subtitle;

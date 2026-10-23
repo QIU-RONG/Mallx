@@ -82,3 +82,16 @@ ALTER TABLE products ADD COLUMN shop_id BIGINT REFERENCES shops(id);  -- 可空
 3. **商品表单选择店铺**：新建/编辑商品时还不能选店（`ProductCreateDTO` 没加 shopId）；
 4. **订单/支付/售后按店拆分**；
 5. C 端「进入店铺」页：没有店铺主页，只显示名字。
+## 7. 续（同日）：商品表单可以选店铺了
+
+补齐上一节「没做的第 3 条」：
+
+- 后端：ProductCreateDTO / ProductUpdateDTO 加 shopId，ProductVO 加 shopId/shopName；
+  管理端商品列表由 illNames 批量补店铺名（同一批 IN (...)，不做 N+1）；
+- 更新语义：shopId 为 null = **不动**（与其它局部更新字段一致），暂不支持「清空归属」；
+- 管理端：商品列表新增「店铺」列（未归属显示「未归属」），新建/编辑弹窗各加一个店铺下拉；
+- 验证新增两条：E1 列表带 shopName、E2 改归属后详情生效（改完已还原），day64 共 **13/13**；
+  主链路 e2e 仍 **40/40**。
+
+★ 一个仍然存在的空白：**C 端商品列表卡片不显示店铺**。详情页有胶囊，列表没有 ——
+列表是比价场景，先保留干净；要做「按店铺筛选」是另一件事（需要后端加 shopId 过滤）。

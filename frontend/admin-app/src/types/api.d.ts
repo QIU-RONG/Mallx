@@ -32,6 +32,9 @@ export interface ProductVO {
   categoryName?: string
   brandId?: number
   brandName?: string
+  /** Day 64：所属店铺（可空 = 未归属），shopName 由列表接口批量补 */
+  shopId?: number | null
+  shopName?: string | null
   name: string
   subtitle?: string
   mainImage?: string
@@ -66,6 +69,7 @@ export interface ProductDetailVO extends ProductVO {
 export interface ProductCreateDTO {
   categoryId: number
   brandId?: number | null
+  shopId?: number | null
   name: string
   subtitle?: string
   description?: string
@@ -96,6 +100,8 @@ export interface ProductUpdateDTO {
   description?: string
   mainImage?: string
   status?: number
+  /** Day 64：不传 = 不改归属（null 在 JSON 里就是「不动」） */
+  shopId?: number
   images?: string[] | null
   skus?: SkuCreateDTO[] | null
 }

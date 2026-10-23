@@ -91,6 +91,20 @@ def main():
     st, j = http("PUT", "/api/admin/shops/999999", {"description": "x"}, admin)
     chk("C5 编辑不存在的店 → 业务码 404", st == 200 and j.get("code") == 404, "code=%s" % j.get("code"))
 
+    # E. 商品 ↔ 店铺：列表带 shopName，编辑能改归属
+    st, j = http("GET", "/api/admin/products?current=1&size=5", token=admin)
+    recs = (j.get("data") or {}).get("records") or []
+    chk("E1 管理端商品列表带 shopName", bool(recs) and any(r.get("shopName") for r in recs),
+        "first=%s" % (recs[0].get("shopName") if recs else None))
+
+    before = http("GET", "/api/admin/products/1", token=admin)[1]["data"].get("shopId")
+    target = 2 if before != 2 else 1
+    st, j = http("PUT", "/api/admin/products/1", {"shopId": target}, admin)
+    after = http("GET", "/api/admin/products/1", token=admin)[1]["data"].get("shopId")
+    chk("E2 改商品归属店铺生效", st == 200 and j.get("code") == 200 and after == target,
+        "before=%s after=%s" % (before, after))
+    http("PUT", "/api/admin/products/1", {"shopId": before}, admin)
+
     user = login_user()
     st, j = http("GET", "/api/admin/shops", token=user)
     chk("D1 C 端 token 打管理端店铺 → 403", st == 403, "http=%s" % st)
