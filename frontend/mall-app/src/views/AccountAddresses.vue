@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   addressCreate,
@@ -44,6 +44,17 @@ const form = reactive({
   district: '',
   detailAddress: '',
   isDefault: false,
+})
+
+/** 弹窗左侧实时预览用：省市区拼一行 */
+const region = computed(() =>
+  [form.province, form.city, form.district].filter(Boolean).join(' '),
+)
+
+/** 预览里的手机号打码：只有提交时才发全量 */
+const maskedPhone = computed(() => {
+  const p = form.receiverPhone.trim()
+  return p.length === 11 ? `${p.slice(0, 3)} **** ${p.slice(-4)}` : p || '手机号'
 })
 
 function resetForm() {
@@ -185,56 +196,90 @@ onMounted(load)
 
     <el-dialog
       v-model="dialogVisible"
-      :title="editingId == null ? '新增收货地址' : '编辑收货地址'"
-      width="600px"
+      width="880px"
       class="addr-dialog"
+      :show-close="true"
     >
-      <p class="dlg-sub">填写一次，下单时一键选用；默认地址会排在最前。</p>
-
-      <el-form label-position="top" class="addr-form">
-        <p class="fsec">联系人</p>
-        <div class="two">
-          <el-form-item label="收货人">
-            <el-input v-model="form.receiverName" maxlength="50" placeholder="姓名" />
-          </el-form-item>
-          <el-form-item label="手机号">
-            <el-input v-model="form.receiverPhone" maxlength="11" placeholder="11 位手机号" />
-          </el-form-item>
-        </div>
-
-        <p class="fsec">所在地区</p>
-        <div class="three">
-          <el-form-item label="省">
-            <el-input v-model="form.province" placeholder="如 上海市" />
-          </el-form-item>
-          <el-form-item label="市">
-            <el-input v-model="form.city" placeholder="如 上海市" />
-          </el-form-item>
-          <el-form-item label="区 / 县">
-            <el-input v-model="form.district" placeholder="如 浦东新区" />
-          </el-form-item>
-        </div>
-
-        <p class="fsec">详细地址</p>
-        <el-form-item>
-          <el-input
-            v-model="form.detailAddress"
-            type="textarea"
-            :rows="3"
-            maxlength="120"
-            show-word-limit
-            placeholder="街道、门牌号、楼层 / 房间号"
-          />
-        </el-form-item>
-
-        <div class="default-row">
+      <template #header>
+        <div class="dlg-head">
+          <span class="dlg-ico">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+              stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 21s7-5.5 7-11a7 7 0 1 0-14 0c0 5.5 7 11 7 11Z" />
+              <circle cx="12" cy="10" r="2.4" />
+            </svg>
+          </span>
           <div>
-            <div class="d-title">设为默认地址</div>
-            <div class="d-sub">下单时优先使用这一条</div>
+            <h4 class="dlg-title">{{ editingId == null ? '新增收货地址' : '编辑收货地址' }}</h4>
+            <p class="dlg-sub">填写一次，下单时一键选用；默认地址会排在最前。</p>
           </div>
-          <el-switch v-model="form.isDefault" />
         </div>
-      </el-form>
+      </template>
+
+      <div class="dlg-grid">
+        <!-- 左：实时预览 -->
+        <aside class="preview">
+          <p class="pv-label">预览</p>
+          <div class="pv-card" :class="{ default: form.isDefault }">
+            <div class="pv-top">
+              <span class="pv-name">{{ form.receiverName || '收货人' }}</span>
+              <span class="pv-phone">{{ maskedPhone }}</span>
+            </div>
+            <p class="pv-region">{{ region || '省 / 市 / 区' }}</p>
+            <p class="pv-detail">{{ form.detailAddress || '详细地址' }}</p>
+            <span v-if="form.isDefault" class="pv-badge">默认</span>
+          </div>
+          <p class="pv-tip">信息只用于配送，不会对外展示。</p>
+        </aside>
+
+        <!-- 右：表单 -->
+        <div class="dlg-form">
+          <el-form label-position="top" class="addr-form">
+            <p class="fsec"><span class="fsec-no">01</span>联系人</p>
+            <div class="two">
+              <el-form-item label="收货人">
+                <el-input v-model="form.receiverName" maxlength="50" placeholder="姓名" />
+              </el-form-item>
+              <el-form-item label="手机号">
+                <el-input v-model="form.receiverPhone" maxlength="11" placeholder="11 位手机号" />
+              </el-form-item>
+            </div>
+
+            <p class="fsec"><span class="fsec-no">02</span>所在地区</p>
+            <div class="three">
+              <el-form-item label="省">
+                <el-input v-model="form.province" placeholder="如 上海市" />
+              </el-form-item>
+              <el-form-item label="市">
+                <el-input v-model="form.city" placeholder="如 上海市" />
+              </el-form-item>
+              <el-form-item label="区 / 县">
+                <el-input v-model="form.district" placeholder="如 浦东新区" />
+              </el-form-item>
+            </div>
+
+            <p class="fsec"><span class="fsec-no">03</span>详细地址</p>
+            <el-form-item>
+              <el-input
+                v-model="form.detailAddress"
+                type="textarea"
+                :rows="3"
+                maxlength="120"
+                show-word-limit
+                placeholder="街道、门牌号、楼层 / 房间号"
+              />
+            </el-form-item>
+
+            <div class="default-row">
+              <div>
+                <div class="d-title">设为默认地址</div>
+                <div class="d-sub">下单时优先使用这一条</div>
+              </div>
+              <el-switch v-model="form.isDefault" />
+            </div>
+          </el-form>
+        </div>
+      </div>
 
       <template #footer>
         <div class="dlg-footer">
@@ -356,18 +401,127 @@ onMounted(load)
   gap: 0 12px;
 }
 
-/* ───── 地址弹窗（Day 66 视觉重做） ───── */
+/* ───── 地址弹窗（Day 68：左预览 + 右表单） ───── */
+.dlg-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.dlg-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--mx-line-soft);
+  color: var(--mx-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.dlg-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--mx-ink);
+}
 .dlg-sub {
-  margin: -8px 0 20px;
+  margin: 4px 0 0;
   font-size: 12px;
   color: var(--mx-ink-3);
 }
+.dlg-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 28px;
+  margin-top: 4px;
+}
+
+/* 左：实时预览 */
+.preview {
+  padding-top: 4px;
+}
+.pv-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mx-ink-3);
+}
+.pv-card {
+  position: relative;
+  border: 1px dashed var(--mx-line);
+  border-radius: var(--mx-card-r);
+  background: var(--mx-line-soft);
+  padding: 18px;
+  min-height: 150px;
+  transition: border-color 0.18s var(--mx-ease);
+}
+.pv-card.default {
+  border-style: solid;
+  border-color: var(--mx-ink);
+  background: var(--mx-surface);
+}
+.pv-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pv-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.pv-phone {
+  font-size: 12px;
+  color: var(--mx-ink-2);
+}
+.pv-region {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  color: var(--mx-ink-3);
+}
+.pv-detail {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--mx-ink);
+  word-break: break-word;
+}
+.pv-badge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--mx-accent);
+  border: 1px solid var(--mx-accent);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.pv-tip {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--mx-ink-3);
+}
+
+/* 右：表单 */
 .fsec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 4px 0 12px;
   font-size: 11px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--mx-ink-3);
+}
+.fsec-no {
+  font-family: Georgia, 'Times New Roman', serif;
+  color: var(--mx-accent);
+  letter-spacing: 0.04em;
 }
 .addr-form :deep(.el-form-item__label) {
   font-size: 12px;
@@ -439,6 +593,15 @@ onMounted(load)
   color: var(--mx-ink);
 }
 
+@media (max-width: 760px) {
+  .dlg-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .pv-card {
+    min-height: 110px;
+  }
+}
 @media (max-width: 900px) {
   .grid {
     grid-template-columns: 1fr;
