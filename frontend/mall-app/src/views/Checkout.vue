@@ -66,32 +66,72 @@ async function submit() {
     <el-card shadow="never" style="margin-bottom: 16px">
       <template #header>收货地址</template>
       <el-empty v-if="addresses.length === 0" description="还没有收货地址（种子账号 demo 自带一条）" />
-      <el-radio-group v-else v-model="addressId" class="addr-group">
-        <el-radio v-for="a in addresses" :key="a.id" :value="a.id" class="addr">
-          <span class="who">{{ a.receiverName }} {{ a.receiverPhone }}</span>
-          <span class="where">{{ a.province }}{{ a.city }}{{ a.district }} {{ a.detailAddress }}</span>
-          <el-tag v-if="a.isDefault" size="small" type="success">默认</el-tag>
-        </el-radio>
-      </el-radio-group>
+      <div v-else class="addrs">
+        <button
+          v-for="a in addresses"
+          :key="a.id"
+          type="button"
+          class="addr"
+          :class="{ sel: addressId === a.id }"
+          @click="addressId = a.id"
+        >
+          <span class="dot" :class="{ on: addressId === a.id }" />
+          <span class="addr-main">
+            <span class="addr-top">
+              <span class="who">{{ a.receiverName }}</span>
+              <span class="phone">{{ a.receiverPhone }}</span>
+              <span v-if="a.isDefault" class="badge">默认</span>
+            </span>
+            <span class="where">{{ a.province }} {{ a.city }} {{ a.district }} {{ a.detailAddress }}</span>
+          </span>
+          <svg
+            v-if="addressId === a.id"
+            class="tick"
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="m5 12 5 5L19 7" />
+          </svg>
+        </button>
+      </div>
     </el-card>
 
     <el-card shadow="never" style="margin-bottom: 16px">
       <template #header>优惠券</template>
-      <el-radio-group v-model="couponId" class="coupon-group">
-        <el-radio :value="null">不使用优惠券</el-radio>
-        <el-radio
+      <div class="coupons">
+        <button
+          type="button"
+          class="coupon"
+          :class="{ sel: couponId == null }"
+          @click="couponId = null"
+        >
+          <span class="dot" :class="{ on: couponId == null }" />
+          <span class="coupon-name">不使用优惠券</span>
+        </button>
+        <button
           v-for="c in usableCoupons"
           :key="c.id"
-          :value="c.id"
+          type="button"
           class="coupon"
+          :class="{ sel: couponId === c.id }"
+          @click="couponId = c.id"
         >
-          {{ c.couponName }}
-          <span class="hint">
-            （<template v-if="c.discountAmount">满 {{ c.minAmount }} 减 {{ c.discountAmount }}</template>
-            <template v-else-if="c.discountRate">{{ c.discountRate }} 折，满 {{ c.minAmount }}</template>）
+          <span class="dot" :class="{ on: couponId === c.id }" />
+          <span class="coupon-main">
+            <span class="coupon-name">{{ c.couponName }}</span>
+            <span class="coupon-cond">
+              <template v-if="c.discountAmount">满 {{ c.minAmount }} 减 {{ c.discountAmount }}</template>
+              <template v-else-if="c.discountRate">{{ c.discountRate }} 折，满 {{ c.minAmount }}</template>
+            </span>
           </span>
-        </el-radio>
-      </el-radio-group>
+        </button>
+      </div>
       <p v-if="usableCoupons.length === 0" class="hint">暂无可用券 —— 去「我的优惠券」领一张再回来</p>
     </el-card>
 
@@ -124,13 +164,129 @@ async function submit() {
 .addr {
   display: flex;
   align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-card-r);
+  background: var(--mx-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.18s var(--mx-ease),
+    background 0.18s var(--mx-ease);
+}
+.addr:hover {
+  border-color: var(--mx-ink-3);
+}
+.addr.sel {
+  border-color: var(--mx-ink);
+  background: var(--mx-line-soft);
+}
+.dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--mx-ink-3);
+  flex: none;
+  position: relative;
+}
+.dot.on {
+  border-color: var(--mx-accent);
+}
+.dot.on::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: var(--mx-accent);
+}
+.addr-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.addr-top {
+  display: flex;
+  align-items: baseline;
   gap: 10px;
+  flex-wrap: wrap;
 }
 .who {
   font-weight: 600;
+  color: var(--mx-ink);
+}
+.phone {
+  font-size: 12px;
+  color: var(--mx-ink-2);
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.badge {
+  font-size: 11px;
+  color: var(--mx-accent);
+  border: 1px solid var(--mx-accent);
+  border-radius: 999px;
+  padding: 0 7px;
 }
 .where {
-  color: #606266;
+  font-size: 13px;
+  color: var(--mx-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tick {
+  flex: none;
+  color: var(--mx-accent);
+}
+.addrs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.coupons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.coupon {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-card-r);
+  background: var(--mx-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s var(--mx-ease);
+}
+.coupon:hover {
+  border-color: var(--mx-ink-3);
+}
+.coupon.sel {
+  border-color: var(--mx-ink);
+  background: var(--mx-line-soft);
+}
+.coupon-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.coupon-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.coupon-cond {
+  font-size: 12px;
+  color: var(--mx-ink-3);
 }
 .summary {
   display: flex;
