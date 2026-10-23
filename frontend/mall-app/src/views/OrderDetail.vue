@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { orderCancel, orderConfirm, orderDetail, payOrder, refundApply } from '../api'
 import type { OrderDetailVO, OrderStatus } from '../types/api'
+import ProductThumb from '../components/ProductThumb.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -135,7 +136,9 @@ onMounted(load)
           <el-table-column label="商品" min-width="240">
             <template #default="{ row }">
               <div class="cell-product">
-                <img :src="row.image" class="pic" alt="" />
+                <div class="pic">
+                  <ProductThumb :src="row.image" :name="row.productName" :seed="row.skuId" />
+                </div>
                 <div>
                   <div>{{ row.productName }}</div>
                   <div class="hint">{{ row.skuName }}</div>
@@ -208,12 +211,12 @@ onMounted(load)
 .pic {
   width: 48px;
   height: 48px;
-  object-fit: cover;
-  border-radius: 4px;
-  background: #f0f0f0;
+  border-radius: var(--mx-media-r);
+  overflow: hidden;
+  border: 1px solid var(--mx-line);
 }
 .hint {
-  color: #909399;
+  color: var(--mx-ink-3);
   font-size: 12px;
 }
 .actions {

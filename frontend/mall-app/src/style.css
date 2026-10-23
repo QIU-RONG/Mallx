@@ -4,8 +4,27 @@
   box-sizing: border-box;
 }
 
+/**
+ * ★ 全局排版基线（Day 57 · 视觉重做）：
+ * 纸感暖白底 + 墨色正文，字族走系统栈（不引 Web 字体，离线可跑）。
+ * ⚠️ 这里只放「全站都成立」的东西；页面级排版各自写在视图里。
+ */
 body {
-  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
-  background: #f5f7fa;
-  color: #303133;
+  font-family:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  background: var(--mx-paper, #faf8f4);
+  color: var(--mx-ink, #191714);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(255, 103, 0, 0.18);
+}
+
+/* ★ 数字/英文的衬线体：只给「价格、编号、日期」这类要被当成数据读的内容用。
+   中文不套衬线 —— Windows 上没有稳定的中文宋体回退，会掉到默认字体。 */
+.mx-serif {
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
 }

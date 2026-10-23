@@ -26,6 +26,16 @@ export default defineConfig({
       },
     },
   },
+  // ★ 预览生产构建时也要反代（Day 57 用它做无头截图验证；不加则产品列表为空）
+  preview: {
+    port: 4173,
+    proxy: {
+      '/api': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
+    },
+  },
   test: {
     // ★ jsdom：auth store 要碰 localStorage、router 要碰 history，Node 环境没有这些
     environment: 'jsdom',

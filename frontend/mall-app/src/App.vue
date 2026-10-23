@@ -47,40 +47,15 @@ function doSearch() {
 </script>
 
 <template>
-  <!-- ═══════════ 第一层：工具条 ═══════════
-       仿华为 / 小米：最上面一条浅灰窄条，放「不常点但偶尔要用」的功能入口
-       （订单 / 售后 / 券 / 登录）。把它和主导航分开，主导航才装得下品类。 -->
-  <div class="utility">
-    <div class="utility-inner">
-      <span class="welcome">
-        {{ auth.token ? `Hi，${auth.nickname}` : '欢迎来到 MallX 商城' }}
-      </span>
-      <div class="spacer" />
-      <template v-if="auth.token">
-        <a class="u-link" @click="router.push('/orders')">我的订单</a>
-        <span class="u-sep" />
-        <a class="u-link" @click="router.push('/refunds')">我的售后</a>
-        <span class="u-sep" />
-        <a class="u-link" @click="router.push('/coupons')">优惠券</a>
-        <span class="u-sep" />
-        <a class="u-link" @click="logout">退出</a>
-      </template>
-      <template v-else>
-        <a class="u-link" @click="router.push('/login')">登录</a>
-        <span class="u-sep" />
-        <a class="u-link" @click="router.push('/login')">注册</a>
-      </template>
-    </div>
-  </div>
-
-  <!-- ═══════════ 第二层：主导航（吸顶）═══════════
-       logo | 品类导航 | 搜索框 | 购物车 —— 国内商城顶栏的固定排布。
-       品类导航直接吃真实分类树，点谁就带着 categoryId 回首页。 -->
-  <div class="mainnav">
-    <div class="mainnav-inner">
+  <!-- ═══════════ 顶栏（单行 · 吸顶）═══════════
+       Day 57：把原来的「浅灰工具条 + 主导航」两层合并成一层。
+       编辑风需要一个安静、只有一条发丝线的顶栏；工具条上的入口收进右侧文字链接。 -->
+  <header class="topbar">
+    <div class="topbar-inner">
       <div class="brand" @click="goHome()">
         <span class="brand-mark">M</span>
-        <span class="brand-name">MallX 商城</span>
+        <span class="brand-word">MallX</span>
+        <span class="brand-sub">商城</span>
       </div>
 
       <nav class="cats">
@@ -102,46 +77,67 @@ function doSearch() {
         </a>
       </nav>
 
-      <!-- ★ 搜索框放在主导航里、且是常驻可见的 ——
-           商城的搜索永远在最显眼处，藏进菜单等于没有。 -->
       <div class="search">
         <el-input
           v-model="kw"
-          placeholder="搜索商品名 / 副标题"
+          placeholder="搜索商品"
           clearable
           @keyup.enter="doSearch"
           @clear="doSearch"
-        />
-        <el-button type="primary" class="search-btn" @click="doSearch">搜索</el-button>
+        >
+          <template #prefix>
+            <svg
+              viewBox="0 0 24 24"
+              width="15"
+              height="15"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3.2-3.2" />
+            </svg>
+          </template>
+        </el-input>
+        <button class="search-go" type="button" @click="doSearch">搜索</button>
       </div>
 
-      <el-badge
-        :value="cartStore.selectedCount"
-        :hidden="!cartStore.selectedCount"
-        class="cart-badge"
-      >
-        <button class="cart-entry" type="button" @click="router.push('/cart')">
-          <!-- ★ 内联 SVG 而不是 emoji：emoji 在各系统的字形/基线都不同，看着不专业 -->
-          <svg
-            class="cart-icon"
-            viewBox="0 0 24 24"
-            width="17"
-            height="17"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <circle cx="9" cy="20" r="1.3" />
-            <circle cx="18" cy="20" r="1.3" />
-            <path d="M2.5 3.5h2.6l2.4 12a1.4 1.4 0 0 0 1.4 1.1h8.4a1.4 1.4 0 0 0 1.4-1.1L20 7.5H6.2" />
-          </svg>
-          <span>购物车</span>
-        </button>
-      </el-badge>
+      <div class="actions">
+        <template v-if="auth.token">
+          <a class="a-link" @click="router.push('/orders')">订单</a>
+          <a class="a-link" @click="router.push('/refunds')">售后</a>
+          <a class="a-link" @click="router.push('/coupons')">券</a>
+          <a class="a-link" @click="logout">退出</a>
+        </template>
+        <template v-else>
+          <a class="a-link" @click="router.push('/login')">登录</a>
+          <a class="a-link a-link--strong" @click="router.push('/login')">注册</a>
+        </template>
+
+        <el-badge :value="cartStore.selectedCount" :hidden="!cartStore.selectedCount">
+          <button class="cart-entry" type="button" @click="router.push('/cart')">
+            <svg
+              class="cart-icon"
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="9" cy="20" r="1.2" />
+              <circle cx="18" cy="20" r="1.2" />
+              <path d="M2.5 3.5h2.6l2.4 12a1.4 1.4 0 0 0 1.4 1.1h8.4a1.4 1.4 0 0 0 1.4-1.1L20 7.5H6.2" />
+            </svg>
+            <span>购物车</span>
+          </button>
+        </el-badge>
+      </div>
     </div>
-  </div>
+  </header>
 
   <!-- ★ 路由切换动画：<router-view v-slot> 拿当前组件，外包 transition。
        mode="out-in" 让旧的先走再进新的，避免两页同时在场时布局跳动。 -->
@@ -153,176 +149,210 @@ function doSearch() {
 </template>
 
 <style scoped>
-/* ─────────── 第一层：工具条 ─────────── */
-.utility {
-  height: var(--brand-utility-h);
-  /* ★ 浅灰而不是纯白：与下面的白色主导航形成分层，
-     否则两条白栏叠在一起会糊成一块。 */
-  background: var(--el-fill-color-light);
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-.utility-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  height: 100%;
-  padding: 0 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.u-link {
-  cursor: pointer;
-}
-.u-link:hover {
-  color: var(--brand-color);
-}
-.u-sep {
-  width: 1px;
-  height: 11px;
-  background: var(--el-border-color);
-}
-.spacer {
-  flex: 1;
-}
-
-/* ─────────── 第二层：主导航 ─────────── */
-.mainnav {
-  background: #fff;
-  height: var(--brand-header-h);
-  box-shadow: var(--brand-shadow);
-  /* ★ 吸顶只加在主导航上：工具条随页面滚走，滚动后正好只留主导航，
-     相当于「自动收纳」——不用写 JS 监听滚动高度。 */
+.topbar {
   position: sticky;
   top: 0;
   z-index: 100;
+  background: color-mix(in srgb, var(--mx-paper) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(10px);
+  border-bottom: 1px solid var(--mx-line);
 }
-.mainnav-inner {
+.topbar-inner {
   max-width: 1200px;
   margin: 0 auto;
-  height: 100%;
-  padding: 0 16px;
+  height: var(--mx-topbar-h);
+  padding: 0 20px;
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 28px;
 }
+
+/* ───── 品牌 ───── */
 .brand {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   cursor: pointer;
   user-select: none;
   flex: none;
 }
 .brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--brand-radius-sm);
-  background: var(--brand-gradient);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: var(--mx-ink);
   color: #fff;
-  font-weight: 800;
-  font-size: 17px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+  align-self: center;
 }
-.brand-name {
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--brand-color);
-  letter-spacing: 0.5px;
-  white-space: nowrap;
+.brand-word {
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--mx-ink);
+}
+.brand-sub {
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  color: var(--mx-ink-3);
 }
 
-/* ───── 品类导航 ─────
-   ★ flex:1 + overflow-x:auto：品类多到装不下时横向滚动，
-   而不是把搜索框挤出屏幕（窄屏上这一点很关键）。
-   滚动条隐藏 —— 一条横条出现在顶栏里非常难看。 */
+/* ───── 品类 ───── */
 .cats {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 22px;
   overflow-x: auto;
   scrollbar-width: none;
-  -ms-overflow-style: none;
 }
 .cats::-webkit-scrollbar {
   display: none;
 }
 .cat {
+  position: relative;
   flex: none;
-  padding: 6px 10px;
-  font-size: 14px;
-  color: var(--el-text-color-regular);
+  padding: 6px 0;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--mx-ink-2);
   cursor: pointer;
-  border-radius: var(--brand-radius-sm);
   white-space: nowrap;
-  transition:
-    color 0.15s ease,
-    background 0.15s ease;
+  transition: color 0.18s var(--mx-ease);
 }
 .cat:hover {
-  color: var(--brand-color);
+  color: var(--mx-ink);
 }
-/* ★ 选中态用「主色文字 + 浅底」，而不是下划线：
-   顶栏在两层结构里已经很满，再画线会更碎。 */
+/* ★ 编辑风的选中态：不描底色，只在字下方画 2px 橙线 */
 .cat.active {
-  color: var(--brand-color);
-  background: var(--el-color-primary-light-9);
+  color: var(--mx-ink);
   font-weight: 600;
 }
+.cat.active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--mx-accent);
+}
 
-/* ───── 搜索框 ───── */
+/* ───── 搜索 ───── */
 .search {
   flex: none;
-  width: 230px;
   display: flex;
-  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-btn-r);
+  background: var(--mx-surface);
+  overflow: hidden;
+  transition: border-color 0.18s var(--mx-ease);
 }
-.search-btn {
+.search:focus-within {
+  border-color: var(--mx-ink-3);
+}
+.search :deep(.el-input__wrapper) {
+  box-shadow: none !important;
+  background: transparent;
+  padding: 2px 10px;
+}
+.search :deep(.el-input__inner) {
+  font-size: 13px;
+}
+.search :deep(.el-input__prefix) {
+  color: var(--mx-ink-3);
+}
+.search-go {
+  height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-left: 1px solid var(--mx-line);
+  background: transparent;
+  color: var(--mx-ink);
+  font-size: 13px;
+  /* ★ 必须 nowrap：搜索框只有 230px 时按钮会被挤成「搜 / 索」两行（实测踩到） */
+  white-space: nowrap;
   flex: none;
+  cursor: pointer;
+  transition: background 0.18s var(--mx-ease);
+}
+.search-go:hover {
+  background: var(--mx-line-soft);
 }
 
-/* ───── 购物车 ───── */
-.cart-badge {
+/* ───── 右侧操作 ───── */
+.actions {
   flex: none;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.a-link {
+  font-size: 12px;
+  color: var(--mx-ink-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.18s var(--mx-ease);
+}
+.a-link:hover {
+  color: var(--mx-ink);
+}
+.a-link--strong {
+  color: var(--mx-ink);
+  font-weight: 600;
 }
 .cart-entry {
   display: flex;
   align-items: center;
   gap: 6px;
   height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--el-border-color);
-  border-radius: var(--brand-radius-sm);
-  background: #fff;
-  color: var(--el-text-color-regular);
-  font-size: 13px;
+  padding: 0 14px;
+  border: 1px solid var(--mx-line);
+  border-radius: 999px;
+  background: var(--mx-surface);
+  color: var(--mx-ink);
+  font-size: 12px;
   cursor: pointer;
   transition:
-    color 0.15s ease,
-    border-color 0.15s ease;
+    border-color 0.18s var(--mx-ease),
+    background 0.18s var(--mx-ease);
 }
 .cart-entry:hover {
-  color: var(--brand-color);
-  border-color: var(--brand-color);
+  border-color: var(--mx-ink-3);
+  background: var(--mx-line-soft);
 }
 .cart-icon {
   flex: none;
 }
 
-/* ───── 窄屏：优先保搜索和购物车，品类让位 ───── */
-@media (max-width: 980px) {
-  .search {
-    width: 160px;
+@media (max-width: 1080px) {
+  .topbar-inner {
+    gap: 18px;
   }
-  .brand-name {
+  .cats {
+    gap: 16px;
+  }
+  .search {
+    width: 190px;
+  }
+}
+@media (max-width: 860px) {
+  .brand-sub {
     display: none;
   }
-  .mainnav-inner {
-    gap: 12px;
+  .search {
+    width: 150px;
+  }
+  .search-go {
+    display: none;
   }
 }
 </style>

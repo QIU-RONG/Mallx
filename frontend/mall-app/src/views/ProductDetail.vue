@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { cartAdd, productDetail } from '../api'
+import ProductThumb from '../components/ProductThumb.vue'
 import type { ProductDetailVO, SkuVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
 
@@ -49,7 +50,6 @@ function pickMain(url: string) {
   mainPic.value = url
 }
 
-/** ★ 换规格时把数量夹回合法范围 —— 否则会出现「选了大码还在 99 件」这种越界组合 */
 function pickSku(id: number) {
   chosenSkuId.value = id
 }
@@ -80,34 +80,31 @@ async function addToCart() {
       </el-breadcrumb>
 
       <div class="main">
+        <!-- ═══════ 左：图 ═══════ -->
         <div class="gallery">
-          <!-- ★ 主图包一层占位底色：图没加载出来时不是一片白，而是浅灰块 -->
           <div class="big-wrap">
-            <img :src="mainPic" class="big" alt="" />
+            <ProductThumb :src="mainPic" :name="vo.name" :seed="vo.id" />
           </div>
-          <div class="thumbs">
-            <img
+          <div v-if="pics.length > 1" class="thumbs">
+            <button
               v-for="url in pics"
               :key="url"
-              :src="url"
+              type="button"
               class="thumb"
               :class="{ active: url === mainPic }"
               @click="pickMain(url)"
-              alt=""
-            />
+            >
+              <ProductThumb :src="url" :name="vo.name" :seed="vo.id" />
+            </button>
           </div>
         </div>
 
+        <!-- ═══════ 右：信息 ═══════ -->
         <div class="info">
-          <h2 class="title">{{ vo.name }}</h2>
-          <p class="subtitle">{{ vo.subtitle }}</p>
+          <p class="eyebrow">{{ vo.brandName || 'MALLX' }} · {{ vo.categoryName }}</p>
+          <h1 class="title">{{ vo.name }}</h1>
+          <p v-if="vo.subtitle" class="subtitle">{{ vo.subtitle }}</p>
 
-          <div class="tags">
-            <el-tag v-if="vo.brandName" type="info" effect="plain" size="small">{{ vo.brandName }}</el-tag>
-            <el-tag v-if="vo.categoryName" type="info" effect="plain" size="small">{{ vo.categoryName }}</el-tag>
-          </div>
-
-          <!-- ★ 价格区：整页的视觉重心。选中哪个规格，这里就显示哪个的价格 -->
           <div class="price-panel">
             <div class="price-main">
               <span class="cur">¥</span>
@@ -117,25 +114,27 @@ async function addToCart() {
             <div v-if="saved > 0" class="saved">立省 ¥{{ saved.toFixed(2) }}</div>
           </div>
 
-          <h4 class="sec-title">选择规格</h4>
+          <div class="divider" />
+
+          <p class="sec-label">选择规格</p>
           <div class="skus">
-            <div
+            <button
               v-for="s in vo.skus"
               :key="s.id"
+              type="button"
               class="sku"
               :class="{ picked: s.id === chosenSkuId }"
               @click="pickSku(s.id)"
             >
-              <div class="sku-name">{{ s.name || s.skuCode }}</div>
-              <div class="sku-price">¥{{ Number(s.price).toFixed(2) }}</div>
-              <div v-if="s.originalPrice" class="sku-orig">¥{{ Number(s.originalPrice).toFixed(2) }}</div>
-            </div>
+              <span class="sku-name">{{ s.name || s.skuCode }}</span>
+              <span class="sku-price">¥{{ Number(s.price).toFixed(2) }}</span>
+            </button>
           </div>
 
           <div class="buy-row">
-            <span class="qty-label">数量</span>
             <el-input-number v-model="quantity" :min="1" :max="99" />
             <el-button
+              class="buy-btn"
               type="primary"
               size="large"
               :loading="adding"
@@ -144,17 +143,24 @@ async function addToCart() {
             >
               加入购物车
             </el-button>
-            <el-button size="large" @click="router.push('/cart')">去购物车结算</el-button>
+            <button class="link-btn" type="button" @click="router.push('/cart')">
+              去购物车结算
+            </button>
           </div>
+
+          <ul class="promise">
+            <li>正品保障</li>
+            <li>极速发货</li>
+            <li>七天无理由退换</li>
+          </ul>
         </div>
       </div>
 
-      <el-card shadow="never" class="desc-card">
-        <template #header>
-          <span class="desc-title">商品详情</span>
-        </template>
+      <!-- ═══════ 详情 ═══════ -->
+      <section class="desc-section">
+        <p class="sec-label">商品详情</p>
         <p class="desc-body">{{ vo.description || '（暂无详情）' }}</p>
-      </el-card>
+      </section>
     </template>
   </div>
 </template>
@@ -163,167 +169,238 @@ async function addToCart() {
 .detail-wrap {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 28px 20px 80px;
   min-height: 300px;
 }
 .crumb {
-  margin-bottom: 16px;
+  margin-bottom: 28px;
+  font-size: 12px;
 }
+.crumb :deep(.el-breadcrumb__inner) {
+  color: var(--mx-ink-3);
+  font-weight: 400;
+}
+.crumb :deep(.el-breadcrumb__item:last-child .el-breadcrumb__inner) {
+  color: var(--mx-ink);
+}
+
 .main {
   display: flex;
-  gap: 24px;
+  gap: 56px;
   flex-wrap: wrap;
+  align-items: flex-start;
 }
 .gallery {
-  width: 380px;
+  width: 460px;
   flex: none;
 }
-/* ★ 主图占位底：图未加载时是浅灰块，不是刺眼的纯白 */
 .big-wrap {
-  width: 380px;
-  height: 380px;
-  border-radius: var(--brand-radius);
-  overflow: hidden;
-  background: var(--el-fill-color-light);
-}
-.big {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--mx-card-r);
+  overflow: hidden;
+  border: 1px solid var(--mx-line);
+  background: var(--mx-line-soft);
 }
 .thumbs {
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 12px;
   flex-wrap: wrap;
 }
 .thumb {
-  width: 56px;
-  height: 56px;
-  object-fit: cover;
-  border: 2px solid transparent;
-  border-radius: var(--brand-radius-sm);
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-media-r);
+  overflow: hidden;
   cursor: pointer;
-  background: var(--el-fill-color-light);
-  transition: border-color 0.15s ease;
+  background: var(--mx-surface);
+  transition: border-color 0.18s var(--mx-ease);
 }
 .thumb.active {
-  border-color: var(--brand-color);
+  border-color: var(--mx-ink);
 }
+
 .info {
   flex: 1;
-  min-width: 300px;
+  min-width: 320px;
+  padding-top: 4px;
+}
+.eyebrow {
+  margin: 0 0 14px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mx-ink-3);
 }
 .title {
   margin: 0;
-  font-size: 22px;
+  font-size: 30px;
   line-height: 1.35;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--mx-ink);
 }
 .subtitle {
-  color: var(--el-text-color-secondary);
-  margin: 8px 0 12px;
+  margin: 10px 0 0;
+  font-size: 14px;
+  color: var(--mx-ink-2);
 }
-.tags {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
-}
-/* ★ 价格面板：浅色底 + 圆角，把「多少钱」从一堆文字里拎出来 */
+
+/* ★ 价格不再铺浅色块：一块灰底会把「价格」降级成标签。
+   编辑风的做法是让数字自己站出来 —— 大字号 + 衬线 + 上下留白。 */
 .price-panel {
-  background: var(--el-fill-color-light);
-  border-radius: var(--brand-radius);
-  padding: 14px 18px;
-  margin-bottom: 20px;
+  margin-top: 28px;
 }
 .price-main {
   display: flex;
   align-items: baseline;
-  gap: 2px;
+  gap: 3px;
+  color: var(--mx-ink);
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-variant-numeric: tabular-nums;
 }
-/* ★ 价格一律用 --brand-price（暖红），与品牌主色分开：
-   价格是「信息」、按钮是「操作」，同色会让人扫一屏时把两者混在一起。 */
 .cur {
-  color: var(--brand-price);
   font-size: 18px;
-  font-weight: 700;
 }
 .num {
-  color: var(--brand-price);
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 1.1;
+  font-size: 40px;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
 }
 .orig {
-  margin-left: 10px;
-  color: var(--el-text-color-placeholder);
-  text-decoration: line-through;
+  margin-left: 12px;
   font-size: 14px;
+  color: var(--mx-ink-3);
+  text-decoration: line-through;
 }
 .saved {
-  margin-top: 4px;
-  color: var(--brand-price);
+  margin-top: 6px;
   font-size: 12px;
+  color: var(--mx-accent);
 }
-.sec-title {
-  margin: 0 0 10px;
+
+.divider {
+  height: 1px;
+  background: var(--mx-line);
+  margin: 28px 0 24px;
+}
+.sec-label {
+  margin: 0 0 14px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--mx-ink-3);
 }
 .skus {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .sku {
-  border: 2px solid var(--el-border-color-lighter);
-  border-radius: var(--brand-radius);
-  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  min-width: 120px;
+  padding: 10px 16px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-btn-r);
+  background: var(--mx-surface);
   cursor: pointer;
-  transition: all 0.15s ease;
-  min-width: 96px;
-  text-align: center;
+  text-align: left;
+  transition:
+    border-color 0.18s var(--mx-ease),
+    background 0.18s var(--mx-ease);
 }
 .sku:hover {
-  border-color: var(--brand-color-light);
+  border-color: var(--mx-ink-3);
 }
+/* ★ 选中 = 反白：墨底白字，不用橙色浅底（浅底在纸感背景上会发脏） */
 .sku.picked {
-  border-color: var(--brand-color);
-  /* ⚠️ 原来是写死的 #fff7f0（橙色浅底）—— 品牌色换成靛蓝后它就成了孤岛。
-     改用 EP 的主色 light-9（= 主色与白按 9/10 混合），永远与主色同源。 */
-  background: var(--el-color-primary-light-9);
+  background: var(--mx-ink);
+  border-color: var(--mx-ink);
+}
+.sku.picked .sku-name,
+.sku.picked .sku-price {
+  color: #fff;
 }
 .sku-name {
   font-size: 13px;
+  color: var(--mx-ink);
 }
 .sku-price {
-  color: var(--brand-price);
-  font-weight: 700;
-  margin-top: 2px;
+  font-size: 13px;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: var(--mx-ink-2);
 }
-.sku-orig {
-  color: var(--el-text-color-placeholder);
-  text-decoration: line-through;
-  font-size: 12px;
-}
+
 .buy-row {
-  margin-top: 24px;
+  margin-top: 28px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
 }
-.qty-label {
-  color: var(--el-text-color-regular);
+.buy-btn {
+  min-width: 180px;
+  height: 46px;
 }
-.desc-card {
-  margin-top: 24px;
+.link-btn {
+  border: none;
+  background: transparent;
+  color: var(--mx-ink-2);
+  font-size: 13px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
-.desc-title {
-  font-weight: 600;
+.link-btn:hover {
+  color: var(--mx-ink);
+}
+
+.promise {
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 20px;
+  font-size: 12px;
+  color: var(--mx-ink-3);
+}
+.promise li::before {
+  content: '·';
+  margin-right: 6px;
+}
+
+.desc-section {
+  margin-top: 64px;
+  padding-top: 32px;
+  border-top: 1px solid var(--mx-line);
 }
 .desc-body {
   white-space: pre-wrap;
-  color: var(--el-text-color-regular);
-  line-height: 1.7;
+  color: var(--mx-ink-2);
+  line-height: 1.9;
+  font-size: 14px;
   margin: 0;
+  max-width: 760px;
+}
+
+@media (max-width: 980px) {
+  .gallery {
+    width: 100%;
+  }
+  .main {
+    gap: 28px;
+  }
+  .title {
+    font-size: 24px;
+  }
+  .num {
+    font-size: 32px;
+  }
 }
 </style>

@@ -76,11 +76,11 @@ async function submit() {
 </script>
 
 <template>
-  <div class="reg-wrap">
-    <el-card class="reg-card" shadow="never">
+  <div class="auth-wrap">
+    <div class="auth-card">
       <div class="brand">
         <span class="brand-mark">M</span>
-        <span class="brand-name">MallX 商城</span>
+        <span class="brand-word">MallX</span>
       </div>
       <!-- ★ 说清「你为什么到了这里」：用户是被登录页转过来的，
            直接甩一个注册表单会让人以为走错了流程。 -->
@@ -88,23 +88,13 @@ async function submit() {
 
       <el-form label-position="top" @submit.prevent>
         <el-form-item label="手机号">
-          <el-input
-            v-model="phone"
-            size="large"
-            maxlength="11"
-            placeholder="请输入 11 位手机号"
-          />
+          <el-input v-model="phone" size="large" maxlength="11" placeholder="11 位手机号" />
         </el-form-item>
         <el-form-item label="验证码">
           <div class="code-row">
-            <el-input
-              v-model="code"
-              size="large"
-              maxlength="6"
-              placeholder="6 位验证码"
-            />
+            <el-input v-model="code" size="large" maxlength="6" placeholder="6 位验证码" />
             <el-button size="large" :disabled="!canSend" @click="sendCode">
-              {{ countdown > 0 ? `${countdown} 秒后重发` : '获取验证码' }}
+              {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
             </el-button>
           </div>
         </el-form-item>
@@ -124,54 +114,54 @@ async function submit() {
 
       <p class="hint">
         已有账号？
-        <el-button link type="primary" @click="router.push('/login')">返回登录</el-button>
+        <a class="back" @click="router.push('/login')">返回登录</a>
       </p>
-    </el-card>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.reg-wrap {
-  min-height: calc(100vh - var(--brand-utility-h) - var(--brand-header-h));
+.auth-wrap {
+  min-height: calc(100vh - var(--mx-topbar-h));
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
-  background: var(--el-fill-color-light);
+  padding: 48px 20px;
 }
-.reg-card {
+.auth-card {
   width: 400px;
-  border: 1px solid var(--el-border-color-lighter);
+  max-width: 100%;
 }
 .brand {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
 }
 .brand-mark {
   width: 30px;
   height: 30px;
-  border-radius: var(--brand-radius-sm);
-  background: var(--brand-gradient);
+  border-radius: 7px;
+  background: var(--mx-ink);
   color: #fff;
-  font-weight: 800;
-  font-size: 17px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.brand-name {
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--brand-color);
-  letter-spacing: 0.5px;
+.brand-word {
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--mx-ink);
+  letter-spacing: 0.01em;
 }
 .sub {
-  margin: 8px 0 18px;
+  margin: 12px 0 28px;
   text-align: center;
   font-size: 13px;
-  color: var(--el-text-color-secondary);
+  color: var(--mx-ink-2);
 }
 .code-row {
   display: flex;
@@ -186,11 +176,19 @@ async function submit() {
 }
 .submit {
   width: 100%;
+  height: 44px;
+  margin-top: 4px;
 }
 .hint {
-  margin: 14px 0 0;
+  margin: 16px 0 0;
   font-size: 12px;
   text-align: center;
-  color: var(--el-text-color-secondary);
+  color: var(--mx-ink-3);
+}
+.back {
+  color: var(--mx-ink);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 </style>

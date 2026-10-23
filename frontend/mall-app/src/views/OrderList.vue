@@ -13,6 +13,11 @@ const size = ref(10)
 const status = ref<string>('')
 const loading = ref(false)
 
+/** 后端返回的是 ISO 串（2026-10-23T19:25:47.47522）—— 列表里截到分钟就够，多出来的小数是噪声 */
+function fmtTime(s?: string) {
+  return s ? s.replace('T', ' ').slice(0, 16) : '-'
+}
+
 const STATUS_META: Record<OrderStatus, { label: string; type: 'info' | 'warning' | 'primary' | 'success' | 'danger' }> = {
   PENDING_PAYMENT: { label: '待支付', type: 'warning' },
   PAID: { label: '已支付', type: 'primary' },
@@ -75,16 +80,18 @@ onMounted(load)
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="金额" width="120">
+      <el-table-column label="金额" width="130">
         <template #default="{ row }">
-          <div>¥{{ row.payAmount }}</div>
+          <div class="amount">¥{{ Number(row.payAmount).toFixed(2) }}</div>
           <div v-if="row.discountAmount > 0" class="hint">省了 ¥{{ row.discountAmount }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="收货人" width="160">
+      <el-table-column label="收货人" width="170">
         <template #default="{ row }">{{ row.receiverName }} {{ row.receiverPhone }}</template>
       </el-table-column>
-      <el-table-column label="下单时间" width="170" prop="createdAt" />
+      <el-table-column label="下单时间" width="170">
+        <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
+      </el-table-column>
       <el-table-column label="操作" width="220">
         <template #default="{ row }">
           <el-button link type="primary" @click="router.push(`/orders/${row.id}`)">详情</el-button>
@@ -113,14 +120,19 @@ onMounted(load)
 .wrap {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 28px 20px 80px;
   min-height: 260px;
 }
 .toolbar {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+}
+.amount {
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-variant-numeric: tabular-nums;
+  color: var(--mx-ink);
 }
 .hint {
-  color: #f56c6c;
+  color: var(--mx-accent);
   font-size: 12px;
 }
 </style>

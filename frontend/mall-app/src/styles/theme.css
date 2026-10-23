@@ -49,17 +49,56 @@
      用更重的暖红，扫价时最跳（京东红 / 小米橙，价格永远是页面上最"重"的数字）。 */
   --brand-price: #e1251b;
 
-  /* 圆角 / 阴影 —— 官方商城的卡片圆角都偏小（4~8px），大圆角会显得像玩具 */
-  --brand-radius: 8px;
-  --brand-radius-sm: 4px;
-  --brand-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-  /* ★ 这个阴影是【hover 专用】。常驻在元素上会一直挂着一圈彩色发光，显脏。 */
-  --brand-shadow-hover: 0 6px 20px rgba(255, 103, 0, 0.16);
+  /* 圆角 / 阴影 —— 编辑风的卡片靠「发丝线」定义边界，不靠阴影 */
+  --brand-radius: 10px;
+  --brand-radius-sm: 6px;
+  --brand-shadow: 0 1px 0 rgba(25, 23, 20, 0.04);
+  /* ★ hover 阴影：中性墨色、大扩散低透明，不要品牌色光晕 */
+  --brand-shadow-hover: 0 10px 30px rgba(25, 23, 20, 0.08);
 
   --brand-header-h: 64px;
-  /* ★ 商城顶栏是【两层】的：上面一条浅灰工具条（订单 / 券 / 登录），
-     下面才是主导航（logo + 品类 + 搜索 + 购物车）。这是国内商城的通用结构。 */
+  /* ★ 商城顶栏原本是【两层】的。Day 57 视觉重做后合并成一行：
+     工具条上的入口（订单 / 售后 / 券 / 登录）收进主导航右侧。
+     变量保留，避免其它页面引用时 undefined。 */
   --brand-utility-h: 34px;
+}
+
+/* ==========================================================================
+ * Day 57 · 视觉重做：编辑风令牌（唯一来源）
+ * --------------------------------------------------------------------------
+ * 取值依据：docs/superpowers/specs/2026-10-23-mallx-storefront-redesign-design.md
+ * ★ 页面里【不要再】写死 #fff / #303133 / 圆角像素 —— 一律用这些变量。
+ * ========================================================================== */
+:root {
+  --mx-paper: #faf8f4;
+  --mx-surface: #ffffff;
+  --mx-ink: #191714;
+  --mx-ink-2: #57534c;
+  --mx-ink-3: #786f64;
+  --mx-line: #e7e2d9;
+  --mx-line-soft: #f0ece4;
+  --mx-accent: #ff6700;
+  --mx-deep: #191714;
+  --mx-deep-2: #262320;
+  --mx-topbar-h: 68px;
+  --mx-card-r: 10px;
+  --mx-media-r: 6px;
+  --mx-btn-r: 6px;
+  --mx-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+
+  /* ★ Element Plus 语义色 → 本套令牌。
+     只改这一处，全站 el-card / el-input / el-table 跟着变，不用逐个 :deep。 */
+  --el-text-color-primary: var(--mx-ink);
+  --el-text-color-regular: var(--mx-ink-2);
+  --el-text-color-secondary: var(--mx-ink-3);
+  --el-text-color-placeholder: #a9a29a;
+  --el-border-color: var(--mx-line);
+  --el-border-color-light: var(--mx-line-soft);
+  --el-border-color-lighter: #f4f0e9;
+  --el-fill-color-light: #f5f1ea;
+  --el-fill-color-blank: var(--mx-surface);
+  --el-border-radius-base: var(--mx-btn-r);
+  --el-box-shadow-light: 0 8px 24px rgba(25, 23, 20, 0.08);
 }
 
 /**
@@ -78,6 +117,21 @@
 }
 .brand-fade-leave-to {
   opacity: 0;
+}
+
+/**
+ * ★ 尊重「减少动效」系统偏好：这部分用户（以及无头截图工具）不该被淡入动画干扰。
+ * 不是测试专用开关 —— 前庭功能敏感的用户会把整页淡入当成不适来源。
+ */
+@media (prefers-reduced-motion: reduce) {
+  .brand-fade-enter-active,
+  .brand-fade-leave-active {
+    transition: none;
+  }
+  .brand-fade-enter-from {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* ★ 全局滚动条：默认那条在 Windows 上又粗又灰，和主题完全不搭 */

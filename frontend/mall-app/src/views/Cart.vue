@@ -9,6 +9,7 @@ import {
   cartUpdateSelected,
 } from '../api'
 import type { CartItemVO } from '../types/api'
+import ProductThumb from '../components/ProductThumb.vue'
 import { useCartStore } from '../stores/cart'
 
 const router = useRouter()
@@ -106,7 +107,9 @@ onMounted(load)
         </span>
 
         <div class="col-goods goods">
-          <img :src="it.image" class="pic" alt="" />
+          <div class="pic">
+            <ProductThumb :src="it.image" :name="it.productName" :seed="it.productId" />
+          </div>
           <div class="goods-meta">
             <div class="gname">{{ it.productName }}</div>
             <div class="sku">{{ it.skuName }}</div>
@@ -189,15 +192,16 @@ onMounted(load)
 }
 .head-row {
   padding: 10px 16px;
-  background: var(--el-fill-color-light);
-  border-radius: var(--brand-radius) var(--brand-radius) 0 0;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--mx-ink-3);
+  border-bottom: 1px solid var(--mx-line);
 }
 .row {
   padding: 14px 16px;
-  background: #fff;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: var(--mx-surface);
+  border-bottom: 1px solid var(--mx-line-soft);
   transition: background 0.15s ease;
 }
 .row:hover {
@@ -220,10 +224,11 @@ onMounted(load)
   color: var(--el-text-color-regular);
   font-size: 13px;
 }
-/* ★ 小计用价格色 + 加粗：一行里最该被看到的就是「这件花了我多少」 */
+/* ★ 小计用墨色衬线：一行里最该被看到的数字，靠字号与字族，而不是红色 */
 .sub {
-  color: var(--brand-price);
-  font-weight: 700;
+  color: var(--mx-ink);
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-variant-numeric: tabular-nums;
 }
 
 .goods {
@@ -235,10 +240,11 @@ onMounted(load)
 .pic {
   width: 72px;
   height: 72px;
-  object-fit: cover;
-  border-radius: var(--brand-radius-sm);
-  background: var(--el-fill-color-light);
+  border-radius: var(--mx-media-r);
+  overflow: hidden;
+  background: var(--mx-line-soft);
   flex: none;
+  border: 1px solid var(--mx-line);
 }
 .goods-meta {
   min-width: 0;
@@ -269,9 +275,8 @@ onMounted(load)
   right: 0;
   bottom: 0;
   z-index: 50;
-  background: #fff;
-  border-top: 1px solid var(--el-border-color-lighter);
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+  background: var(--mx-paper);
+  border-top: 1px solid var(--mx-line);
   padding: 12px 0;
 }
 .bar-inner {
@@ -290,8 +295,9 @@ onMounted(load)
 .amount {
   display: flex;
   align-items: baseline;
-  color: var(--brand-price);
-  font-weight: 700;
+  color: var(--mx-ink);
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-variant-numeric: tabular-nums;
 }
 .amount .sym {
   font-size: 14px;

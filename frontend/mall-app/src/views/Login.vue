@@ -106,26 +106,20 @@ async function onPwdSubmit() {
 </script>
 
 <template>
-  <div class="login-wrap">
-    <el-card class="login-card" shadow="never">
-      <!-- ★ 品牌区与顶栏同款（渐变方块 + 名称）：登录页是用户见到的第一个界面，
-           这儿若没有品牌标识，整个应用就缺了「记忆点」的起点。 -->
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <!-- ★ 品牌用顶栏同一个字标（衬线 + 墨色），不另做一套 -->
       <div class="brand">
         <span class="brand-mark">M</span>
-        <span class="brand-name">MallX 商城</span>
+        <span class="brand-word">MallX</span>
       </div>
       <p class="sub">登录后即可加购、下单、查看订单与售后</p>
 
-      <el-tabs v-model="mode" stretch>
+      <el-tabs v-model="mode" stretch class="auth-tabs">
         <el-tab-pane label="手机号登录" name="sms">
           <el-form label-position="top" @submit.prevent>
             <el-form-item label="手机号">
-              <el-input
-                v-model="phone"
-                size="large"
-                maxlength="11"
-                placeholder="请输入 11 位手机号"
-              />
+              <el-input v-model="phone" size="large" maxlength="11" placeholder="11 位手机号" />
             </el-form-item>
             <el-form-item label="验证码">
               <div class="code-row">
@@ -137,7 +131,7 @@ async function onPwdSubmit() {
                   @keyup.enter="onSmsSubmit"
                 />
                 <el-button size="large" :disabled="!canSend" @click="sendCode">
-                  {{ countdown > 0 ? `${countdown} 秒后重发` : '获取验证码' }}
+                  {{ countdown > 0 ? `${countdown}s` : '获取验证码' }}
                 </el-button>
               </div>
             </el-form-item>
@@ -148,7 +142,7 @@ async function onPwdSubmit() {
               :loading="loading"
               @click="onSmsSubmit"
             >
-              登 录
+              登录
             </el-button>
           </el-form>
           <p class="hint">未注册的手机号验证通过后会引导你完成注册</p>
@@ -181,63 +175,80 @@ async function onPwdSubmit() {
               :loading="loading"
               @click="onPwdSubmit"
             >
-              登 录
+              登录
             </el-button>
           </el-form>
           <p class="hint">体验账号：demo / demo123（种子用户）</p>
         </el-tab-pane>
       </el-tabs>
-    </el-card>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.login-wrap {
-  /* ⚠️ 原来写的是 calc(100vh - 60px) —— 顶栏改成两层（工具条 34 + 主导航 64 = 98）之后，
-     那个 60 就成了旧值，页面底部会多出 38px 空白 / 白滚一下。
-     ★ 改成用变量算：以后再调顶栏高度，这里自动跟随。 */
-  min-height: calc(100vh - var(--brand-utility-h) - var(--brand-header-h));
+/* ★ 不用 el-card：一块带边框的白卡放在纸底上，是我们这轮要修掉的「灰盒子」。
+   登录页只需要一条居中纵轴：品牌、说明、表单，全部靠留白分隔。 */
+.auth-wrap {
+  min-height: calc(100vh - var(--mx-topbar-h));
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
-  background: var(--el-fill-color-light);
+  padding: 48px 20px;
 }
-.login-card {
-  width: 380px;
-  border: 1px solid var(--el-border-color-lighter);
+.auth-card {
+  width: 400px;
+  max-width: 100%;
 }
 .brand {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
 }
 .brand-mark {
   width: 30px;
   height: 30px;
-  border-radius: var(--brand-radius-sm);
-  background: var(--brand-gradient);
+  border-radius: 7px;
+  background: var(--mx-ink);
   color: #fff;
-  font-weight: 800;
-  font-size: 17px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.brand-name {
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--brand-color);
-  letter-spacing: 0.5px;
+.brand-word {
+  font-family: Georgia, 'Times New Roman', 'Songti SC', serif;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--mx-ink);
+  letter-spacing: 0.01em;
 }
 .sub {
-  margin: 8px 0 8px;
+  margin: 12px 0 28px;
   text-align: center;
   font-size: 13px;
-  color: var(--el-text-color-secondary);
+  color: var(--mx-ink-2);
 }
-/* 验证码输入 + 获取按钮同一行；输入框吃掉剩余宽度，按钮固定宽度别换行 */
+.auth-tabs :deep(.el-tabs__header) {
+  margin-bottom: 24px;
+}
+.auth-tabs :deep(.el-tabs__nav-wrap::after) {
+  background: var(--mx-line);
+  height: 1px;
+}
+.auth-tabs :deep(.el-tabs__active-bar) {
+  background: var(--mx-ink);
+  height: 2px;
+}
+.auth-tabs :deep(.el-tabs__item) {
+  font-size: 13px;
+  color: var(--mx-ink-3);
+}
+.auth-tabs :deep(.el-tabs__item.is-active) {
+  color: var(--mx-ink);
+  font-weight: 600;
+}
 .code-row {
   display: flex;
   gap: 8px;
@@ -251,11 +262,13 @@ async function onPwdSubmit() {
 }
 .submit {
   width: 100%;
+  height: 44px;
+  margin-top: 4px;
 }
 .hint {
-  margin-top: 14px;
+  margin: 16px 0 0;
   font-size: 12px;
   text-align: center;
-  color: var(--el-text-color-secondary);
+  color: var(--mx-ink-3);
 }
 </style>
