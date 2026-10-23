@@ -186,9 +186,13 @@ onMounted(load)
     <el-dialog
       v-model="dialogVisible"
       :title="editingId == null ? '新增收货地址' : '编辑收货地址'"
-      width="560px"
+      width="600px"
+      class="addr-dialog"
     >
-      <el-form label-position="top">
+      <p class="dlg-sub">填写一次，下单时一键选用；默认地址会排在最前。</p>
+
+      <el-form label-position="top" class="addr-form">
+        <p class="fsec">联系人</p>
         <div class="two">
           <el-form-item label="收货人">
             <el-input v-model="form.receiverName" maxlength="50" placeholder="姓名" />
@@ -197,6 +201,8 @@ onMounted(load)
             <el-input v-model="form.receiverPhone" maxlength="11" placeholder="11 位手机号" />
           </el-form-item>
         </div>
+
+        <p class="fsec">所在地区</p>
         <div class="three">
           <el-form-item label="省">
             <el-input v-model="form.province" placeholder="如 上海市" />
@@ -208,16 +214,33 @@ onMounted(load)
             <el-input v-model="form.district" placeholder="如 浦东新区" />
           </el-form-item>
         </div>
-        <el-form-item label="详细地址">
-          <el-input v-model="form.detailAddress" type="textarea" :rows="2" placeholder="街道、门牌号" />
-        </el-form-item>
+
+        <p class="fsec">详细地址</p>
         <el-form-item>
-          <el-checkbox v-model="form.isDefault">设为默认地址</el-checkbox>
+          <el-input
+            v-model="form.detailAddress"
+            type="textarea"
+            :rows="3"
+            maxlength="120"
+            show-word-limit
+            placeholder="街道、门牌号、楼层 / 房间号"
+          />
         </el-form-item>
+
+        <div class="default-row">
+          <div>
+            <div class="d-title">设为默认地址</div>
+            <div class="d-sub">下单时优先使用这一条</div>
+          </div>
+          <el-switch v-model="form.isDefault" />
+        </div>
       </el-form>
+
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+        <div class="dlg-footer">
+          <button class="cancel-link" type="button" @click="dialogVisible = false">取消</button>
+          <el-button type="primary" :loading="saving" @click="submit">保存地址</el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -331,6 +354,89 @@ onMounted(load)
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 0 12px;
+}
+
+/* ───── 地址弹窗（Day 66 视觉重做） ───── */
+.dlg-sub {
+  margin: -8px 0 20px;
+  font-size: 12px;
+  color: var(--mx-ink-3);
+}
+.fsec {
+  margin: 4px 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--mx-ink-3);
+}
+.addr-form :deep(.el-form-item__label) {
+  font-size: 12px;
+  color: var(--mx-ink-2);
+  padding-bottom: 4px;
+}
+.addr-form :deep(.el-input__wrapper) {
+  background: var(--mx-surface);
+  box-shadow: none;
+  border: 1px solid var(--mx-line);
+  border-radius: 8px;
+  padding: 4px 12px;
+}
+.addr-form :deep(.el-input__wrapper:hover) {
+  border-color: var(--mx-ink-3);
+}
+.addr-form :deep(.el-input__wrapper.is-focus) {
+  border-color: var(--mx-ink);
+  box-shadow: none;
+}
+.addr-form :deep(.el-textarea__inner) {
+  background: var(--mx-surface);
+  box-shadow: none;
+  border: 1px solid var(--mx-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  resize: none;
+}
+.addr-form :deep(.el-textarea__inner:focus) {
+  border-color: var(--mx-ink);
+  box-shadow: none;
+}
+.default-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-card-r);
+  background: var(--mx-line-soft);
+}
+.d-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.d-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--mx-ink-3);
+}
+.dlg-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+}
+.cancel-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+  color: var(--mx-ink-2);
+  cursor: pointer;
+}
+.cancel-link:hover {
+  color: var(--mx-ink);
 }
 
 @media (max-width: 900px) {
