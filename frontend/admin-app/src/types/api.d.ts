@@ -335,3 +335,25 @@ export interface PermissionVO {
   method?: string
   status: number
 }
+
+// ===================== 评价审核（Day 55） =====================
+/**
+ * 管理端评价行（AdminReviewVO）。
+ * ★ 与 C 端 ReviewVO 的唯一差别是多了 `status`：C 端恒为 1（公开列表已过滤），
+ *   管理端才需要区分「正常 / 已隐藏」。
+ * ⚠️ 与 C 端一样【没有 userId】：展示只用 userNickname，不暴露内部归属 id。
+ */
+export interface AdminReviewVO {
+  id: number
+  orderItemId: number
+  productId: number
+  productName?: string
+  skuName?: string
+  image?: string
+  rating: number
+  content?: string
+  userNickname?: string
+  /** 1 = 显示，0 = 已隐藏 */
+  status: number
+  createdAt?: string
+}

@@ -2,6 +2,7 @@ import http from './http'
 import type {
   AdminOrderVO,
   AdminRefundVO,
+  AdminReviewVO,
   BrandCreateDTO,
   BrandUpdateDTO,
   BrandVO,
@@ -141,6 +142,31 @@ export function dashboardOverview() {
 
 export function dashboardTrend(days = 7) {
   return http.get<never, Result<TrendPointVO[]>>('/admin/dashboard/trend', { params: { days } })
+}
+
+// ===================== 评价审核（Day 55） =====================
+/**
+ * 评价分页（管理端，含已隐藏）。
+ * ★ 与 C 端 `/api/products/{id}/reviews` 的口径差异：这里 status 不传 = 两者都要；
+ *   C 端恒为 status=1。管理端看不见已隐藏的评价 = 「隐藏」变成单向失明。
+ */
+export function adminReviewPage(params: {
+  current: number
+  size: number
+  productId?: number | null
+  rating?: number | null
+  status?: number | null
+}) {
+  return http.get<never, Result<PageResult<AdminReviewVO>>>('/admin/reviews', { params })
+}
+
+/**
+ * 显示 / 隐藏一条评价。
+ * ★ 只改 reviews.status，不删数据、不改内容 —— 隐藏可逆。
+ * ★ 权限码 review:status 只发给超管（review:list 才给商品管理员）。
+ */
+export function adminReviewUpdateStatus(id: number | string, status: number) {
+  return http.put<never, Result<void>>(`/admin/reviews/${id}/status`, { status })
 }
 
 // ===================== 字典（商品表单用） =====================

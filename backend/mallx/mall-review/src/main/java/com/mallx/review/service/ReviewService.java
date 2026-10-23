@@ -2,6 +2,7 @@ package com.mallx.review.service;
 
 import com.mallx.common.api.PageResult;
 import com.mallx.review.dto.ReviewCreateDTO;
+import com.mallx.review.vo.AdminReviewVO;
 import com.mallx.review.vo.ReviewPageVO;
 import com.mallx.review.vo.ReviewVO;
 
@@ -78,4 +79,40 @@ public interface ReviewService {
      * @param size   每页条数，最终落在 1..100
      */
     PageResult<ReviewVO> pageMine(Long userId, long page, long size);
+
+    /**
+     * ★ 管理端评价列表（分页，<b>含已隐藏</b>）—— Day 55。
+     *
+     * <p>★★ 与 {@link #pageByProduct} 的口径差异是本方法存在的全部理由：
+     * <pre>
+     *   C 端    ：WHERE ... AND status = 1   （只看得到正常评价）
+     *   管理端  ：status 不传 = 两者都要      （要能看见自己藏了什么、要能恢复）
+     * </pre>
+     * ⇒ <b>同一张表、同一个概念，两端口径必须同源且各自显式</b>；
+     * 把管理端写成「C 端的复用 + 前端过滤」会让「隐藏」变成不可恢复的失明。
+     *
+     * <p>★ 三种过滤都可选（null = 不过滤），全部为空时就是「全站评价」。
+     * 分页夹紧规则与 {@link #pageByProduct} 完全一致（★ 必须写在 {@code new Page<>} 之前）。
+     *
+     * @param productId 可选：只看某件商品的评价
+     * @param rating    可选：按评分过滤（1..5）
+     * @param status    可选：1=显示 0=已隐藏；null = 两者都要
+     */
+    PageResult<AdminReviewVO> pageAdmin(long page, long size, Long productId, Integer rating, Integer status);
+
+    /**
+     * ★ 显示 / 隐藏一条评价 —— Day 55。
+     *
+     * <p>★ 只改 {@code reviews.status}，<b>不删数据、不改内容</b>：
+     * 平台可以「不展示」，但不该替用户改写他说过的话。
+     *
+     * <p>★★ 一次写入、四处生效（这是它值得单测而不是只做端到端的原因）：
+     * C 端评价列表、平均分、评价总数、以及「我的评价」之外的所有公开读路径
+     * 都带 {@code status = 1} ⇒ 置 0 后立刻从商品页消失、也不再计入聚合。
+     * <b>没有第二个真相要同步</b>。
+     *
+     * @param status 1 = 显示，0 = 隐藏；越界取值 → 400（DTO 已经拦一次，这里是防绕过接口的兜底）
+     * @throws com.mallx.common.exception.BusinessException code=404 评价不存在；code=400 status 非法
+     */
+    void updateStatus(Long id, Integer status);
 }

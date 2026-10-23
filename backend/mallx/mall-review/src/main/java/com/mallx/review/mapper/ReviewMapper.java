@@ -3,6 +3,7 @@ package com.mallx.review.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.mallx.review.entity.Review;
+import com.mallx.review.vo.AdminReviewVO;
 import com.mallx.review.vo.ReviewVO;
 import org.apache.ibatis.annotations.Param;
 
@@ -150,4 +151,32 @@ public interface ReviewMapper extends BaseMapper<Review> {
      * @return 该商品 {@code status = 1} 的评价条数
      */
     long selectProductReviewCount(@Param("productId") Long productId);
+
+    /**
+     * ★★ 管理端评价列表（含已隐藏）—— Day 55。
+     *
+     * <p>★★ 与 {@link #selectProductReviews} 的差别只有一处、但它是全部：
+     * <b>没有 {@code status = 1}</b>。管理端必须看得见自己藏了什么，
+     * 否则「隐藏」就变成单向删除（想恢复时找不到它）。
+     *
+     * <p>★ 三个过滤条件都走 {@code <if>}：为 null 就不拼进 WHERE。
+     * ★ 排序与 C 端一致（{@code created_at DESC, id DESC}）——
+     * 同一份数据在两个视图里的顺序不该不同。
+     * ★ 首参必须是 {@code IPage}（分页插件靠它改写 SQL），XML 里不写 LIMIT。
+     */
+    IPage<AdminReviewVO> selectAdminReviews(IPage<AdminReviewVO> page,
+                                            @Param("productId") Long productId,
+                                            @Param("rating") Integer rating,
+                                            @Param("status") Integer status);
+
+    /**
+     * ★ 改一条评价的可见状态（Day 55）。
+     *
+     * <p>★ 用影响行数当「存在性判据」：0 行 = 该 id 不存在（上层抛 404）。
+     * 不「先 SELECT 再 UPDATE」—— 多一次往返，还给并发留了窗口（项目一贯做法）。
+     * <p>⚠️ {@code updated_at} 在 SQL 里手写（自定义 XML 不走 MetaObjectHandler）。
+     *
+     * @return 影响行数：1 = 改成功；0 = 该评价不存在
+     */
+    int updateReviewStatus(@Param("id") Long id, @Param("status") Integer status);
 }

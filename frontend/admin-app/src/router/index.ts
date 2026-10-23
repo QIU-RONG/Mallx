@@ -22,6 +22,7 @@ const router = createRouter({
         { path: 'orders', component: () => import('../views/OrderList.vue') },
         { path: 'orders/:id', component: () => import('../views/OrderDetail.vue') },
         { path: 'refunds', component: () => import('../views/RefundList.vue') },
+        { path: 'reviews', component: () => import('../views/ReviewList.vue') },
         { path: 'coupons', component: () => import('../views/CouponList.vue') },
         { path: 'users', component: () => import('../views/UserList.vue') },
         { path: 'roles', component: () => import('../views/RoleList.vue') },

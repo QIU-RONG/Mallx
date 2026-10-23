@@ -38,8 +38,8 @@ COUPON = os.path.join(APP, "src", "utils", "coupon.ts")
 CONFIRM = os.path.join(APP, "src", "utils", "confirm.ts")
 TREE = os.path.join(APP, "src", "utils", "tree.ts")
 
-# ★ 全库测试总数（Day 53 的 21 + 本日 26）；改动测试时必须同步这里
-EXPECTED_TOTAL = 47
+# ★ 全库测试总数（Day 53 的 21 + Day 54 的 26 + Day 55 的 menu 新用例 1 = 48）；改动测试时必须同步这里
+EXPECTED_TOTAL = 48
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 

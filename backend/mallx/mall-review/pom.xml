@@ -31,5 +31,14 @@
         <!-- ★ 刻意【不依赖】mall-product：
              order_items 已快照 product_name / sku_name / image，
              评价展示所需的商品信息全在订单域内（见 docs/daily/Day-16-商品评价.md §2.3）。 -->
+
+        <!-- ★ 父 pom 里那份只是【版本声明】，被测模块必须各自再引一次，
+             否则 src/test 下的类编译期找不到 JUnit/Mockito（表现为 0 条测试静默跳过）。
+             Day 55 起 mall-review 也有了单测（ReviewServiceImplTest：管理端列表夹紧 + 隐藏状态三层判据）。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

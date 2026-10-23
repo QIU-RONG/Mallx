@@ -30,6 +30,7 @@ export const ADMIN_MENUS: AdminMenuItem[] = [
   { path: '/brands', label: '品牌管理', perm: 'brand:list' },
   { path: '/orders', label: '订单管理' },
   { path: '/refunds', label: '售后管理', perm: 'refund:list' },
+  { path: '/reviews', label: '评价管理', perm: 'review:list' },
   { path: '/coupons', label: '优惠券', perm: 'coupon:list' },
   { path: '/users', label: '用户管理', perm: 'user:list' },
   { path: '/roles', label: '角色权限', perm: 'role:list' },

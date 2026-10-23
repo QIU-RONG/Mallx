@@ -114,5 +114,48 @@
           FROM reviews
          WHERE product_id = #{productId} AND status = 1
     </select>
+    <!--
+      ⑦ 管理端评价列表（Day 55）。要点：
+        · ★★ 没有 status = 1 —— 这正是它与 ③ 的全部差别：管理端要看得见已隐藏的
+        · 三个过滤条件都用 <if>（null = 不拼），全为 null 时就是「全站评价」
+        · LEFT JOIN users / order_items，字段集与 ReviewVO 相同 + r.status
+        · ORDER BY r.created_at DESC, r.id DESC（与 C 端同一个顺序）
+        · ★ 首参 IPage 由 Java 侧传，XML 里不写 LIMIT（自己写会双重分页）
+    -->
+    <select id="selectAdminReviews" resultType="com.mallx.review.vo.AdminReviewVO">
+        SELECT r.id, r.order_item_id, r.product_id, oi.product_name, oi.sku_name, oi.image,
+               r.rating, r.content,
+               COALESCE(u.nickname, '用户****') AS user_nickname,
+               r.status, r.created_at
+          FROM reviews r
+          LEFT JOIN users u ON u.id = r.user_id
+          LEFT JOIN order_items oi ON oi.id = r.order_item_id
+        <where>
+            <if test="productId != null">
+                AND r.product_id = #{productId}
+            </if>
+            <if test="rating != null">
+                AND r.rating = #{rating}
+            </if>
+            <if test="status != null">
+                AND r.status = #{status}
+            </if>
+        </where>
+         ORDER BY r.created_at DESC, r.id DESC
+    </select>
+
+    <!--
+      ⑧ 显示 / 隐藏一条评价（Day 55）。
+        · 只改 status 与 updated_at，绝不删行、绝不改 content
+          （平台可以不展示，但不该替用户改写他说过的话）
+        · ★ updated_at 必须手写：自定义 XML 的 UPDATE 不走 MetaObjectHandler
+        · 影响行数就是存在性判据：0 行 → 上层抛 404
+    -->
+    <update id="updateReviewStatus">
+        UPDATE reviews
+           SET status = #{status},
+               updated_at = CURRENT_TIMESTAMP
+         WHERE id = #{id}
+    </update>
 
 </mapper>

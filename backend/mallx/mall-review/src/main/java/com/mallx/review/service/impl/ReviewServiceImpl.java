@@ -10,6 +10,7 @@ import com.mallx.review.dto.ReviewCreateDTO;
 import com.mallx.review.entity.Review;
 import com.mallx.review.mapper.ReviewMapper;
 import com.mallx.review.service.ReviewService;
+import com.mallx.review.vo.AdminReviewVO;
 import com.mallx.review.vo.ReviewPageVO;
 import com.mallx.review.vo.ReviewVO;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -155,5 +156,51 @@ public class ReviewServiceImpl implements ReviewService {
 
         // ③ 没有聚合，字段集正好是分页四件套 —— 直接复用公共壳
         return PageResult.of(result);
+    }
+
+    /**
+     * 管理端评价列表（Day 55）。
+     *
+     * <p>★ 结构与 {@link #pageMine} 同构（夹紧 → 一次分页查询 → 包壳），
+     * 唯一的实质差别在 SQL：<b>不带归属条件、也不带 status = 1</b>
+     * （管理端要看得见已隐藏的，否则「隐藏」就是单向失明）。
+     */
+    @Override
+    public PageResult<AdminReviewVO> pageAdmin(long page, long size,
+                                               Long productId, Integer rating, Integer status) {
+        // ① 夹紧规则与另外两个分页方法逐字相同（★ 必须在 new Page 之前）
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+
+        // ② 三个过滤都可能为 null —— 由 XML 的 <if> 决定是否拼进 WHERE
+        IPage<AdminReviewVO> result = reviewMapper.selectAdminReviews(
+                new Page<>(safePage, safeSize), productId, rating, status);
+
+        // ③ 没有聚合，直接复用公共壳
+        return PageResult.of(result);
+    }
+
+    /**
+     * 显示 / 隐藏一条评价（Day 55）。
+     *
+     * <p>★★ 三层判据，顺序不能换：
+     * <pre>
+     *   ① status 为空或不在 {0,1} → 400（DTO 拦了第一次，这里防「绕过接口直接调 Service」）
+     *   ② UPDATE ... WHERE id = ?，返回 0 行 → 404（不存在，而不是「成功了但什么都没改」）
+     *   ③ 不删数据、不改 content —— 隐藏是可逆的
+     * </pre>
+     * <p>★ 用影响行数当判据，与项目一路的 CAS 写法同源：不「先 SELECT 判存在再 UPDATE」，
+     * 那会多一次往返，也给并发留了窗口。
+     */
+    @Override
+    public void updateStatus(Long id, Integer status) {
+        if (status == null || (status != 0 && status != 1)) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    "评价状态只能是 0（隐藏）或 1（显示）");
+        }
+        int rows = reviewMapper.updateReviewStatus(id, status);
+        if (rows == 0) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "评价不存在");
+        }
     }
 }

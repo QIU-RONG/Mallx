@@ -37,23 +37,24 @@ PROBE_DB = "mallx_strict_probe"    # ★ 临时库，跑完就删
 SQL_DIR = lp(r"D:\MallX\backend\sql")
 REPORT = lp(r"D:\MallX\backend\loadtest\day25-sql-strict-check-report.txt")
 
-# 18 份补丁的期望顺序（字典序恰好也是正确的执行序；15 = Day 28 搜索修复、17/18 = Day 46 退款售后）
+# 19 份补丁的期望顺序（字典序恰好也是正确的执行序；15 = Day 28 搜索修复、17/18 = Day 46 退款售后、
+# 19 = Day 55 评价审核权限）
 FILES = ["01-schema.sql", "02-index.sql", "03-data.sql", "04-review-constraints.sql",
          "05-admin-permissions.sql", "06-day17-fixtures.sql", "07-admin-permissions.sql",
          "08-marketing-permissions.sql", "09-user-coupons-unique.sql",
          "10-brand-permissions.sql", "11-order-discount.sql", "12-day22-permissions.sql",
          "13-day23-permissions.sql", "14-brand-crud-permissions.sql",
          "15-search-trgm-indexes.sql", "16-drop-dead-indexes.sql",
-         "17-refunds.sql", "18-refund-permissions.sql"]
+         "17-refunds.sql", "18-refund-permissions.sql", "19-review-permissions.sql"]
 
 # 满额护栏：文件清单被改动时立刻炸（防止「少跑一个文件却全绿」）
-EXPECTED_FILES = 18
+EXPECTED_FILES = 19
 # 满额护栏：断言条数（防止「有检查项根本没被执行到」被当成通过）
 EXPECTED_CHECKS = 16
 # 跑完全部补丁后的硬事实（与 day24-perm-apply.py 的 EXPECT_PERM_TOTAL 同源）
-# ⚠️ Day 46 新增 5 条退款权限（42–46）：41 → 46。改 backend/sql 里任何权限文件时，
+# ⚠️ Day 55 新增 2 条评价权限（47–48）：46 → 48。改 backend/sql 里任何权限文件时，
 #    本常量、day24-perm-apply.py 的同名常量、以及 ci.yml 那条「等 initdb」的判据必须一起改。
-EXPECT_PERM_TOTAL = 46
+EXPECT_PERM_TOTAL = 48
 
 lines = []
 say = lines.append

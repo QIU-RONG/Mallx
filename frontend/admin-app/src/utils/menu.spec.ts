@@ -12,11 +12,12 @@ import { ADMIN_MENUS, visibleMenus } from './menu'
  * 新角色只要登录就该看得到（见 `menu.ts` 的注释）。
  */
 describe('admin menu · visibleMenus', () => {
-  it('超级管理员（全码）→ 9 个入口全在', () => {
+  it('超级管理员（全码）→ 10 个入口全在', () => {
     const all = [
       'category:list',
       'brand:list',
       'refund:list',
+      'review:list',
       'coupon:list',
       'user:list',
       'role:list',
@@ -35,13 +36,18 @@ describe('admin menu · visibleMenus', () => {
     expect(labels).not.toContain('角色权限')
   })
 
+  it('★ review:list 才给「评价管理」入口（review:status 是另一个码，不带 list 就看不到页）', () => {
+    expect(visibleMenus(['review:status']).map((m) => m.label)).not.toContain('评价管理')
+    expect(visibleMenus(['review:list']).map((m) => m.label)).toContain('评价管理')
+  })
+
   it('每个菜单项的 path 唯一且以 / 开头（router 与菜单是同一份路径）', () => {
     const paths = ADMIN_MENUS.map((m) => m.path)
     expect(new Set(paths).size).toBe(paths.length)
     expect(paths.every((p) => p.startsWith('/'))).toBe(true)
   })
 
-  it('★ 挂 perm 的项数固定为 6（多出来的入口必须显式登记，不能偷偷绕过权限）', () => {
-    expect(ADMIN_MENUS.filter((m) => m.perm).length).toBe(6)
+  it('★ 挂 perm 的项数固定为 7（多出来的入口必须显式登记，不能偷偷绕过权限）', () => {
+    expect(ADMIN_MENUS.filter((m) => m.perm).length).toBe(7)
   })
 })
