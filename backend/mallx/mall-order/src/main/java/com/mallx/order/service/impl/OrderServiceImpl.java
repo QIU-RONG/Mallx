@@ -39,7 +39,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 
@@ -718,8 +720,42 @@ public class OrderServiceImpl implements OrderService {
                         //   再按 id 倒序，才能保证分页「不重不漏」而不是随机翻页。
                         .orderByDesc(Order::getId));
 
-        // convert 只做「记录行」的转换（count 不变），返回 IPage<OrderVO>，直接交给 PageResult.of
-        return PageResult.of(result.convert(this::toOrderVO));
+        // ★ Day 65：一次 IN 查询补齐「首件商品」摘要，不做 N+1。
+        //   列表页要让人一眼看到买了什么，而不是一串订单号。
+        List<OrderVO> voList = result.getRecords().stream().map(this::toOrderVO).toList();
+        fillFirstItem(voList);
+
+        PageResult<OrderVO> pageResult = new PageResult<>();
+        pageResult.setRecords(voList);
+        pageResult.setTotal(result.getTotal());
+        pageResult.setCurrent(result.getCurrent());
+        pageResult.setSize(result.getSize());
+        return pageResult;
+    }
+
+    /** 批量补首件商品摘要：一次 IN 查询 + 内存分组 */
+    private void fillFirstItem(List<OrderVO> voList) {
+        if (voList.isEmpty()) {
+            return;
+        }
+        List<Long> orderIds = voList.stream().map(OrderVO::getId).toList();
+        List<OrderItem> items = orderItemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
+                .in(OrderItem::getOrderId, orderIds)
+                .orderByAsc(OrderItem::getId));
+        Map<Long, List<OrderItem>> byOrder = new HashMap<>();
+        for (OrderItem item : items) {
+            byOrder.computeIfAbsent(item.getOrderId(), k -> new ArrayList<>()).add(item);
+        }
+        for (OrderVO vo : voList) {
+            List<OrderItem> list = byOrder.getOrDefault(vo.getId(), List.of());
+            vo.setItemCount(list.size());
+            if (!list.isEmpty()) {
+                OrderItem first = list.get(0);
+                vo.setFirstItemName(first.getProductName());
+                vo.setFirstItemSkuName(first.getSkuName());
+                vo.setFirstItemImage(first.getImage());
+            }
+        }
     }
 
     @Override

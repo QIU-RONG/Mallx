@@ -9,7 +9,11 @@ import java.time.LocalDateTime;
  * 订单列表行（GET /api/orders 的 records 元素）。
  *
  * <p>刻意【不含 userId】—— 同 AddressVO 的规矩：内部归属字段不外泄。
- * 收货信息带上是因为列表里用户要看「寄给谁」；明细不带（列表页不展开，避免 N+1）。
+ *
+ * <p>★★ Day 65：列表行补【首件商品摘要】。原因来自用户反馈：
+ * 「应该直接看到的是商品，而不是订单编号」—— 订单号是给客服对账的，
+ * 顾客认的是「我买的那台手机」。摘要是<b>首件商品</b>的名字/规格/图 + 总件数，
+ * 由 {@code OrderServiceImpl#listMyOrders} 用<b>一次 IN 查询</b>批量补，不做 N+1。
  */
 @Data
 public class OrderVO {
@@ -37,4 +41,16 @@ public class OrderVO {
     private String receiverAddress;
 
     private LocalDateTime createdAt;
+
+    /** 首件商品名（Day 65）；订单无明细时为 null */
+    private String firstItemName;
+
+    /** 首件商品规格名（Day 65） */
+    private String firstItemSkuName;
+
+    /** 首件商品图（Day 65） */
+    private String firstItemImage;
+
+    /** 该订单的明细行数（>1 时界面显示「等 N 件」） */
+    private Integer itemCount;
 }

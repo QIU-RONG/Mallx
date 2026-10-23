@@ -209,6 +209,12 @@ export interface OrderVO {
   receiverPhone: string
   receiverAddress: string
   createdAt: string
+  /** Day 65：列表首件商品摘要（后端一次 IN 查询批量补，不是前端 N+1） */
+  firstItemName?: string | null
+  firstItemSkuName?: string | null
+  firstItemImage?: string | null
+  /** 明细行数，>1 时列表显示「等 N 件」 */
+  itemCount?: number | null
 }
 
 export interface OrderDetailVO extends OrderVO {
