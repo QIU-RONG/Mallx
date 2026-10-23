@@ -105,10 +105,10 @@ function doSearch() {
 
       <div class="actions">
         <template v-if="auth.token">
-          <a class="a-link" @click="router.push('/orders')">订单</a>
-          <a class="a-link" @click="router.push('/refunds')">售后</a>
-          <a class="a-link" @click="router.push('/coupons')">券</a>
-          <a class="a-link" @click="logout">退出</a>
+          <a class="a-link a-link--account" @click="router.push('/orders')">订单</a>
+          <a class="a-link a-link--account" @click="router.push('/refunds')">售后</a>
+          <a class="a-link a-link--account" @click="router.push('/coupons')">券</a>
+          <a class="a-link a-link--account" @click="logout">退出</a>
         </template>
         <template v-else>
           <a class="a-link" @click="router.push('/login')">登录</a>
@@ -333,15 +333,38 @@ function doSearch() {
   flex: none;
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1199px) {
   .topbar-inner {
-    gap: 18px;
-  }
-  .cats {
     gap: 16px;
   }
+  .cats {
+    gap: 14px;
+  }
+  .cat {
+    font-size: 12.5px;
+  }
   .search {
-    width: 190px;
+    width: 200px;
+  }
+  /* ★ 中等宽度先把「已登录的四个文字入口」收掉（它们都能从购物车/订单页到达），
+     否则品类导航会被挤到半个字被切掉 —— 那看起来像坏掉，而不是像设计。
+     登录 / 注册 保留：未登录用户只有这两个入口。 */
+  .a-link--account {
+    display: none;
+  }
+  .actions {
+    gap: 12px;
+  }
+}
+@media (max-width: 1080px) {
+  .topbar-inner {
+    gap: 14px;
+  }
+  .cats {
+    gap: 12px;
+  }
+  .search {
+    width: 180px;
   }
 }
 @media (max-width: 860px) {
@@ -353,6 +376,15 @@ function doSearch() {
   }
   .search-go {
     display: none;
+  }
+}
+/* ★ 手机上顶栏装不下品类：直接收起，让用户用首页的分类下拉（功能不缺，只是换入口） */
+@media (max-width: 760px) {
+  .cats {
+    display: none;
+  }
+  .brand-word {
+    font-size: 18px;
   }
 }
 </style>
