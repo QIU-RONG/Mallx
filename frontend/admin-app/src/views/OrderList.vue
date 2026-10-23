@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import { adminOrderCancel, adminOrderDetail, adminOrderList, adminOrderShip } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { confirmAction } from '../utils/confirm'
 import type { AdminOrderVO, OrderDetailVO } from '../types/api'
 
 const auth = useAuthStore()
@@ -74,22 +75,34 @@ async function openDetail(row: AdminOrderVO) {
 
 /** ★ 发货：路径是 /api/orders/{id}/ship（C 端 Controller 里唯一挂权限码的方法） */
 async function ship(row: AdminOrderVO) {
-  await ElMessageBox.confirm(`确定对订单 ${row.orderNo} 执行发货？`, '提示', { type: 'warning' }).catch(
-    () => null,
-  )
-  await adminOrderShip(row.id)
-  ElMessage.success('已发货')
-  load()
+  const ok = await confirmAction(`确定对订单 ${row.orderNo} 执行发货？发货后状态不可回退。`, {
+    title: '确认发货',
+    confirmButtonText: '发货',
+  })
+  if (!ok) return
+  try {
+    await adminOrderShip(row.id)
+    ElMessage.success('已发货')
+    await load()
+  } catch {
+    /* 拦截器已提示 */
+  }
 }
 
 /** ★ 管理端取消仅对「待支付」生效，已支付会被后端 CAS 挡成 400 */
 async function cancel(row: AdminOrderVO) {
-  await ElMessageBox.confirm(`确定取消订单 ${row.orderNo}？`, '危险操作', { type: 'warning' }).catch(
-    () => null,
+  const ok = await confirmAction(
+    `确定取消订单 ${row.orderNo}？取消后库存会释放，订单不可恢复。`,
+    { title: '取消订单', confirmButtonText: '取消订单', type: 'error' },
   )
-  await adminOrderCancel(row.id)
-  ElMessage.success('已取消')
-  load()
+  if (!ok) return
+  try {
+    await adminOrderCancel(row.id)
+    ElMessage.success('已取消')
+    await load()
+  } catch {
+    /* 非待支付 / 无权限：拦截器已提示 */
+  }
 }
 
 onMounted(load)

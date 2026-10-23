@@ -39,7 +39,7 @@ HTTP = os.path.join(APP, "src", "api", "http.ts")
 AUTH = os.path.join(APP, "src", "stores", "auth.ts")
 ROUTER = os.path.join(APP, "src", "router", "index.ts")
 
-EXPECTED_TOTAL = 21
+EXPECTED_TOTAL = 47  # Day 53 时是 21；Day 54 新增 26 条（utils 三件套 + confirm），此处同步
 
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
 

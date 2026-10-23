@@ -2,18 +2,30 @@ import http from './http'
 import type {
   AdminOrderVO,
   AdminRefundVO,
+  BrandCreateDTO,
+  BrandUpdateDTO,
   BrandVO,
+  CategoryCreateDTO,
+  CategoryUpdateDTO,
   CategoryVO,
+  CouponCreateDTO,
+  CouponVO,
   DashboardOverviewVO,
   LoginData,
   OrderDetailVO,
   PageResult,
+  PermissionVO,
   ProductCreateDTO,
   ProductDetailVO,
   ProductUpdateDTO,
   ProductVO,
   Result,
+  RoleCreateDTO,
+  RoleDetailVO,
+  RoleUpdateDTO,
+  RoleVO,
   TrendPointVO,
+  UserVO,
 } from '../types/api'
 
 // ---------- 管理端认证（★ 与 C 端是两个独立入口） ----------
@@ -138,4 +150,113 @@ export function adminCategoryTree() {
 
 export function adminBrandList() {
   return http.get<never, Result<BrandVO[]>>('/admin/brands')
+}
+
+// ===================== 分类管理（Day 54） =====================
+/**
+ * ★ 分类与品牌的服务端返回形状不一致，别「统一」：
+ *   分类列表是【树】（children 嵌套），品牌是【平铺数组】。
+ *   把树拍平是在前端做的（utils/tree.ts），因为表格/下拉需要的是扁平行。
+ */
+export function adminCategoryCreate(payload: CategoryCreateDTO) {
+  return http.post<never, Result<number>>('/admin/categories', payload)
+}
+
+/** ★ 局部更新：parentId 传 null = 不动（后端 DTO 的既定语义），所以这里不强制带全字段 */
+export function adminCategoryUpdate(id: number | string, payload: CategoryUpdateDTO) {
+  return http.put<never, Result<void>>(`/admin/categories/${id}`, payload)
+}
+
+/** 删除是物理删 + 三重校验：有子分类 / 有商品引用（含软删）都会被后端 400 拒 */
+export function adminCategoryDelete(id: number | string) {
+  return http.delete<never, Result<void>>(`/admin/categories/${id}`)
+}
+
+// ===================== 品牌管理（Day 54） =====================
+export function adminBrandCreate(payload: BrandCreateDTO) {
+  return http.post<never, Result<number>>('/admin/brands', payload)
+}
+
+export function adminBrandUpdate(id: number | string, payload: BrandUpdateDTO) {
+  return http.put<never, Result<void>>(`/admin/brands/${id}`, payload)
+}
+
+/** 删除是物理删：该品牌下仍有商品（含软删商品）时后端 400 */
+export function adminBrandDelete(id: number | string) {
+  return http.delete<never, Result<void>>(`/admin/brands/${id}`)
+}
+
+// ===================== 优惠券管理（Day 54） =====================
+/**
+ * ⚠️ 分页参数是 `page` 而不是 `current` —— 券的 Controller 与商品/订单/用户
+ * 用的是两套参数名，照着真实签名写，别按习惯统一。
+ */
+export function adminCouponList(params: { page: number; size: number; status?: number | null }) {
+  return http.get<never, Result<PageResult<CouponVO>>>('/admin/coupons', { params })
+}
+
+/** 建券：面额字段互斥，请求体必须先过 utils/coupon.ts#buildCouponPayload */
+export function adminCouponCreate(payload: CouponCreateDTO) {
+  return http.post<never, Result<number>>('/admin/coupons', payload)
+}
+
+/** ★ 已被 user_coupons 引用过的券删不掉（后端 400，不是 500） */
+export function adminCouponDelete(id: number | string) {
+  return http.delete<never, Result<void>>(`/admin/coupons/${id}`)
+}
+
+// ===================== 用户管理（Day 54） =====================
+export function adminUserPage(params: {
+  current: number
+  size: number
+  keyword?: string
+  status?: number | null
+}) {
+  return http.get<never, Result<PageResult<UserVO>>>('/admin/users', { params })
+}
+
+/** 管理端详情：已禁用的用户也能看 */
+export function adminUserDetail(id: number | string) {
+  return http.get<never, Result<UserVO>>(`/admin/users/${id}`)
+}
+
+/** ★ 定点端点（PUT /{id}/status），不是「编辑用户」：只改状态，不会覆盖昵称 */
+export function adminUserUpdateStatus(id: number | string, status: number) {
+  return http.put<never, Result<void>>(`/admin/users/${id}/status`, { status })
+}
+
+// ===================== 角色 / 权限（Day 54） =====================
+export function adminRolePage(params: { current: number; size: number; keyword?: string }) {
+  return http.get<never, Result<PageResult<RoleVO>>>('/admin/roles', { params })
+}
+
+/** 详情多带 permissionIds / permissionCodes —— 分配权限时的回显来源 */
+export function adminRoleDetail(id: number | string) {
+  return http.get<never, Result<RoleDetailVO>>(`/admin/roles/${id}`)
+}
+
+export function adminRoleCreate(payload: RoleCreateDTO) {
+  return http.post<never, Result<number>>('/admin/roles', payload)
+}
+
+/** 编辑：name / description / status；★ code 不可改（DTO 里就没有它） */
+export function adminRoleUpdate(id: number | string, payload: RoleUpdateDTO) {
+  return http.put<never, Result<void>>(`/admin/roles/${id}`, payload)
+}
+
+export function adminRoleDelete(id: number | string) {
+  return http.delete<never, Result<void>>(`/admin/roles/${id}`)
+}
+
+/**
+ * 给角色【全量替换】权限：传的是「改完之后要有的全集」，不是增量。
+ * ★ 对 SUPER_ADMIN：目标集合必须是现有集合的超集，否则后端 400（护栏②）。
+ */
+export function adminRoleAssignPermissions(id: number | string, permissionIds: number[]) {
+  return http.put<never, Result<void>>(`/admin/roles/${id}/permissions`, { permissionIds })
+}
+
+/** 权限字典（不分页）—— 给分配权限对话框渲染勾选框 */
+export function adminPermissionList() {
+  return http.get<never, Result<PermissionVO[]>>('/admin/permissions')
 }

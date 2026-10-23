@@ -163,13 +163,48 @@ export interface CategoryVO {
   id: number
   name: string
   parentId?: number
+  /** 越小越靠前；0 = 默认（Day 54 管理页要显示与编辑它） */
+  sortOrder?: number
   children?: CategoryVO[]
+}
+
+/** 新增分类（CategoryCreateDTO）：parentId 不传 = 顶级；只允许两级 */
+export interface CategoryCreateDTO {
+  parentId?: number | null
+  name: string
+  sortOrder?: number
+}
+
+/** 修改分类（CategoryUpdateDTO）：★ parentId 传 null 一律按「不动」处理，改不了层级 */
+export interface CategoryUpdateDTO {
+  parentId?: number | null
+  name?: string
+  sortOrder?: number
 }
 
 export interface BrandVO {
   id: number
   name: string
   logo?: string
+  description?: string
+  /** 1 = 启用，0 = 停用；管理端两个都返回（要能重新启用） */
+  status: number
+}
+
+/** 新增品牌（BrandCreateDTO）：name 有 UNIQUE，重名由后端翻成 400 */
+export interface BrandCreateDTO {
+  name: string
+  logo?: string
+  description?: string
+  status?: number
+}
+
+/** 修改品牌（BrandUpdateDTO）：status 不传 = 不动（★ 不是「停用」） */
+export interface BrandUpdateDTO {
+  name?: string
+  logo?: string
+  description?: string
+  status?: number
 }
 
 // ===================== 售后 / 退款（Day 46） =====================
@@ -202,4 +237,101 @@ export interface AdminRefundVO {
   receivedAt?: string
   refundedAt?: string
   createdAt?: string
+}
+
+// ===================== 优惠券（Day 54 管理页） =====================
+export type CouponType = 'FIXED' | 'DISCOUNT'
+
+/**
+ * 券（CouponVO，管理端列表与 C 端可领列表共用同一份字段）。
+ *
+ * ★ 管理端与 C 端的差别只在 WHERE（管理端含下架券），不在 VO ——
+ *   所以 `status` 在 C 端恒为 1、在管理端才有 0。
+ */
+export interface CouponVO {
+  id: number
+  name: string
+  type: CouponType
+  discountAmount?: number | null
+  /** 应付比例系数：0.8 = 打 8 折（不是 80） */
+  discountRate?: number | null
+  minAmount?: number | null
+  totalCount: number
+  receivedCount: number
+  startTime: string
+  endTime: string
+  status: number
+}
+
+/**
+ * 新建券（CouponCreateDTO）。
+ * ★ 两个面额字段【互斥】：FIXED 只准带 discountAmount、DISCOUNT 只准带 discountRate，
+ *   同时出现会被后端 400。前端由 `utils/coupon.ts#buildCouponPayload` 保证。
+ */
+export interface CouponCreateDTO {
+  name: string
+  type: CouponType
+  discountAmount?: number
+  discountRate?: number
+  minAmount?: number
+  totalCount: number
+  startTime: string
+  endTime: string
+}
+
+// ===================== 用户（Day 54 管理页） =====================
+/** 用户可公开字段（UserVO）—— ★ 刻意不含 password，这是它存在的理由 */
+export interface UserVO {
+  id: number
+  username: string
+  nickname?: string
+  phone?: string
+  email?: string
+  /** 1 = 正常，0 = 已禁用 */
+  status: number
+  createdAt?: string
+}
+
+// ===================== RBAC（Day 54 管理页） =====================
+export interface RoleVO {
+  id: number
+  name: string
+  /** UNIQUE；★ 不可改 —— 它已经以 ROLE_xxx 的形式签进了存量 token */
+  code: string
+  description?: string
+  status: number
+  createdAt?: string
+}
+
+export interface RoleDetailVO extends RoleVO {
+  /** 该角色当前绑定的权限 id（分配权限对话框的回显依据） */
+  permissionIds: number[]
+  permissionCodes: string[]
+}
+
+export interface RoleCreateDTO {
+  name: string
+  code: string
+  description?: string
+}
+
+/** 编辑角色（RoleUpdateDTO）：★ 不含 code */
+export interface RoleUpdateDTO {
+  name?: string
+  description?: string
+  status?: number
+}
+
+/**
+ * 权限项（PermissionVO）—— 字典，只读。
+ * ★ 权限码是代码资产：每一行 code 都必须有一个 @PreAuthorize 引用它，界面不许造码。
+ */
+export interface PermissionVO {
+  id: number
+  name: string
+  code: string
+  type: string
+  path?: string
+  method?: string
+  status: number
 }

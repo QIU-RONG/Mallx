@@ -1,13 +1,26 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
+import { confirmAction } from '../utils/confirm'
+import { visibleMenus } from '../utils/menu'
 
 const auth = useAuthStore()
 const router = useRouter()
 
+/**
+ * ★ 菜单 = 纯数据（utils/menu.ts）+ 当前权限码。好处有两个：
+ *   ① 增删入口只改一处，不会出现「路由加了、菜单忘了」；
+ *   ② 显隐规则可以被单测钉住（menu.spec.ts），而模板里的 v-if 链不行。
+ * ⚠️ 仍然只是体验：直接敲 URL 会被后端 @PreAuthorize 挡成 403（管理端 403 是常态）。
+ */
+const menus = computed(() => visibleMenus(auth.perms))
+
 async function onExit() {
-  await ElMessageBox.confirm('确定退出管理后台？', '提示', { type: 'warning' }).catch(() => null)
+  // ★ 同一类事故：旧写法 confirm().catch(() => null) 会让「取消」也退出登录
+  const ok = await confirmAction('确定退出管理后台？', { title: '退出登录' })
+  if (!ok) return
   auth.logout()
   ElMessage.success('已退出')
   router.push('/login')
@@ -23,12 +36,11 @@ async function onExit() {
         <span class="brand-text">MallX 管理后台</span>
       </div>
       <el-menu router :default-active="$route.path" class="menu">
-        <el-menu-item index="/dashboard">概览</el-menu-item>
-        <el-menu-item index="/products">商品管理</el-menu-item>
-        <el-menu-item index="/orders">订单管理</el-menu-item>
-        <!-- ★ 售后入口按权限码显隐：没有 refund:list 的人连菜单都看不到
-             （只是体验 —— 直接敲 URL 也会被后端 @PreAuthorize 挡成 403） -->
-        <el-menu-item v-if="auth.hasPerm('refund:list')" index="/refunds">售后管理</el-menu-item>
+        <!-- ★ 菜单项来自 utils/menu.ts：入口与权限码的对应关系只有一处，
+             且被 menu.spec.ts 锁着（写错一个字符 = 入口静默消失） -->
+        <el-menu-item v-for="m in menus" :key="m.path" :index="m.path">
+          {{ m.label }}
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
@@ -60,6 +72,9 @@ async function onExit() {
 }
 .aside {
   background: var(--admin-aside-bg);
+  /* ★ 菜单项变多之后，999 高度的窗口放不下：让菜单自己滚，而不是把「退出」顶出视口 */
+  display: flex;
+  flex-direction: column;
 }
 .brand {
   height: 60px;
@@ -103,6 +118,8 @@ async function onExit() {
 .menu {
   border-right: none;
   background: var(--admin-aside-bg);
+  flex: 1;
+  overflow-y: auto;
   --el-menu-bg-color: var(--admin-aside-bg);
   --el-menu-text-color: rgba(255, 255, 255, 0.72);
   --el-menu-hover-text-color: #fff;

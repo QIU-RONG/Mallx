@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import {
   adminBrandList,
   adminCategoryTree,
@@ -10,6 +10,8 @@ import {
   adminProductUpdate,
 } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { confirmAction } from '../utils/confirm'
+import { flattenCategories } from '../utils/tree'
 import type { BrandVO, CategoryVO, ProductVO, SkuCreateDTO } from '../types/api'
 
 const auth = useAuthStore()
@@ -22,18 +24,8 @@ const loading = ref(false)
 const categories = ref<CategoryVO[]>([])
 const brands = ref<BrandVO[]>([])
 
-/** 树拍平后给 el-select 用（父在前，缩进靠 label 前缀区分） */
-const flatCategories = computed(() => {
-  const out: CategoryVO[] = []
-  const walk = (list: CategoryVO[], depth: number) => {
-    for (const c of list) {
-      out.push({ ...c, name: `${'　'.repeat(depth)}${c.name}` })
-      if (c.children?.length) walk(c.children, depth + 1)
-    }
-  }
-  walk(categories.value, 0)
-  return out
-})
+/** 树拍平后给 el-select 用（父在前、子级全角空格缩进）—— 与分类管理页同一个实现 */
+const flatCategories = computed(() => flattenCategories(categories.value))
 
 async function load() {
   loading.value = true
@@ -162,12 +154,20 @@ async function toggleStatus(row: ProductVO) {
 }
 
 async function remove(row: ProductVO) {
-  await ElMessageBox.confirm(`确定删除商品「${row.name}」？`, '危险操作', { type: 'warning' }).catch(
-    () => null,
-  )
-  await adminProductDelete(row.id)
-  ElMessage.success('已删除（软删）')
-  load()
+  // ★ 旧写法 `confirm().catch(() => null)` 会把「取消」也当成继续执行 —— 用了共享工具
+  const ok = await confirmAction(`确定删除商品「${row.name}」？删除是软删，可人工恢复。`, {
+    title: '删除商品',
+    confirmButtonText: '删除',
+    type: 'error',
+  })
+  if (!ok) return
+  try {
+    await adminProductDelete(row.id)
+    ElMessage.success('已删除（软删）')
+    await load()
+  } catch {
+    /* 拦截器已提示 */
+  }
 }
 
 onMounted(() => {

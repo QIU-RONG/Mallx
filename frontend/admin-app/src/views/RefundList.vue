@@ -9,6 +9,7 @@ import {
   adminRefundReject,
 } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { confirmAction } from '../utils/confirm'
 import type { AdminRefundVO } from '../types/api'
 
 const auth = useAuthStore()
@@ -103,21 +104,26 @@ async function doReject(row: AdminRefundVO) {
 }
 
 async function doReceive(row: AdminRefundVO) {
-  await ElMessageBox.confirm(
-    `确认已收到退货？物流单号 ${row.trackingNo || '-'}`,
-    '确认收货',
-    { type: 'warning' },
-  ).catch(() => null)
+  const ok = await confirmAction(
+    `确认已收到退货？物流单号 ${row.trackingNo || '-'}\n确认后即可执行退款。`,
+    { title: '确认收货', confirmButtonText: '确认收货' },
+  )
+  if (!ok) return
   await attempt(adminRefundReceive(row.id), '已收货，可执行退款')
 }
 
 /** ★★★ 动钱的动作：二次确认必须写清后果，并说明它【不可撤销】 */
 async function doExecute(row: AdminRefundVO) {
-  await ElMessageBox.confirm(
+  const ok = await confirmAction(
     `将向买家退还 ¥${row.amount}，并回补库存 / 退还优惠券。\n该操作不可撤销，确定继续？`,
-    '执行退款',
-    { type: 'warning', confirmButtonText: '确认退款', cancelButtonText: '再想想' },
-  ).catch(() => null)
+    {
+      title: '执行退款',
+      type: 'error',
+      confirmButtonText: '确认退款',
+      cancelButtonText: '再想想',
+    },
+  )
+  if (!ok) return
   await attempt(adminRefundExecute(row.id), '退款成功')
 }
 
