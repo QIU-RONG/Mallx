@@ -89,6 +89,7 @@ set AI_MODEL=deepseek-chat
    该用文件写入工具，别用 shell 管道改源码。
 4. **jar 被运行中的后端锁住**，`mvn package` 报 `Unable to rename`。先停进程再打包。
 5. **开发模式提示重复**：后端拼进正文 + 前端还显示 meta 标签。改为一处（前端 meta）。
+6. **dev server 缓存了旧 App.vue**：新增 <AiChat /> 后页面里没有挂件，而 prod build 正常。/src/App.vue 返回的内容已含 import，但长时间运行的 Vite 实例模块图没失效（写文件是原子替换，Windows 下 watcher 可能漏事件）⇒ **重启 dev server 即恢复**。判断方法：CDP 里 document.querySelector('.fab') 为 null 且控制台无报错。
 
 ## 8. 没做的
 
