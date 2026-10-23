@@ -106,7 +106,9 @@ function doSearch() {
       <div class="actions">
         <template v-if="auth.token">
           <a class="a-link a-link--account" @click="router.push('/account')">个人中心</a>
-          <a class="a-link a-link--account" @click="logout">退出</a>
+          <!-- ★ 「退出」单独一个类：中等宽度先收它（个人中心里也有退出），
+               而不是把「个人中心」一起藏掉 -->
+          <a class="a-link a-link--exit" @click="logout">退出</a>
         </template>
         <template v-else>
           <a class="a-link" @click="router.push('/login')">登录</a>
@@ -162,7 +164,7 @@ function doSearch() {
   padding: 0 20px;
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 18px;
 }
 
 /* ───── 品牌 ───── */
@@ -207,7 +209,7 @@ function doSearch() {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 22px;
+  gap: 16px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -252,6 +254,7 @@ function doSearch() {
   border-radius: var(--mx-btn-r);
   background: var(--mx-surface);
   overflow: hidden;
+  width: 210px;
   transition: border-color 0.18s var(--mx-ease);
 }
 .search:focus-within {
@@ -344,10 +347,9 @@ function doSearch() {
   .search {
     width: 200px;
   }
-  /* ★ 中等宽度先把「已登录的四个文字入口」收掉（它们都能从购物车/订单页到达），
-     否则品类导航会被挤到半个字被切掉 —— 那看起来像坏掉，而不是像设计。
-     登录 / 注册 保留：未登录用户只有这两个入口。 */
-  .a-link--account {
+  /* ★ 中等宽度先收「退出」（个人中心左侧导航里也有退出），保留「个人中心」；
+     未登录的「登录 / 注册」必须保留 —— 那是匿名用户唯一的入口。 */
+  .a-link--exit {
     display: none;
   }
   .actions {
@@ -363,6 +365,9 @@ function doSearch() {
   }
   .search {
     width: 180px;
+  }
+  .a-link--account {
+    display: none;
   }
 }
 @media (max-width: 860px) {
