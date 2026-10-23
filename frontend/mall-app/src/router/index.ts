@@ -53,6 +53,7 @@ const router = createRouter({
         { path: 'orders', component: () => import('../views/OrderList.vue') },
         { path: 'refunds', component: () => import('../views/MyRefunds.vue') },
         { path: 'coupons', component: () => import('../views/Coupons.vue') },
+        { path: 'reviews', component: () => import('../views/MyReviews.vue') },
         { path: 'addresses', component: () => import('../views/AccountAddresses.vue') },
         { path: 'profile', component: () => import('../views/AccountProfile.vue') },
       ],

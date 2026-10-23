@@ -156,6 +156,30 @@ export interface AiChatTurn {
   content: string
 }
 
+/** 商品评价（ReviewVO）—— 公开列表与「我的评价」共用同一份字段 */
+export interface ReviewVO {
+  id: number
+  orderItemId: number
+  productId: number
+  productName?: string
+  skuName?: string
+  image?: string
+  rating: number
+  content?: string
+  userNickname?: string
+  createdAt?: string
+}
+
+/** 商品评价列表（带聚合） */
+export interface ReviewPageVO {
+  avgRating?: number | null
+  reviewCount: number
+  records: ReviewVO[]
+  total: number
+  current: number
+  size: number
+}
+
 export interface OrderItemVO {
   id: number
   orderId: number

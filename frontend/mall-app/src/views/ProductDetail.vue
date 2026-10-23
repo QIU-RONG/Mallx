@@ -2,9 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { cartAdd, productDetail } from '../api'
+import { cartAdd, productDetail, productReviews } from '../api'
 import ProductThumb from '../components/ProductThumb.vue'
-import type { ProductDetailVO, SkuVO } from '../types/api'
+import type { ProductDetailVO, ReviewVO, SkuVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
 
 const route = useRoute()
@@ -33,6 +33,41 @@ const saved = computed(() => {
   return diff > 0 ? diff : 0
 })
 
+// ---------------- 用户评价（Day 61） ----------------
+const REVIEW_SIZE = 5
+const reviews = ref<ReviewVO[]>([])
+const reviewAvg = ref(0)
+const reviewCount = ref(0)
+const reviewTotal = ref(0)
+const reviewPage = ref(1)
+const reviewLoading = ref(false)
+
+async function loadReviews(reset = false) {
+  if (reset) {
+    reviewPage.value = 1
+    reviews.value = []
+  }
+  reviewLoading.value = true
+  try {
+    const j = await productReviews(route.params.id as string, reviewPage.value, REVIEW_SIZE)
+    reviewAvg.value = Number(j.data.avgRating || 0)
+    reviewCount.value = j.data.reviewCount
+    reviewTotal.value = j.data.total
+    reviews.value = reset ? j.data.records : [...reviews.value, ...j.data.records]
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+function moreReviews() {
+  reviewPage.value += 1
+  loadReviews()
+}
+
+function fmtTime(s?: string) {
+  return s ? s.replace('T', ' ').slice(0, 16) : ''
+}
+
 onMounted(async () => {
   loading.value = true
   try {
@@ -44,6 +79,8 @@ onMounted(async () => {
   } finally {
     loading.value = false
   }
+  // ★ 评价是公开接口，不阻塞商品主体渲染失败
+  loadReviews(true)
 })
 
 function pickMain(url: string) {
@@ -160,6 +197,38 @@ async function addToCart() {
       <section class="desc-section">
         <p class="sec-label">商品详情</p>
         <p class="desc-body">{{ vo.description || '（暂无详情）' }}</p>
+      </section>
+
+      <!-- ═══════ 用户评价（Day 61） ═══════ -->
+      <section class="reviews-section">
+        <div class="reviews-head">
+          <p class="sec-label">用户评价</p>
+          <div class="review-summary">
+            <el-rate :model-value="reviewAvg" disabled size="small" />
+            <span class="avg mx-serif">{{ reviewAvg.toFixed(1) }}</span>
+            <span class="count">{{ reviewCount }} 条评价</span>
+          </div>
+        </div>
+
+        <div v-loading="reviewLoading" class="reviews-body">
+          <el-empty v-if="!reviews.length && !reviewLoading" description="还没有评价，买过的人可以说两句" />
+
+          <article v-for="r in reviews" :key="r.id" class="review">
+            <div class="avatar">{{ (r.userNickname || '匿').charAt(0) }}</div>
+            <div class="review-main">
+              <div class="review-top">
+                <span class="nick">{{ r.userNickname || '匿名用户' }}</span>
+                <el-rate :model-value="r.rating" disabled size="small" />
+                <span class="time">{{ fmtTime(r.createdAt) }}</span>
+              </div>
+              <p class="review-content">{{ r.content || '（未填写文字）' }}</p>
+            </div>
+          </article>
+
+          <button v-if="reviews.length < reviewTotal" class="more-btn" type="button" @click="moreReviews">
+            查看更多评价（{{ reviews.length }} / {{ reviewTotal }}）
+          </button>
+        </div>
       </section>
     </template>
   </div>
@@ -387,6 +456,97 @@ async function addToCart() {
   font-size: 14px;
   margin: 0;
   max-width: 760px;
+}
+
+/* ───── 用户评价 ───── */
+.reviews-section {
+  margin-top: 56px;
+  padding-top: 32px;
+  border-top: 1px solid var(--mx-line);
+}
+.reviews-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.review-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.review-summary .avg {
+  font-size: 22px;
+  color: var(--mx-ink);
+}
+.review-summary .count {
+  font-size: 12px;
+  color: var(--mx-ink-3);
+}
+.reviews-body {
+  margin-top: 8px;
+  min-height: 60px;
+}
+.review {
+  display: flex;
+  gap: 14px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--mx-line-soft);
+}
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--mx-line-soft);
+  color: var(--mx-ink-2);
+  font-family: Georgia, 'Times New Roman', serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.review-main {
+  flex: 1;
+  min-width: 0;
+}
+.review-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.nick {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mx-ink);
+}
+.time {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--mx-ink-3);
+}
+.review-content {
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--mx-ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.more-btn {
+  margin-top: 18px;
+  height: 38px;
+  padding: 0 18px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-btn-r);
+  background: var(--mx-surface);
+  color: var(--mx-ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.more-btn:hover {
+  border-color: var(--mx-ink-3);
 }
 
 @media (max-width: 980px) {

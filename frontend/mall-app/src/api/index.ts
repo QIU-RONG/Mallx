@@ -16,6 +16,8 @@ import type {
   ProductVO,
   RefundVO,
   Result,
+  ReviewPageVO,
+  ReviewVO,
   SmsSendData,
   UserCouponVO,
   UserVO,
@@ -135,6 +137,28 @@ export function userMe() {
 /** 改昵称：@NotBlank + 最长 50（后端 NicknameUpdateDTO），空串会被挡 */
 export function userUpdateNickname(nickname: string) {
   return http.put<never, Result<void>>('/users/me/nickname', { nickname })
+}
+
+// ---------- 商品评价（Day 61） ----------
+/** 商品评价列表：公开（游客可看），带平均分与总数 */
+export function productReviews(productId: number | string, page = 1, size = 5) {
+  return http.get<never, Result<ReviewPageVO>>(`/products/${productId}/reviews`, {
+    params: { page, size },
+  })
+}
+
+/**
+ * 发表评价。
+ * ★ 只能评「自己的、已完成的订单明细」且一条明细只能评一次 —— 这三条都在后端守。
+ * ★ 入参刻意没有 productId：商品由 orderItemId 反查（防「一单刷全站」）。
+ */
+export function createReview(orderItemId: number, rating: number, content: string) {
+  return http.post<never, Result<ReviewVO>>('/reviews', { orderItemId, rating, content })
+}
+
+/** 我的评价（需登录） */
+export function myReviews(page = 1, size = 10) {
+  return http.get<never, Result<PageResult<ReviewVO>>>('/reviews/my', { params: { page, size } })
 }
 
 // ---------- AI 客服（Day 59） ----------

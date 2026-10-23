@@ -2,8 +2,8 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { orderCancel, orderConfirm, orderDetail, payOrder, refundApply } from '../api'
-import type { OrderDetailVO, OrderStatus } from '../types/api'
+import { createReview, orderCancel, orderConfirm, orderDetail, payOrder, refundApply } from '../api'
+import type { OrderDetailVO, OrderItemVO, OrderStatus } from '../types/api'
 import ProductThumb from '../components/ProductThumb.vue'
 
 const route = useRoute()
@@ -50,6 +50,43 @@ async function confirm() {
   await orderConfirm(vo.value.id)
   ElMessage.success('已完成')
   load()
+}
+
+// ===================== 评价（Day 61） =====================
+/**
+ * ★ 只能评【已完成的订单】里的明细，而且一条明细只能评一次 ——
+ *   这两条都在后端守（GET buyContext 校验状态 + reviews 表的唯一约束）：
+ *   前端这里只是「不给用户一个注定失败的按钮」。
+ */
+const reviewVisible = ref(false)
+const reviewItem = ref<OrderItemVO | null>(null)
+const reviewRating = ref(5)
+const reviewContent = ref('')
+const reviewSubmitting = ref(false)
+
+function openReview(row: OrderItemVO) {
+  reviewItem.value = row
+  reviewRating.value = 5
+  reviewContent.value = ''
+  reviewVisible.value = true
+}
+
+async function submitReview() {
+  if (!reviewItem.value) return
+  if (!reviewRating.value) {
+    ElMessage.warning('请先打分')
+    return
+  }
+  reviewSubmitting.value = true
+  try {
+    await createReview(reviewItem.value.id, reviewRating.value, reviewContent.value.trim())
+    ElMessage.success('评价成功，感谢反馈')
+    reviewVisible.value = false
+  } catch {
+    /* 「已评价过」/ 网络错误：拦截器已提示 */
+  } finally {
+    reviewSubmitting.value = false
+  }
 }
 
 // ===================== 申请售后（Day 46） =====================
@@ -153,6 +190,11 @@ onMounted(load)
           <el-table-column label="小计" width="120">
             <template #default="{ row }">¥{{ row.totalAmount }}</template>
           </el-table-column>
+          <el-table-column v-if="vo.status === 'COMPLETED'" label="评价" width="100">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openReview(row)">评价</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </el-card>
 
@@ -190,6 +232,39 @@ onMounted(load)
         <el-button type="primary" @click="submitApply">提交申请</el-button>
       </template>
     </el-dialog>
+
+    <!-- 评价（Day 61） -->
+    <el-dialog v-model="reviewVisible" title="评价商品" width="520px">
+      <div v-if="reviewItem" class="review-product">
+        <div class="pic">
+          <ProductThumb :src="reviewItem.image" :name="reviewItem.productName" :seed="reviewItem.skuId" />
+        </div>
+        <div>
+          <div class="review-name">{{ reviewItem.productName }}</div>
+          <div class="hint">{{ reviewItem.skuName }}</div>
+        </div>
+      </div>
+      <el-form label-position="top">
+        <el-form-item label="评分">
+          <el-rate v-model="reviewRating" />
+        </el-form-item>
+        <el-form-item label="评价内容">
+          <el-input
+            v-model="reviewContent"
+            type="textarea"
+            :rows="4"
+            maxlength="500"
+            show-word-limit
+            placeholder="说说这件商品怎么样（可选）"
+          />
+        </el-form-item>
+      </el-form>
+      <div class="hint">评价会展示在商品详情页，提交后不可修改。</div>
+      <template #footer>
+        <el-button @click="reviewVisible = false">取消</el-button>
+        <el-button type="primary" :loading="reviewSubmitting" @click="submitReview">提交评价</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -218,6 +293,21 @@ onMounted(load)
 .hint {
   color: var(--mx-ink-3);
   font-size: 12px;
+}
+
+/* 评价弹窗里的商品行（与明细行同一套视觉） */
+.review-product {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--mx-line-soft);
+}
+.review-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mx-ink);
 }
 .actions {
   margin-top: 16px;
