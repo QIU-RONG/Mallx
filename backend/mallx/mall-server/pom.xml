@@ -63,6 +63,11 @@
             <groupId>com.mallx</groupId>
             <artifactId>mall-aftersale</artifactId>
         </dependency>
+        <!-- Day 59 · AI 客服：只读工具（搜商品 / 我的订单 / 我的售后） -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-ai</artifactId>
+        </dependency>
         <!-- V1.1 · D37：Redis 缓存基建。★ 只声明在启动模块 —— RedisAutoConfiguration
              在应用层生效，各业务模块（mall-product 等）编译期需要时再各自声明依赖。 -->
         <dependency>

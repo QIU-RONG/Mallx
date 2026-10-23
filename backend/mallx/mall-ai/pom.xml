@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mallx</groupId>
+        <artifactId>mallx</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>mall-ai</artifactId>
+    <name>mall-ai</name>
+    <description>MallX AI 客服：售前导购 + 售后查询（只读工具，模型不直接读库）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-common</artifactId>
+        </dependency>
+
+        <!-- 工具的数据来源：商品搜索 / 我的订单 / 我的售后 -->
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-product</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-order</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mallx</groupId>
+            <artifactId>mall-aftersale</artifactId>
+        </dependency>
+
+        <!-- ★ 父 pom 里那份只是版本声明，被测模块必须各自再引一次，
+             否则 src/test 下的类编译期找不到 JUnit/Mockito（表现为 0 条测试静默跳过） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

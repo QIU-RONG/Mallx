@@ -51,6 +51,20 @@ mallx:
     #   那里是 `${JWT_SECRET}` 不带兜底 ⇒ 没设就启动失败（不会静默用这个密钥）。
     secret: ${JWT_SECRET:mallx-dev-secret-key-please-change-me-2026}
     expire-minutes: 120
+  # ==========================================================================
+  # AI 客服（Day 59）
+  # --------------------------------------------------------------------------
+  # ★ api-key 为空 ⇒ 整个模块走 mock（规则 + 真实工具），本地与 CI 都能测；
+  #   配了 key 就切真实模型，代码零改动。
+  # ★ 走 OpenAI 兼容协议：DeepSeek / OpenAI / 通义 / 本地 vLLM 都只是改这三个环境变量。
+  # ==========================================================================
+  ai:
+    base-url: ${AI_BASE_URL:https://api.deepseek.com/v1}
+    api-key: ${AI_API_KEY:}
+    model: ${AI_MODEL:deepseek-chat}
+    max-tool-rounds: 3
+    timeout-seconds: 20
+    rate-per-minute: 20
   order:
     # D41：延迟关单消息的 TTL（毫秒）。与 OrderTimeoutTask 的 2 分钟扫描兜底对齐；
     # 验收时用 ORDER_CLOSE_DELAY_MS 环境变量压短（如 5000）来证明 MQ 路径快于扫描。

@@ -142,6 +142,20 @@ export interface UserVO {
   createdAt?: string
 }
 
+/** AI 客服回答（POST /api/ai/chat） */
+export interface AiChatReply {
+  reply: string
+  /** mock = 未接大模型（规则回复）；llm = 真实模型 */
+  mode: 'mock' | 'llm' | string
+  /** 本轮执行过的工具名 */
+  tools: string[]
+}
+
+export interface AiChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface OrderItemVO {
   id: number
   orderId: number

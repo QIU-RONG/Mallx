@@ -33,6 +33,9 @@
         <!-- Day 46 · 售后（退款 / 退货退款）。★ 必须排在 mall-server 【之前】：
              mall-server 是本模块的唯一消费者，Maven 的反应堆按声明顺序构建。 -->
         <module>mall-aftersale</module>
+        <!-- Day 59 · AI 客服。★ 排在 mall-server 之前：它依赖 product/order/aftersale，
+             而 server 是它的唯一消费者。 -->
+        <module>mall-ai</module>
         <module>mall-server</module>
     </modules>
 
@@ -103,6 +106,12 @@
             <dependency>
                 <groupId>com.mallx</groupId>
                 <artifactId>mall-aftersale</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <!-- Day 59 · AI 客服（依赖 product / order / aftersale，只被 server 依赖） -->
+            <dependency>
+                <groupId>com.mallx</groupId>
+                <artifactId>mall-ai</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

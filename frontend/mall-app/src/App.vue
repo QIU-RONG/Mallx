@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { useCartStore } from './stores/cart'
 import { useCatalogStore } from './stores/catalog'
+import AiChat from './components/AiChat.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -148,6 +149,9 @@ function doSearch() {
       <component :is="Component" />
     </transition>
   </router-view>
+
+  <!-- ★ AI 客服挂件：全站常驻（游客也能问商品） -->
+  <AiChat />
 </template>
 
 <style scoped>

@@ -1,6 +1,8 @@
 import http from './http'
 import type {
   AddressVO,
+  AiChatReply,
+  AiChatTurn,
   BrandVO,
   CartVO,
   CategoryVO,
@@ -133,6 +135,16 @@ export function userMe() {
 /** 改昵称：@NotBlank + 最长 50（后端 NicknameUpdateDTO），空串会被挡 */
 export function userUpdateNickname(nickname: string) {
   return http.put<never, Result<void>>('/users/me/nickname', { nickname })
+}
+
+// ---------- AI 客服（Day 59） ----------
+/**
+ * 客服对话。
+ * ★ 游客也能调（后端对该精确路径 POST 放行）；是否登录决定能不能查订单。
+ * ★ history 由服务端再过滤一遍：只认 user/assistant，客户端塞 system 无效。
+ */
+export function aiChat(message: string, history: AiChatTurn[] = []) {
+  return http.post<never, Result<AiChatReply>>('/ai/chat', { message, history })
 }
 
 // ===================== FE2：订单 =====================

@@ -68,6 +68,9 @@ public class SecurityConfig {
                 //      写 /** 之后这个前缀下将来新增的任何 GET 都会被【静默公开】
                 //      （与上面 /api/coupons 那条同一个坑，Day 20 实测过）。
                 .requestMatchers(HttpMethod.GET, "/api/brands").permitAll()
+                // ★ Day 59：AI 客服对游客开放（只能问商品，订单工具需要登录态）。
+                //   ⚠️ 精确路径 + 精确方法：写成 "/api/ai/**" 会把以后加的写接口一起公开。
+                .requestMatchers(HttpMethod.POST, "/api/ai/chat").permitAll()
                 // ★ V1.4 · D42：actuator 探针白名单。**依然是精确路径**，理由同上一条 ——
                 //   ⚠️ 绝不能写 "/actuator/**"：那会把 metrics / env / configprops / heapdump
                 //      这类「暴露数据源地址、环境变量、堆转储」的端点一起【静默公开】。

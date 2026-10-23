@@ -1,0 +1,14 @@
+[OK] A1 游客问商品 → 200 / mock   http=200 code=200 mode=mock
+[OK] A2 真的调了 search_products（不是编的）   tools=['search_products']
+[OK] A3 回答里出现库里存在的商品（iPhone 17 Pro）   搜到这些商品： 1. Apple iPhone 17 Pro（¥9999.00 起） —— 钛金属边框 3nm A19 
+[OK] B1 游客问订单 → 明确要求先登录   用户未登录，无法查询订单。请先登录后再问。
+[OK] B2 工具被调用但只能拿到『未登录』（不是静默不查）   tools=['get_my_orders']
+[OK] C1 登录后问订单 → 返回订单号   · MX202610232028065337531：已完成，实付 ¥29997.00
+[OK] C2 只返回当前用户的订单（demo 的订单数 ≤ 5）   count=4
+[OK] D1 带 system 注入的 history 不会 500   http=200 code=200
+[OK] D2 注入后回答仍是商品推荐（未被改写）   搜到这些商品： 1. Apple iPhone 17 Pro（¥9999.00 
+[OK] E1 超过每分钟阈值 → 业务码 429   前 22 次=[200, 200, 200] 末=429
+[OK] E2 429 是业务码而不是 HTTP 500   codes=[200, 429]
+
+ASSERTIONS: 11 / 11 passed
+VERDICT: OK
