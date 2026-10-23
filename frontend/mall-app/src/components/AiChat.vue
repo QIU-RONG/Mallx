@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { aiChat } from '../api'
 import { useAuthStore } from '../stores/auth'
 
@@ -10,6 +10,9 @@ import { useAuthStore } from '../stores/auth'
  * 工具不带 userId 入参、写操作一个都没有；前端把 history 传上去也会被服务端过滤掉 system。
  *
  * <p>★ 登录态只影响「能不能查订单」：游客也能问商品，后端会返回「请先登录」。
+ *
+ * <p>★★ 可拖动（Day 60）：按钮位置存在 localStorage，刷新后保持；
+ * 拖过 4px 才算「移动」，否则仍按点击处理 —— 否则用户永远点不开面板。
  */
 interface Msg {
   role: 'user' | 'assistant'
@@ -23,6 +26,111 @@ const open = ref(false)
 const input = ref('')
 const sending = ref(false)
 const listRef = ref<HTMLElement | null>(null)
+const fabRef = ref<HTMLElement | null>(null)
+
+// ---------------- 拖动 / 位置 ----------------
+const FAB_KEY = 'mall_ai_fab_pos'
+const FAB_SIZE = 46
+const PANEL_W = 360
+const PANEL_H = 520
+const MARGIN = 8
+
+/** null = 默认停右下角（CSS 负责）；拖动过之后才有绝对坐标 */
+const pos = ref<{ x: number; y: number } | null>(null)
+
+const fabStyle = computed(() => (pos.value ? { left: `${pos.value.x}px`, top: `${pos.value.y}px` } : {}))
+
+/** 面板跟随按钮：优先放上方；上方不够就放下方；左右贴边钳制 */
+const panelStyle = computed(() => {
+  if (!pos.value) return {}
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  const left = clamp(pos.value.x + FAB_SIZE - PANEL_W, 12, Math.max(12, vw - PANEL_W - 12))
+  let top = pos.value.y - PANEL_H - 12
+  if (top < 12) {
+    top = clamp(pos.value.y + FAB_SIZE + 12, 12, Math.max(12, vh - PANEL_H - 12))
+  }
+  return { left: `${left}px`, top: `${top}px`, right: 'auto', bottom: 'auto' }
+})
+
+function clamp(v: number, min: number, max: number) {
+  return Math.min(Math.max(v, min), Math.max(min, max))
+}
+
+function loadPos() {
+  try {
+    const raw = localStorage.getItem(FAB_KEY)
+    if (!raw) return
+    const p = JSON.parse(raw) as { x: number; y: number }
+    if (typeof p.x === 'number' && typeof p.y === 'number') {
+      pos.value = {
+        x: clamp(p.x, MARGIN, window.innerWidth - FAB_SIZE - MARGIN),
+        y: clamp(p.y, MARGIN, window.innerHeight - FAB_SIZE - MARGIN),
+      }
+    }
+  } catch {
+    /* 坏数据就当没存过 */
+  }
+}
+
+let dragging = false
+let moved = false
+let startX = 0
+let startY = 0
+let originX = 0
+let originY = 0
+
+function onPointerDown(e: PointerEvent) {
+  const el = fabRef.value
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  dragging = true
+  moved = false
+  startX = e.clientX
+  startY = e.clientY
+  originX = r.left
+  originY = r.top
+  try {
+    el.setPointerCapture(e.pointerId)
+  } catch {
+    /* 合成事件没有真实 pointerId 时会抛，忽略 */
+  }
+}
+
+function onPointerMove(e: PointerEvent) {
+  if (!dragging) return
+  const dx = e.clientX - startX
+  const dy = e.clientY - startY
+  if (!moved && Math.hypot(dx, dy) < 4) return
+  moved = true
+  pos.value = {
+    x: clamp(originX + dx, MARGIN, window.innerWidth - FAB_SIZE - MARGIN),
+    y: clamp(originY + dy, MARGIN, window.innerHeight - FAB_SIZE - MARGIN),
+  }
+}
+
+function onPointerUp(e: PointerEvent) {
+  if (!dragging) return
+  dragging = false
+  try {
+    fabRef.value?.releasePointerCapture(e.pointerId)
+  } catch {
+    /* ignore */
+  }
+  if (moved) {
+    if (pos.value) localStorage.setItem(FAB_KEY, JSON.stringify(pos.value))
+  } else {
+    toggle()
+  }
+}
+
+function onResize() {
+  if (!pos.value) return
+  pos.value = {
+    x: clamp(pos.value.x, MARGIN, window.innerWidth - FAB_SIZE - MARGIN),
+    y: clamp(pos.value.y, MARGIN, window.innerHeight - FAB_SIZE - MARGIN),
+  }
+}
 
 const messages = ref<Msg[]>([
   {
@@ -82,12 +190,30 @@ function toggle() {
   if (open.value) scrollToBottom()
 }
 
-onMounted(scrollToBottom)
+onMounted(() => {
+  scrollToBottom()
+  loadPos()
+  window.addEventListener('resize', onResize)
+})
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize)
+})
 </script>
 
 <template>
-  <!-- 悬浮按钮 -->
-  <button class="fab" type="button" :class="{ 'fab--open': open }" @click="toggle">
+  <!-- 悬浮按钮：可拖动；拖过 4px 才视为移动，否则仍是点击开关 -->
+  <button
+    ref="fabRef"
+    class="fab"
+    type="button"
+    :class="{ 'fab--open': open, 'fab--free': !!pos }"
+    :style="fabStyle"
+    title="拖动可移动"
+    @pointerdown.prevent="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
+  >
     <svg v-if="!open" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
       stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
       <path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-6.5A8 8 0 1 1 21 12Z" />
@@ -100,8 +226,8 @@ onMounted(scrollToBottom)
     <span v-if="!open" class="fab-label">客服</span>
   </button>
 
-  <!-- 对话面板 -->
-  <div class="panel" :class="{ 'panel--open': open }">
+  <!-- 对话面板：跟随按钮位置（拖到左边就出现在左边） -->
+  <div class="panel" :class="{ 'panel--open': open }" :style="panelStyle">
     <header class="panel-head">
       <div>
         <div class="title">小 M</div>
@@ -158,9 +284,20 @@ onMounted(scrollToBottom)
   background: var(--mx-ink);
   color: #fff;
   font-size: 13px;
-  cursor: pointer;
+  cursor: grab;
+  /* ★ 拖动时不要选中文字、不要触发页面滚动（触屏） */
+  touch-action: none;
+  user-select: none;
   box-shadow: 0 10px 30px rgba(25, 23, 20, 0.18);
   transition: transform 0.18s var(--mx-ease), background 0.18s var(--mx-ease);
+}
+.fab:active {
+  cursor: grabbing;
+}
+/* 拖动过之后用 left/top 定位，必须把默认的 right/bottom 让开 */
+.fab--free {
+  right: auto;
+  bottom: auto;
 }
 .fab:hover {
   background: var(--mx-deep-2);
