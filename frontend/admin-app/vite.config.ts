@@ -5,6 +5,13 @@
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
 
+/**
+ * ★ 后端地址支持环境变量覆盖（Day 56）：本机 8080 被别的项目占用时，用
+ * `VITE_API_TARGET=http://127.0.0.1:8081 npm run dev` 指到实际后端。
+ * 默认仍是 8080 —— 日常开发与 CI 零变化。改完必须重启 dev server（启动期读取）。
+ */
+const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:8080'
+
 // 管理端应用：5174（C 端 mall-app 是 5173）
 // ★ 与 C 端同思路：dev 用 vite proxy 把 /api 转发到后端 8080 ——
 //   同源 ⇒ 免 CORS；生产换 nginx 反代即可，前端代码零改动。
@@ -14,7 +21,7 @@ export default defineConfig({
     port: 5174,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: apiTarget,
         changeOrigin: true,
       },
     },

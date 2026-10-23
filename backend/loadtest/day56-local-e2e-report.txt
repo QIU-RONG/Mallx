@@ -1,0 +1,43 @@
+[OK]   0.1 /actuator/health = UP   UP
+[OK]   0.2 管理员 admin/admin123 能登录（token 非空）   tokenLen=1243
+[OK]   0.3 买家 demo/demo123 能登录   tokenLen=191
+[OK]   A.商品列表 /api/admin/products 200   http=200 code=200
+[OK]   A.分类树 /api/admin/categories/tree 200   http=200 code=200
+[OK]   A.品牌字典 /api/admin/brands 200   http=200 code=200
+[OK]   A.券列表 /api/admin/coupons 200   http=200 code=200
+[OK]   A.用户列表 /api/admin/users 200   http=200 code=200
+[OK]   A.角色列表 /api/admin/roles 200   http=200 code=200
+[OK]   A.权限字典 /api/admin/permissions 200   http=200 code=200
+[OK]   A.评价列表 /api/admin/reviews 200   http=200 code=200
+[OK]   A.仪表盘概览 /api/admin/dashboard/overview 200   http=200 code=200
+[OK]   A.10 权限字典共 48 条（Day 55 新增 47/48 已生效）   n=48
+[OK]   A.11 review:list / review:status 都在字典里   missing=set()
+[OK]   B.1 新增收货地址   id=2
+[OK]   B.2 商品 1 有可售 SKU   skuId=1
+[OK]   B.3 加入购物车   http=200 code=200
+[OK]   B.4 从购物车下单（PENDING_PAYMENT）   orderId=2 code=200
+[OK]   B.5 支付成功（order → PAID）   code=200
+[OK]   B.6 管理员发货   code=200
+[OK]   B.7 买家确认收货（order → COMPLETED）   code=200
+[OK]   B.8 订单详情含明细（可评价）   status=COMPLETED items=1
+[OK]   B.9 发表评价（5 星）   reviewId=2
+[OK]   C.1 隐藏前：C 端评价数 ≥1 且平均分 5.0   count=2 avg=5.0
+[OK]   C.2 管理员隐藏该评价   code=200
+[OK]   C.3 隐藏后：C 端评价数 -1 且记录消失   count=1 (before=2)
+[OK]   C.4 隐藏后：平均分随实时聚合回退（无评价时 0）   avg=5.0
+[OK]   C.5 管理端 status=0 能看到它（不是单向失明）   hidden=[2]
+[OK]   C.6 恢复后：评价数回到原值且记录重新出现   count=2 avg=5.0
+[OK]   D.1 新建二级分类   id=33
+[OK]   D.2 改分类名（局部更新）   code=200
+[OK]   D.3 删分类（无引用可物理删）   code=200
+[OK]   D.4 新建品牌   id=9
+[OK]   D.5 重名品牌 → 400（UNIQUE 被翻译成人话，不是 500）   code=400
+[OK]   D.6 删品牌（无商品引用）   code=200
+[OK]   D.7 新建满减券（FIXED）   id=2
+[OK]   D.8 两个面额字段同时出现 → 400（后端关系校验）   code=400
+[OK]   D.9 删券（未被领取）   code=200
+[OK]   E.1 C 端 token 打管理端接口 → 403（已认证但无权限码）   http=403
+[OK]   E.2 匿名打管理端接口 → 401   http=401
+
+ASSERTIONS: 40 / 40 passed
+VERDICT: OK
