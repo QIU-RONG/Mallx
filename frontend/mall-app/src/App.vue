@@ -112,7 +112,9 @@ function doSearch() {
         </template>
         <template v-else>
           <a class="a-link" @click="router.push('/login')">登录</a>
-          <a class="a-link a-link--strong" @click="router.push('/login')">注册</a>
+          <!-- ★ 注册有独立页面（Day 52），顶栏必须真的跳过去；
+               原来这里也写 /login，点「注册」只会回到登录页 -->
+          <a class="a-link a-link--strong" @click="router.push('/register')">注册</a>
         </template>
 
         <el-badge :value="cartStore.selectedCount" :hidden="!cartStore.selectedCount">
