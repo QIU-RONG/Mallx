@@ -47,14 +47,18 @@ public final class RefundType {
      * 「仅退款只认 PAID」这句话里，{@code PAID} 的定义权在<b>订单域</b>，
      * 这里只是引用。将来订单状态机改了，本文件会编译失败而不是静默放行。
      *
+     * <p>★★ Day 71 放宽：已发货（SHIPPED）也允许【仅退款】—— 对应「没收到货 / 拒收」。
+     * 这类单<b>不回补库存</b>（货可能还在路上），见 {@code RefundServiceImpl#executeRefund}。
+     * 已完成（COMPLETED）仍然只能【退货退款】：货已经签收，不寄回就等于白送。
+     *
      * @param type     售后类型（已保证非 null）
      * @param orderStatus 订单当前状态
      * @return true = 这个订单状态可以申请这一类售后
      */
     public static boolean isOrderStatusAllowed(String type, String orderStatus) {
         if (REFUND_ONLY.equals(type)) {
-            // 没发货 ⇒ 只能是「已付款」
-            return OrderStatus.PAID.equals(orderStatus);
+            // 没发货，或已发货但买家没收到 → 都可以「仅退款」
+            return OrderStatus.PAID.equals(orderStatus) || OrderStatus.SHIPPED.equals(orderStatus);
         }
         if (RETURN_REFUND.equals(type)) {
             // 已发货 ⇒ 在途中或已确认收货，都还能退
@@ -62,6 +66,17 @@ public final class RefundType {
                     || OrderStatus.COMPLETED.equals(orderStatus);
         }
         return false;
+    }
+
+    /** 当前订单状态允许的售后类型（前端下拉与 400 文案共用这一份口径） */
+    public static java.util.List<String> allowedTypes(String orderStatus) {
+        java.util.List<String> list = new java.util.ArrayList<>();
+        for (String t : new String[] {REFUND_ONLY, RETURN_REFUND}) {
+            if (isOrderStatusAllowed(t, orderStatus)) {
+                list.add(t);
+            }
+        }
+        return list;
     }
 
     /**
@@ -74,6 +89,7 @@ public final class RefundType {
             return REFUND_ONLY;
         }
         if (OrderStatus.SHIPPED.equals(orderStatus) || OrderStatus.COMPLETED.equals(orderStatus)) {
+            // 已发货默认「退货退款」：签收后想退，绝大多数是要寄回的
             return RETURN_REFUND;
         }
         return null;

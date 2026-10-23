@@ -434,11 +434,15 @@ def main():
         say("     status=%s" % status_of(oid_b))
         chk("B: order shipped -> SHIPPED", status_of(oid_b) == "SHIPPED")
 
-        say("\n[B2] 选错类型：已发货却申请【仅退款】 -> 期望 400")
+        say("\n[B2] 已发货也可选【仅退款】（Day 71 放宽，对应没收到货/拒收）")
         st, b, raw = apply_refund(oid_b, "REFUND_ONLY")
         say("     http=%s code=%s %s" % (st, b.get("code"), short(raw, 110)))
-        chk("B2: 已发货选仅退款 -> code 400", code_of(raw) == 400)
-        chk("B2: 消息指明该选【退货退款】", "退货退款" in (b.get("msg") or raw))
+        rid_b2 = b.get("data") if isinstance(b.get("data"), int) else None
+        chk("B2: 已发货选仅退款 -> code 200", code_of(raw) == 200 and isinstance(rid_b2, int))
+        # 撤销这张，腾出「进行中」名额给 B3 的退货退款
+        if rid_b2:
+            st2, b2, raw2 = japi("POST", "/api/refunds/%d/cancel" % rid_b2, token=toks["demo"])
+            chk("B2: 撤销后可再申请", code_of(raw2) == 200, short(raw2, 80))
 
         say("\n[B3] 申请【退货退款】-> APPLIED")
         st, b, raw = apply_refund(oid_b, "RETURN_REFUND", reason="尺码不合适")

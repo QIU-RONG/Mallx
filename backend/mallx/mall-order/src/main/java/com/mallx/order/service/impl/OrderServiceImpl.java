@@ -671,6 +671,12 @@ public class OrderServiceImpl implements OrderService {
         }
     }
 
+    @Override
+    public boolean wasShipped(Long orderId) {
+        Order order = orderMapper.selectById(orderId);
+        return order != null && order.getShippedAt() != null;
+    }
+
     // ============================ 查询（Day 12 第 4 步） ============================
 
     /**

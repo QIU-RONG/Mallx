@@ -89,35 +89,54 @@ async function submitReview() {
   }
 }
 
-// ===================== 申请售后（Day 46） =====================
+// ===================== 申请售后（Day 46 / Day 71 可选类型） =====================
 /**
- * ★★ 售后类型不是买家「想选哪个选哪个」，而是【订单当前状态】决定的：
- *     未发货（PAID）          → 只能 REFUND_ONLY（货还没出仓，不存在「寄回」）
- *     已发货（SHIPPED/COMPLETED）→ 只能 RETURN_REFUND（货在你手上，要退就得寄回）
- *   这是**跨对象的关系校验**，前端按状态锁定选项是【体验】，
- *   真正的守门在 RefundServiceImpl#apply（选错会 400，且报错会指明该选哪个）。
+ * ★ 售后类型按【订单状态】给候选，买家在候选里选：
+ *     未发货（PAID）     → 仅退款
+ *     已发货（SHIPPED）  → 仅退款（没收到/拒收）或 退货退款（已收到，寄回）
+ *     已完成（COMPLETED）→ 退货退款（已经签收，不寄回等于白送）
+ *   前端只做「不给注定失败的选项」；真正的守门仍在 RefundServiceImpl#apply。
  */
-const REFUNDABLE: Partial<Record<OrderStatus, 'REFUND_ONLY' | 'RETURN_REFUND'>> = {
-  PAID: 'REFUND_ONLY',
-  SHIPPED: 'RETURN_REFUND',
-  COMPLETED: 'RETURN_REFUND',
-}
+type RefundTypeCode = 'REFUND_ONLY' | 'RETURN_REFUND'
+
+const REFUND_OPTIONS: Array<{ value: RefundTypeCode; label: string; hint: string }> = [
+  { value: 'REFUND_ONLY', label: '仅退款', hint: '未发货，或已发货但没收到货（拒收）' },
+  { value: 'RETURN_REFUND', label: '退货退款', hint: '已经收到货，需要把商品寄回' },
+]
+
+const allowedTypes = computed<RefundTypeCode[]>(() => {
+  switch (vo.value?.status) {
+    case 'PAID':
+      return ['REFUND_ONLY']
+    case 'SHIPPED':
+      return ['REFUND_ONLY', 'RETURN_REFUND']
+    case 'COMPLETED':
+      return ['RETURN_REFUND']
+    default:
+      return []
+  }
+})
+
+const applyAvailable = computed(() => allowedTypes.value.length > 0)
+const typeOptions = computed(() => REFUND_OPTIONS.filter((o) => allowedTypes.value.includes(o.value)))
+const applyType = ref<RefundTypeCode>('REFUND_ONLY')
+
+const applyTypeHint = computed(
+  () => REFUND_OPTIONS.find((o) => o.value === applyType.value)?.hint ?? '',
+)
 
 const applyVisible = ref(false)
 const applyReason = ref('')
 
-const applyType = computed(() => (vo.value ? REFUNDABLE[vo.value.status] : undefined))
-const applyTypeLabel = computed(() =>
-  applyType.value === 'REFUND_ONLY' ? '仅退款（未发货，无需寄回）' : '退货退款（需将商品寄回）',
-)
-
 function openApply() {
+  // 默认选「能退货退款就选它」—— 已签收的商品，仅退款几乎都不是本意
+  applyType.value = allowedTypes.value.includes('RETURN_REFUND') ? 'RETURN_REFUND' : 'REFUND_ONLY'
   applyReason.value = ''
   applyVisible.value = true
 }
 
 async function submitApply() {
-  if (!vo.value || !applyType.value) return
+  if (!vo.value || !applyAvailable.value) return
   if (!applyReason.value.trim()) {
     ElMessage.warning('请填写申请原因')
     return
@@ -203,15 +222,23 @@ onMounted(load)
         <el-button v-if="vo.status === 'PENDING_PAYMENT'" @click="cancel">取消订单</el-button>
         <el-button v-if="vo.status === 'SHIPPED'" type="success" @click="confirm">确认收货</el-button>
         <!-- ★ 只有「付过钱且还没退过」的订单能申请售后 -->
-        <el-button v-if="applyType" @click="openApply">申请售后</el-button>
+        <el-button v-if="applyAvailable" @click="openApply">申请售后</el-button>
       </div>
     </template>
 
     <el-dialog v-model="applyVisible" title="申请售后" width="520px">
       <el-form label-width="90px">
         <el-form-item label="售后类型">
-          <!-- ★ 类型由订单状态锁定：给买家一个「不可选」的选择框，比让他选错再吃 400 强 -->
-          <el-input :model-value="applyTypeLabel" readonly />
+          <!-- Day 71：按订单状态给候选，买家自己选（已发货可二选一） -->
+          <el-select v-model="applyType" style="width: 100%">
+            <el-option
+              v-for="o in typeOptions"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
+          </el-select>
+          <div class="type-hint">{{ applyTypeHint }}</div>
         </el-form-item>
         <el-form-item label="申请原因" required>
           <el-input
@@ -293,6 +320,11 @@ onMounted(load)
 .hint {
   color: var(--mx-ink-3);
   font-size: 12px;
+}
+.type-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--mx-ink-3);
 }
 
 /* 评价弹窗里的商品行（与明细行同一套视觉） */

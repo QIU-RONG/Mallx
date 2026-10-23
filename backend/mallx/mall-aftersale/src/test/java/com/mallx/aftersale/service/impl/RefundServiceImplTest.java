@@ -12,6 +12,7 @@ import com.mallx.marketing.service.CouponService;
 import com.mallx.order.common.OrderStatus;
 import com.mallx.order.service.OrderService;
 import com.mallx.order.vo.OrderRefundContext;
+import com.mallx.order.vo.OrderRefundItem;
 import com.mallx.payment.service.PaymentService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -23,12 +24,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
@@ -189,15 +192,33 @@ class RefundServiceImplTest {
     }
 
     @Test
-    @DisplayName("已发货却申请仅退款 -> 400，且提示该选【退货退款】")
-    void wrongType_alreadyShipped() {
+    @DisplayName("已发货也可申请仅退款（Day 71 放宽）—— 对应没收到货/拒收")
+    void refundOnlyAllowedAfterShipped() {
         givenOrder(OrderStatus.SHIPPED, "6999.00");
+        when(refundMapper.countActiveByOrder(ORDER)).thenReturn(0);
+        doAnswer(inv -> {
+            Refund r = inv.getArgument(0);
+            r.setId(777L);
+            return 1;
+        }).when(refundMapper).insert(any(Refund.class));
+
+        Long id = service.apply(USER, dto(RefundType.REFUND_ONLY));
+
+        assertEquals(777L, id);
+        ArgumentCaptor<Refund> cap = ArgumentCaptor.forClass(Refund.class);
+        verify(refundMapper).insert(cap.capture());
+        assertEquals(RefundType.REFUND_ONLY, cap.getValue().getType());
+    }
+
+    @Test
+    @DisplayName("已完成订单申请仅退款 -> 400（已签收，不寄回等于白送）")
+    void refundOnlyRejectedAfterCompleted() {
+        givenOrder(OrderStatus.COMPLETED, "6999.00");
 
         BusinessException e = assertThrows(BusinessException.class,
                 () -> service.apply(USER, dto(RefundType.REFUND_ONLY)));
 
         assertEquals(ResultCode.VALIDATE_FAILED.getCode(), e.getCode());
-        assertTrue(e.getMessage().contains("退货退款"), "实际=" + e.getMessage());
         verify(refundMapper, never()).insert(any(Refund.class));
     }
 
@@ -276,5 +297,53 @@ class RefundServiceImplTest {
         assertEquals(ResultCode.VALIDATE_FAILED.getCode(), e.getCode());
         verify(refundMapper).countActiveByOrder(ORDER);
         verify(refundMapper, never()).insert(any(Refund.class));
+    }
+
+    // ================================================================
+    // ③ 已发货仅退款：不回补库存（Day 71）
+    // ================================================================
+
+    @Test
+    @DisplayName("已发货订单的仅退款：执行退款时不回补库存（货可能还在路上）")
+    void shippedRefundOnly_doesNotRestock() {
+        Refund refund = new Refund();
+        refund.setId(9001L);
+        refund.setOrderId(ORDER);
+        refund.setType(RefundType.REFUND_ONLY);
+        refund.setAmount(new BigDecimal("6999.00"));
+        when(refundMapper.selectById(9001L)).thenReturn(refund);
+        when(refundMapper.markSuccess(9001L)).thenReturn(1);
+        when(orderService.wasShipped(ORDER)).thenReturn(true);
+        OrderRefundItem item = new OrderRefundItem();
+        item.setSkuId(31L);
+        item.setQuantity(2);
+        when(orderService.listItemsForRefund(ORDER)).thenReturn(List.of(item));
+
+        service.executeRefund(9001L);
+
+        verify(inventoryService, never()).returnToStock(anyLong(), anyInt(), anyLong());
+        // 钱还是要退、单还是要完成
+        verify(paymentService).recordRefund(ORDER, new BigDecimal("6999.00"));
+    }
+
+    @Test
+    @DisplayName("未发货的仅退款：执行退款时照常回补库存")
+    void unshippedRefundOnly_restocks() {
+        Refund refund = new Refund();
+        refund.setId(9002L);
+        refund.setOrderId(ORDER);
+        refund.setType(RefundType.REFUND_ONLY);
+        refund.setAmount(new BigDecimal("6999.00"));
+        when(refundMapper.selectById(9002L)).thenReturn(refund);
+        when(refundMapper.markSuccess(9002L)).thenReturn(1);
+        when(orderService.wasShipped(ORDER)).thenReturn(false);
+        OrderRefundItem item = new OrderRefundItem();
+        item.setSkuId(31L);
+        item.setQuantity(2);
+        when(orderService.listItemsForRefund(ORDER)).thenReturn(List.of(item));
+
+        service.executeRefund(9002L);
+
+        verify(inventoryService).returnToStock(31L, 2, ORDER);
     }
 }

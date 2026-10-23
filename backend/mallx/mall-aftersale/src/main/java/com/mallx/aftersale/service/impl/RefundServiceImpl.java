@@ -94,12 +94,11 @@ public class RefundServiceImpl implements RefundService {
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
                     "订单当前状态（" + ctx.getStatus() + "）不支持申请售后");
         }
-        if (!suggested.equals(dto.getType())) {
+        if (!RefundType.isOrderStatusAllowed(dto.getType(), ctx.getStatus())) {
             // ★ 给一句人话，别只说「不允许」—— 用户要的是「那我该选哪个」
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
-                    RefundType.REFUND_ONLY.equals(suggested)
-                            ? "订单尚未发货，请申请【仅退款】"
-                            : "订单已发货，请申请【退货退款】");
+                    "该订单当前状态不能申请此售后类型，可选：" + RefundType.allowedTypes(ctx.getStatus())
+                            + "（未发货只能仅退款；已发货可仅退款或退货退款）");
         }
 
         // ③ 人话提示（★ 不是防线 —— 真正的防线是 uk_refunds_active_order 那条部分唯一索引）
@@ -242,13 +241,19 @@ public class RefundServiceImpl implements RefundService {
         orderService.markRefunded(refund.getOrderId());
 
         // ③ 逐 SKU 回补库存：sold → available（★ 不是 releaseLocked —— 那一条是「没付过钱」的路径）
+        //    ★★ Day 71：已发货订单申请「仅退款」= 没收到货/拒收，货可能还在路上 —— 不回补。
+        //    回补会把「在途的那件」也算成可售，超卖。
+        boolean shippedRefundOnly = RefundType.REFUND_ONLY.equals(refund.getType())
+                && orderService.wasShipped(refund.getOrderId());
         List<OrderRefundItem> items = orderService.listItemsForRefund(refund.getOrderId());
         if (items.isEmpty()) {
             // 与 OrderCancelExecutor 同口径：没有明细就无法回补，属账目不一致 → 500 整笔回滚
             throw new BusinessException(ResultCode.FAIL.getCode(), "订单明细缺失，退款已回滚");
         }
-        for (OrderRefundItem item : items) {
-            inventoryService.returnToStock(item.getSkuId(), item.getQuantity(), refund.getOrderId());
+        if (!shippedRefundOnly) {
+            for (OrderRefundItem item : items) {
+                inventoryService.returnToStock(item.getSkuId(), item.getQuantity(), refund.getOrderId());
+            }
         }
 
         // ④ 退券：★ 0 行是【正常】的（这一单没用券），绝不当失败处理

@@ -323,4 +323,12 @@ public interface OrderService {
      */
     void markRefunded(Long orderId);
 
+    /**
+     * 这单是否发过货（Day 71，退款回补库存用）。
+     *
+     * <p>★ 判据是 {@code shipped_at} 是否有值，不是当前 status ——
+     * 执行退款时订单已经被推进到 REFUNDED，status 已经看不出「发没发过」。
+     */
+    boolean wasShipped(Long orderId);
+
 }
