@@ -216,6 +216,14 @@ export function payOrder(orderId: number, method: 'ALIPAY' | 'WECHAT' | 'BALANCE
   return http.post<never, Result<PaymentVO>>('/payments', { orderId, method })
 }
 
+/** 批量支付（Day 78）：跨店拆单后一次付清多张待支付订单 */
+export function payBatch(orderIds: number[], method: 'ALIPAY' | 'WECHAT' | 'BALANCE' = 'BALANCE') {
+  return http.post<never, Result<{ orderIds: number[]; totalAmount: number; count: number }>>(
+    '/payments/batch',
+    { orderIds, method },
+  )
+}
+
 // ===================== FE2：优惠券 =====================
 export function couponAvailable(params: { page: number; size: number }) {
   return http.get<never, Result<PageResult<CouponVO>>>('/coupons', { params })

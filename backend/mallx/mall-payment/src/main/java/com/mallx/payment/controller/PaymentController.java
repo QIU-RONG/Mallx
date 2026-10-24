@@ -2,8 +2,10 @@ package com.mallx.payment.controller;
 
 import com.mallx.common.api.PageResult;
 import com.mallx.common.api.Result;
+import com.mallx.payment.dto.BatchPayDTO;
 import com.mallx.payment.dto.PaymentCreateDTO;
 import com.mallx.payment.service.PaymentService;
+import com.mallx.payment.vo.BatchPayVO;
 import com.mallx.payment.vo.PaymentVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -59,6 +61,14 @@ public class PaymentController {
         return Result.ok(paymentService.pay(userId, dto));
     }
 
+    @Operation(summary = "批量支付（跨店拆单后一次付清多张待支付订单）")
+    @PostMapping("/batch")
+    public Result<BatchPayVO> batchPay(Authentication authentication,
+                                       @RequestBody @Valid BatchPayDTO dto) {
+        Long userId = (Long) authentication.getPrincipal();
+        return Result.ok(paymentService.payBatch(userId, dto.getOrderIds(), dto.getMethod()));
+    }
+
     /**
      * ★ 这里用的是 {@code @RequestParam defaultValue}，参数名 {@code page} 而不是 {@code current}
      * —— 对外接口的叫法以文档为准，内部的 MP {@code Page} 才叫 current。
@@ -70,7 +80,7 @@ public class PaymentController {
      * {@code PaymentMapper.xml} 的 {@code WHERE o.user_id = #{userId}} 里
      * （{@code payments} 表没有 user_id，必须 JOIN {@code orders}）。
      */
-    @Operation(summary = "我的支付记录（分页，size 上限 100；只返回本人订单的支付记录）")
+    @Operation(summary = "我的支付记录（分页，size 上限 100）")
     @GetMapping
     public Result<PageResult<PaymentVO>> list(Authentication authentication,
                                               @RequestParam(defaultValue = "1") long page,

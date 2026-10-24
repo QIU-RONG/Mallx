@@ -2,6 +2,7 @@ package com.mallx.payment.service;
 
 import com.mallx.common.api.PageResult;
 import com.mallx.payment.dto.PaymentCreateDTO;
+import com.mallx.payment.vo.BatchPayVO;
 import com.mallx.payment.vo.PaymentVO;
 
 import java.math.BigDecimal;
@@ -44,6 +45,14 @@ public interface PaymentService {
      * @param userId 当前登录用户（从 token 来）
      * @return 只含本人订单对应的支付记录，按 id 倒序（最新在前）
      */
+    /**
+     * 批量支付（Day 78）：跨店拆单后一次付清多张待支付订单。
+     *
+     * <p>★ 逐单走 {@link #pay} —— 归属校验、CAS 抢资格、库存流转一个都不绕过；
+     * 任何一张失败整批回滚（同一事务）。
+     */
+    BatchPayVO payBatch(Long userId, java.util.List<Long> orderIds, String method);
+
     PageResult<PaymentVO> listMyPayments(Long userId, long page, long size);
 
     /**

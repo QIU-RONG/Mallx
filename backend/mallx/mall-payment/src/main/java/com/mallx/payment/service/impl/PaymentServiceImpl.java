@@ -18,6 +18,7 @@ import com.mallx.payment.dto.PaymentCreateDTO;
 import com.mallx.payment.entity.Payment;
 import com.mallx.payment.mapper.PaymentMapper;
 import com.mallx.payment.service.PaymentService;
+import com.mallx.payment.vo.BatchPayVO;
 import com.mallx.payment.vo.PaymentVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -202,6 +203,33 @@ public class PaymentServiceImpl implements PaymentService {
      * <p>★ 越权防线（{@code WHERE o.user_id = #{userId}}）写在 XML 里，与本方法的夹紧是
      * <b>两件独立的事</b>：前者防越权，后者防资源滥用。
      */
+    @Override
+    @Transactional
+    public BatchPayVO payBatch(Long userId, java.util.List<Long> orderIds, String method) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "请选择要支付的订单");
+        }
+        java.util.List<Long> ids = orderIds.stream().distinct().toList();
+        if (ids.size() > 20) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "一次最多支付 20 张订单");
+        }
+        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        for (Long id : ids) {
+            PaymentCreateDTO dto = new PaymentCreateDTO();
+            dto.setOrderId(id);
+            dto.setMethod(method);
+            PaymentVO vo = pay(userId, dto);
+            if (vo.getAmount() != null) {
+                total = total.add(vo.getAmount());
+            }
+        }
+        BatchPayVO result = new BatchPayVO();
+        result.setOrderIds(ids);
+        result.setTotalAmount(total);
+        result.setCount(ids.size());
+        return result;
+    }
+
     @Override
     public PageResult<PaymentVO> listMyPayments(Long userId, long page, long size) {
         long safePage = Math.max(page, 1);

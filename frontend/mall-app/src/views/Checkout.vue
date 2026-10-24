@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { addressList, cartList, couponMy, orderCreate } from '../api'
+import { addressList, cartList, couponMy, orderCreate, payBatch } from '../api'
 import type { AddressVO, UserCouponVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
 
@@ -53,7 +53,9 @@ async function submit() {
     const ids = j.data || []
     cartStore.clear()
     if (ids.length > 1) {
-      ElMessage.success(`购物车含多家店铺，已拆分为 ${ids.length} 个订单，请分别支付`)
+      // Day 78：拆单后一次付清，避免用户逐张点「支付」
+      await payBatch(ids)
+      ElMessage.success(`购物车含多家店铺，已拆分为 ${ids.length} 个订单并完成支付`)
       router.push('/account/orders')
     } else {
       ElMessage.success('下单成功')
