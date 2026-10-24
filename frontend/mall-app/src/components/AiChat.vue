@@ -166,13 +166,26 @@ async function send(text?: string) {
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .slice(-6)
       .map((m) => ({ role: m.role, content: m.content }))
-    const r = await aiChat(content, history)
-    messages.value.push({
-      role: 'assistant',
-      content: r.data.reply,
-      tools: r.data.tools,
-      mock: r.data.mode === 'mock',
+    // Day 79：优先走 SSE 流式；失败自动退回同步接口
+    messages.value.push({ role: 'assistant', content: '' })
+    const target = messages.value[messages.value.length - 1]
+    const streamed = await streamChat(content, history, (delta) => {
+      target.content += delta
+      scrollToBottom()
+    }, (meta) => {
+      target.mock = !!meta.mock
+      target.tools = meta.tools
     })
+    if (!streamed) {
+      messages.value.pop()
+      const r = await aiChat(content, history)
+      messages.value.push({
+        role: 'assistant',
+        content: r.data.reply,
+        tools: r.data.tools,
+        mock: r.data.mode === 'mock',
+      })
+    }
   } catch {
     // 拦截器已提示；这里补一条可见的失败态，避免输入区看起来"没反应"
     messages.value.push({
@@ -182,6 +195,56 @@ async function send(text?: string) {
   } finally {
     sending.value = false
     scrollToBottom()
+  }
+}
+
+
+/**
+ * SSE 流式对话：返回 false 表示"流不可用"（网络/接口错误），调用方退回同步接口。
+ * 事件：delta{text} / done{mock,tools} / error{message}
+ */
+async function streamChat(
+  content: string,
+  history: { role: string; content: string }[],
+  onDelta: (t: string) => void,
+  onDone: (meta: { mock?: boolean; tools?: string[] }) => void,
+): Promise<boolean> {
+  try {
+    const res = await fetch('/api/ai/chat/stream', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}),
+      },
+      body: JSON.stringify({ message: content, history }),
+    })
+    if (!res.ok || !res.body) return false
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buf = ''
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buf += decoder.decode(value, { stream: true })
+      const blocks = buf.split('\n\n')
+      buf = blocks.pop() ?? ''
+      for (const block of blocks) {
+        let event = 'message'
+        let data = ''
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event:')) event = line.slice(6).trim()
+          else if (line.startsWith('data:')) data += line.slice(5).trim()
+        }
+        if (!data) continue
+        const obj = JSON.parse(data) as { text?: string; mock?: boolean; tools?: string[]; message?: string }
+        if (event === 'delta' && obj.text) onDelta(obj.text)
+        else if (event === 'done') onDone(obj)
+        else if (event === 'error') throw new Error(obj.message || 'stream error')
+      }
+    }
+    return true
+  } catch {
+    return false
   }
 }
 

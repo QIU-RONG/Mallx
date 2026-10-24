@@ -71,6 +71,8 @@ public class SecurityConfig {
                 // ★ Day 59：AI 客服对游客开放（只能问商品，订单工具需要登录态）。
                 //   ⚠️ 精确路径 + 精确方法：写成 "/api/ai/**" 会把以后加的写接口一起公开。
                 .requestMatchers(HttpMethod.POST, "/api/ai/chat").permitAll()
+                // ★ Day 79：流式入口同一条路径族，精确放行
+                .requestMatchers(HttpMethod.POST, "/api/ai/chat/stream").permitAll()
                 // ★ Day 73：商品详情要显示可售库存，游客也能看。
                 //   精确路径 + GET：管理端 /api/admin/inventory/** 与本模块写接口都不受影响。
                 .requestMatchers(HttpMethod.GET, "/api/inventory/stock").permitAll()

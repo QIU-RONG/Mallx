@@ -14,10 +14,13 @@ import com.mallx.ai.vo.AiChatReply;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * AI 客服实现（Day 59）。
@@ -260,5 +263,37 @@ public class AiChatServiceImpl implements AiChatService {
         if (required) {
             ((ArrayNode) params.path("required")).add(name);
         }
+    }
+
+    @Override
+    public void stream(Long userId, AiChatRequest request, SseEmitter emitter) {
+        // ★ 先算完整回答（工具调用需要完整一轮），再切片推送 —— 传输流，不是模型 token 流
+        CompletableFuture.runAsync(() -> {
+            try {
+                AiChatReply reply = chat(userId, request);
+                String text = reply.getReply() == null ? "" : reply.getReply();
+                int step = 8;
+                for (int i = 0; i < text.length(); i += step) {
+                    String delta = text.substring(i, Math.min(text.length(), i + step));
+                    emitter.send(SseEmitter.event().name("delta").data(Map.of("text", delta)));
+                    Thread.sleep(18);
+                }
+                emitter.send(SseEmitter.event().name("done").data(Map.of(
+                        "mock", "mock".equals(reply.getMode()),
+                        "tools", reply.getTools() == null ? List.of() : reply.getTools())));
+                emitter.complete();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                emitter.completeWithError(e);
+            } catch (Exception e) {
+                log.warn("AI 流式推送失败", e);
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(Map.of("message", "生成回答失败，请重试")));
+                } catch (Exception ignored) {
+                    // 客户端已断开
+                }
+                emitter.completeWithError(e);
+            }
+        });
     }
 }

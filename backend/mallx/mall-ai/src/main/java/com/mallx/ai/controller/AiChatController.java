@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.http.MediaType;
 
 /**
  * AI 客服（Day 59）。
@@ -63,5 +65,20 @@ public class AiChatController {
             return xff.split(",")[0].trim();
         }
         return request.getRemoteAddr();
+    }
+
+    @Operation(summary = "客服对话 · 流式（SSE；旅客可用）")
+    @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter stream(Authentication authentication,
+                             HttpServletRequest request,
+                             @RequestBody @Valid AiChatRequest body) {
+        Long userId = (authentication != null && authentication.getPrincipal() instanceof Long id) ? id : null;
+        String bucket = userId != null ? "u:" + userId : "ip:" + clientIp(request);
+        if (!rateLimiter.allow(bucket, props.getRatePerMinute())) {
+            throw new BusinessException(429, "问得有点快，歇一会儿再试。");
+        }
+        SseEmitter emitter = new SseEmitter(60_000L);
+        aiChatService.stream(userId, body, emitter);
+        return emitter;
     }
 }
