@@ -216,7 +216,7 @@ public interface OrderService {
      * @param page   页码，从 1 开始
      * @param size   每页条数，最终落在 1..100
      */
-    PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size);
+    PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size, Long shopScope);
 
     /**
      * ★★ 管理端订单详情：任意订单都能看，<b>不做归属分流</b>。
@@ -240,7 +240,7 @@ public interface OrderService {
      *
      * @throws com.mallx.common.exception.BusinessException code=404 订单不存在
      */
-    OrderDetailVO detailByAdmin(Long orderId);
+    OrderDetailVO detailByAdmin(Long orderId, Long shopScope);
 
     /**
      * ★★★ 管理端取消订单：<b>复用同一段回补代码</b>（本日最容易写错的一处）。

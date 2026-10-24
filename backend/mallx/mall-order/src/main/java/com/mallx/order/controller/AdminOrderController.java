@@ -79,7 +79,7 @@ public class AdminOrderController {
      *
      * <p>骨架说明 —— 方法体只有一行：
      * <pre>
-     *   return Result.ok(orderService.listAllOrders(status, userId, page, size));
+     *   return Result.ok(orderService.listAllOrders(status, userId, page, size, com.mallx.common.security.ShopScope.currentShopId()));
      * </pre>
      *
      * <p>★ 两个过滤参数<b>都是可选的筛选条件</b>（不传 = 不筛），
@@ -97,7 +97,7 @@ public class AdminOrderController {
                                                  @RequestParam(required = false) Long userId,
                                                  @RequestParam(defaultValue = "1") long page,
                                                  @RequestParam(defaultValue = "10") long size) {
-        return Result.ok(orderService.listAllOrders(status, userId, page, size));
+        return Result.ok(orderService.listAllOrders(status, userId, page, size, com.mallx.common.security.ShopScope.currentShopId()));
     }
 
     /**
@@ -105,7 +105,7 @@ public class AdminOrderController {
      *
      * <p>骨架说明 —— 方法体只有一行：
      * <pre>
-     *   return Result.ok(orderService.detailByAdmin(id));
+     *   return Result.ok(orderService.detailByAdmin(id, com.mallx.common.security.ShopScope.currentShopId()));
      * </pre>
      *
      * <p>★ 「不存在」→ 业务 404（HTTP 200 + code=404）；
@@ -118,7 +118,7 @@ public class AdminOrderController {
     @PreAuthorize("hasAuthority('order:detail')")
     @GetMapping("/{id}")
     public Result<OrderDetailVO> detail(@PathVariable Long id) {
-        return Result.ok(orderService.detailByAdmin(id));
+        return Result.ok(orderService.detailByAdmin(id, com.mallx.common.security.ShopScope.currentShopId()));
     }
 
     /**

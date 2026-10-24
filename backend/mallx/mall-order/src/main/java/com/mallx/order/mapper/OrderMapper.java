@@ -244,7 +244,8 @@ public interface OrderMapper extends BaseMapper<Order> {
      */
     IPage<AdminOrderVO> selectAdminOrders(IPage<AdminOrderVO> page,
                                           @Param("status") String status,
-                                          @Param("userId") Long userId);
+                                          @Param("userId") Long userId,
+                                          @Param("shopId") Long shopId);
 
     // ================== 售后域（Day 46） ==================
 

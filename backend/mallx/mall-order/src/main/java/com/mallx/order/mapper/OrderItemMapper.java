@@ -5,6 +5,7 @@ import com.mallx.order.api.OrderItemBuyContext;
 import com.mallx.order.entity.OrderItem;
 import com.mallx.order.vo.OrderRefundItem;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -75,4 +76,15 @@ public interface OrderItemMapper extends BaseMapper<OrderItem> {
      * @return 明细列表；这张单没有明细时返回空列表（不是 null）
      */
     List<OrderRefundItem> selectItemsForRefund(@Param("orderId") Long orderId);
+
+    /** Day 76：商户可见的订单 id（订单里至少有一件该店铺商品） */
+    @Select("SELECT DISTINCT oi.order_id FROM order_items oi "
+            + "JOIN products p ON p.id = oi.product_id WHERE p.shop_id = #{shopId}")
+    List<Long> selectOrderIdsByShop(@Param("shopId") Long shopId);
+
+    /** Day 76：这张订单里是否含该店铺的商品（商户详情越权判定） */
+    @Select("SELECT count(*) FROM order_items oi "
+            + "JOIN products p ON p.id = oi.product_id "
+            + "WHERE oi.order_id = #{orderId} AND p.shop_id = #{shopId}")
+    int countByOrderAndShop(@Param("orderId") Long orderId, @Param("shopId") Long shopId);
 }

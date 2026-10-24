@@ -48,7 +48,7 @@ export function visibleMenus(perms: readonly string[]): AdminMenuItem[] {
   //   平台角色没有这条权限，菜单照旧按 perm 过滤。
   const isMerchant = perms.some((p) => p.startsWith('SHOP_SCOPE_'))
   if (isMerchant) {
-    return ADMIN_MENUS.filter((m) => m.label === '商品管理')
+    return ADMIN_MENUS.filter((m) => m.label === '商品管理' || m.label === '订单管理')
   }
   return ADMIN_MENUS.filter((m) => !m.perm || perms.includes(m.perm))
 }

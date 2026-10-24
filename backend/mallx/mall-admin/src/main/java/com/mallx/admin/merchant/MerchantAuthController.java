@@ -70,7 +70,9 @@ public class MerchantAuthController {
                 "product:create",
                 "product:update",
                 "category:list",
-                "brand:list"
+                "brand:list",
+                "order:list",
+                "order:detail"
         ));
         perms.add(ShopScope.authority(m.getShopId()));
 

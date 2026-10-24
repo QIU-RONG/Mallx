@@ -537,7 +537,7 @@ public class OrderServiceImpl implements OrderService {
      * 与传不传 userId 无关。</b>
      */
     @Override
-    public PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size) {
+    public PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size, Long shopScope) {
         // ① 夹紧分页 —— ★ 必须在 new Page 之前：构造进去的值就是最终发给 DB 的值
         long safePage = Math.max(page, 1);
         long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
@@ -550,7 +550,7 @@ public class OrderServiceImpl implements OrderService {
         //    ★ 此处【故意】不传「当前登录用户的 id」—— XML 里没有归属条件，
         //      那一行的缺席就是「数据权限反转」本身
         IPage<AdminOrderVO> result =
-                orderMapper.selectAdminOrders(new Page<>(safePage, safeSize), safeStatus, userId);
+                orderMapper.selectAdminOrders(new Page<>(safePage, safeSize), safeStatus, userId, shopScope);
 
         // ④ 不需要转换：selectAdminOrders 返回的本来就是 IPage<AdminOrderVO>
         //    （转换发生在 SQL 别名 -> VO 字段的映射里，不像 listMyOrders 还要 result.convert）
@@ -585,9 +585,13 @@ public class OrderServiceImpl implements OrderService {
      * 路径不同、消息可以相同。
      */
     @Override
-    public OrderDetailVO detailByAdmin(Long orderId) {
+    public OrderDetailVO detailByAdmin(Long orderId, Long shopScope) {
         Order order = orderMapper.selectById(orderId);
         if (order == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "订单不存在");
+        }
+        // ★ Day 76：商户不能看「不含本店商品」的订单（一律 404）
+        if (shopScope != null && orderItemMapper.countByOrderAndShop(orderId, shopScope) == 0) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "订单不存在");
         }
         return buildDetail(order);
