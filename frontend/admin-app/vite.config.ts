@@ -20,6 +20,8 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
+      // 上传图片（Day 74）：后端静态资源同样要转发
+      '/uploads': { target: apiTarget, changeOrigin: true },
       '/api': {
         target: apiTarget,
         changeOrigin: true,

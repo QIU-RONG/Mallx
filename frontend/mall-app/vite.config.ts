@@ -20,6 +20,8 @@ export default defineConfig({
     // ★ 开发期代理：/api 全部转发到后端 8080 —— 同源策略下免 CORS 配置，
     //   与生产「nginx 反代」同一思路。C 端应用 5173，管理端应用用 5174。
     proxy: {
+      // 上传图片（Day 74）：后端静态资源同样要转发
+      '/uploads': { target: apiTarget, changeOrigin: true },
       '/api': {
         target: apiTarget,
         changeOrigin: true,
@@ -30,6 +32,8 @@ export default defineConfig({
   preview: {
     port: 4173,
     proxy: {
+      // 上传图片（Day 74）：后端静态资源同样要转发
+      '/uploads': { target: apiTarget, changeOrigin: true },
       '/api': {
         target: apiTarget,
         changeOrigin: true,

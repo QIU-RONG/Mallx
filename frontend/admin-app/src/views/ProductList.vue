@@ -76,6 +76,22 @@ function resetQuery() {
   load()
 }
 
+// ---------- 主图上传（Day 74） ----------
+const uploadUrl = '/api/admin/upload/image'
+const uploadHeaders = computed(() => ({ Authorization: `Bearer ${auth.token}` }))
+
+function onUploaded(res: { code?: number; message?: string; data?: string }) {
+  if (res?.code === 200 && res.data) {
+    createForm.mainImage = res.data
+    ElMessage.success('图片已上传')
+  } else {
+    ElMessage.error(res?.message || '上传失败')
+  }
+}
+function onUploadError() {
+  ElMessage.error('上传失败（检查格式与大小）')
+}
+
 // ---------- 新增 ----------
 const createVisible = ref(false)
 const createForm = reactive({
@@ -214,7 +230,7 @@ onMounted(() => {
         </el-select>
         <el-button type="primary" @click="load">查询</el-button>
         <!-- ★ 按钮级权限码：只是体验，真正的边界在后端 @PreAuthorize -->
-        <el-button v-if="auth.hasPerm('product:create')" type="success" @click="openCreate">
+        <el-button v-if="auth.hasPerm('product:create')" type="primary" @click="openCreate">
           新建商品
         </el-button>
       </div>
@@ -313,8 +329,23 @@ onMounted(() => {
         <el-form-item label="副标题">
           <el-input v-model="createForm.subtitle" maxlength="200" />
         </el-form-item>
-        <el-form-item label="主图 URL">
-          <el-input v-model="createForm.mainImage" placeholder="https://..." />
+        <el-form-item label="主图">
+          <div class="upload-row">
+            <img v-if="createForm.mainImage" :src="createForm.mainImage" class="upload-preview" alt="" />
+            <div v-else class="upload-preview upload-none">无图</div>
+            <el-upload
+              :action="uploadUrl"
+              :headers="uploadHeaders"
+              :show-file-list="false"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              :on-success="onUploaded"
+              :on-error="onUploadError"
+            >
+              <el-button>上传图片</el-button>
+            </el-upload>
+            <el-input v-model="createForm.mainImage" placeholder="或直接粘贴图片 URL" />
+          </div>
+          <div class="hint">支持 jpg / png / webp / gif，≤ 2MB</div>
         </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="createForm.status">
@@ -380,6 +411,28 @@ onMounted(() => {
 }
 .skus {
   width: 100%;
+}
+.upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.upload-preview {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--el-border-color);
+  border-radius: 6px;
+  flex: none;
+}
+.upload-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
+  background: var(--el-fill-color-light);
 }
 .sku-row {
   display: flex;
