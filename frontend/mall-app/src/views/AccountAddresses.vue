@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { regionData } from 'element-china-area-data'
 import {
   addressCreate,
   addressDelete,
@@ -47,9 +48,20 @@ const form = reactive({
 })
 
 /** 弹窗左侧实时预览用：省市区拼一行 */
-const region = computed(() =>
+const regionText = computed(() =>
   [form.province, form.city, form.district].filter(Boolean).join(' '),
 )
+
+/** 级联选择器的值：直接绑【名称】数组（props.value = label），省得再查 code → text */
+const regionPath = ref<string[]>([])
+const cascaderProps = { value: 'label', label: 'label', children: 'children' } as const
+
+function onRegionChange(v: string[] | null) {
+  const arr = v ?? []
+  form.province = arr[0] ?? ''
+  form.city = arr[1] ?? ''
+  form.district = arr[2] ?? ''
+}
 
 /** 预览里的手机号打码：只有提交时才发全量 */
 const maskedPhone = computed(() => {
@@ -67,6 +79,7 @@ function resetForm() {
     detailAddress: '',
     isDefault: rows.value.length === 0,
   })
+  regionPath.value = []
 }
 
 function openCreate() {
@@ -77,6 +90,8 @@ function openCreate() {
 
 function openEdit(row: AddressVO) {
   editingId.value = row.id
+  // 旧数据若不在行政区内（历史手填），级联会显示为空；用户重选即可
+  regionPath.value = [row.province, row.city, row.district].filter(Boolean)
   Object.assign(form, {
     receiverName: row.receiverName,
     receiverPhone: row.receiverPhone,
@@ -225,7 +240,7 @@ onMounted(load)
               <span class="pv-name">{{ form.receiverName || '收货人' }}</span>
               <span class="pv-phone">{{ maskedPhone }}</span>
             </div>
-            <p class="pv-region">{{ region || '省 / 市 / 区' }}</p>
+            <p class="pv-region">{{ regionText || '省 / 市 / 区' }}</p>
             <p class="pv-detail">{{ form.detailAddress || '详细地址' }}</p>
             <span v-if="form.isDefault" class="pv-badge">默认</span>
           </div>
@@ -246,17 +261,19 @@ onMounted(load)
             </div>
 
             <p class="fsec"><span class="fsec-no">02</span>所在地区</p>
-            <div class="three">
-              <el-form-item label="省">
-                <el-input v-model="form.province" placeholder="如 上海市" />
-              </el-form-item>
-              <el-form-item label="市">
-                <el-input v-model="form.city" placeholder="如 上海市" />
-              </el-form-item>
-              <el-form-item label="区 / 县">
-                <el-input v-model="form.district" placeholder="如 浦东新区" />
-              </el-form-item>
-            </div>
+            <el-form-item label="省 / 市 / 区">
+              <el-cascader
+                v-model="regionPath"
+                :options="regionData"
+                :props="cascaderProps"
+                separator=" / "
+                clearable
+                filterable
+                placeholder="请选择省 / 市 / 区"
+                style="width: 100%"
+                @change="onRegionChange"
+              />
+            </el-form-item>
 
             <p class="fsec"><span class="fsec-no">03</span>详细地址</p>
             <el-form-item>
