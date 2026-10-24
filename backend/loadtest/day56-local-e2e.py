@@ -155,9 +155,11 @@ def main():
     chk("B.3 加入购物车", st == 200 and body_code(j) == 200, "http=%s code=%s" % (st, body_code(j)))
 
     st, j = http("POST", "/api/orders", token=demo, body={"addressId": address_id})
-    order_id = j.get("data")
+    # Day 77：多店铺购物车会拆成多张订单，接口统一返回 id 数组
+    ids = j.get("data") or []
+    order_id = ids[0] if ids else None
     chk("B.4 从购物车下单（PENDING_PAYMENT）", st == 200 and body_code(j) == 200 and order_id,
-        "orderId=%s code=%s" % (order_id, body_code(j)))
+        "orderIds=%s code=%s" % (ids, body_code(j)))
 
     st, j = http("POST", "/api/payments", token=demo, body={"orderId": order_id, "method": "ALIPAY"})
     chk("B.5 支付成功（order → PAID）", st == 200 and body_code(j) == 200, "code=%s" % body_code(j))

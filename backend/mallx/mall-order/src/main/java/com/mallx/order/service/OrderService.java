@@ -24,7 +24,7 @@ public interface OrderService {
      *
      * @return 新订单 id
      */
-    Long createFromCart(Long userId, OrderCreateDTO dto);
+    List<Long> createFromCart(Long userId, OrderCreateDTO dto);
 
     /**
      * 我的订单列表（分页，按创建时间倒序）。

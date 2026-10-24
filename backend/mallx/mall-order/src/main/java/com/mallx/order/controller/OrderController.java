@@ -14,6 +14,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+
+import java.util.List;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -60,7 +62,7 @@ public class OrderController {
 
     @Operation(summary = "从购物车下单（结算已勾选的商品，返回订单 id）")
     @PostMapping
-    public Result<Long> create(Authentication authentication, @RequestBody @Valid OrderCreateDTO dto) {
+    public Result<List<Long>> create(Authentication authentication, @RequestBody @Valid OrderCreateDTO dto) {
         Long userId = (Long) authentication.getPrincipal();
         return Result.ok(orderService.createFromCart(userId, dto));
     }

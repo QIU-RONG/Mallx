@@ -105,7 +105,7 @@ public class OrderServiceImpl implements OrderService {
      */
     @Override
     @Transactional
-    public Long createFromCart(Long userId, OrderCreateDTO dto) {
+    public List<Long> createFromCart(Long userId, OrderCreateDTO dto) {
 
         // ① 校验地址归属：IDOR 校验写在 SQL 的 WHERE 里（id + user_id）
         AddressForOrderVO addr = orderMapper.selectAddressForOrder(dto.getAddressId(), userId);
@@ -154,6 +154,14 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
+        // ③.5 按店铺分组（Day 77 拆单）：一个购物车里可能有多家店的东西
+        //   ★ shopId 为 null 的历史商品归到 -1 组，与任何真实店铺都不相等
+        java.util.Map<Long, List<OrderItemSourceVO>> byShop = new java.util.LinkedHashMap<>();
+        for (OrderItemSourceVO s : sources) {
+            byShop.computeIfAbsent(s.getShopId() == null ? -1L : s.getShopId(), k -> new ArrayList<>()).add(s);
+        }
+        boolean split = byShop.size() > 1;
+
         // ④ 算总额（服务端算，禁止客户端传金额）：Σ(price × quantity)
         BigDecimal totalAmount = BigDecimal.ZERO;
         for (OrderItemSourceVO s : sources) {
@@ -167,7 +175,11 @@ public class OrderServiceImpl implements OrderService {
         //        全程不碰 marketing 域，老链路一行逻辑都没变（这是 M1 198 条能原样跑通的原因）。
         BigDecimal discountAmount = BigDecimal.ZERO;
         CouponUseVO use = null;
-        if (dto.getUserCouponId() != null) {
+        if (split && dto.getUserCouponId() != null) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(),
+                    "购物车含多家店铺的商品，拆单后暂不支持使用优惠券");
+        }
+        if (!split && dto.getUserCouponId() != null) {
             // ★ 方法名叫 calcDiscount（只算、不写库）；真正的核销是下面的 ⑥.5 ——
             //   这里是「快路径的预演」，成败最终由 ⑥.5 那条 CAS 决定。
             //   ⚠️ 不要写成 use(...)：没有这个方法；也不要在这里改 user_coupons —— 那时订单 id 还不存在。
@@ -192,43 +204,86 @@ public class OrderServiceImpl implements OrderService {
             }
         }
 
-        // ⑥ 插订单 → 拿回填 id → 插明细（快照）
+        // ⑥ 插订单 + 明细（Day 77：按店铺拆单）
+        //   split=false → 一单，券核销逻辑保持原样
+        //   split=true  → 每店一单；券已在上文拒绝，discount 恒为 0
+        List<Long> orderIds = new ArrayList<>();
+        if (!split) {
+            Order order = insertOrder(userId, addr, totalAmount, discountAmount);
+            // ⑥.5 核销：必须在 insert 之后（要写落库后的订单 id）；失败必须抛出才回滚
+            if (use != null) {
+                couponService.useCoupon(userId, use.getUserCouponId(), order.getId());
+            }
+            insertItems(order.getId(), sources);
+            orderIds.add(order.getId());
+        } else {
+            for (Map.Entry<Long, List<OrderItemSourceVO>> e : byShop.entrySet()) {
+                List<OrderItemSourceVO> group = e.getValue();
+                BigDecimal groupTotal = BigDecimal.ZERO;
+                for (OrderItemSourceVO s : group) {
+                    groupTotal = groupTotal.add(s.getPrice().multiply(BigDecimal.valueOf(s.getQuantity())));
+                }
+                Order order = insertOrder(userId, addr, groupTotal, BigDecimal.ZERO);
+                insertItems(order.getId(), group);
+                orderIds.add(order.getId());
+            }
+        }
+
+        // ⑦ 清掉已勾选的购物车项（未勾选的必须留在车里）
+        orderMapper.deleteSelectedCartItems(userId);
+
+        // ⑧ 每个拆分单各发一条延迟关单消息（afterCommit）
+        for (Long oid : orderIds) {
+            final Long placedOrderId = oid;
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        rabbitTemplate.convertAndSend(OrderDelayMqConfig.EXCHANGE, OrderDelayMqConfig.RK_TTL,
+                                String.valueOf(placedOrderId),
+                                m -> {
+                                    m.getMessageProperties().setExpiration(String.valueOf(closeDelayMs));
+                                    return m;
+                                });
+                        log.info("延迟关单消息已发布 orderId={} ttl={}ms", placedOrderId, closeDelayMs);
+                    } catch (Exception e) {
+                        log.warn("延迟关单消息发布失败（扫描任务将兜底）orderId={}", placedOrderId, e);
+                    }
+                }
+            });
+        }
+
+        log.info("下单成功 userId={} orderIds={} split={} totalAmount={} couponId={}",
+                userId, orderIds, split, totalAmount, use == null ? null : use.getUserCouponId());
+        return orderIds;
+    }
+
+    /** 插订单主表（Day 77 拆单后两处共用） */
+    private Order insertOrder(Long userId, AddressForOrderVO addr,
+                              BigDecimal totalAmount, BigDecimal discountAmount) {
         Order order = new Order();
         order.setOrderNo(generateOrderNo());
         order.setUserId(userId);
         order.setTotalAmount(totalAmount);
-        // ★ Day 21 起 payAmount 不再恒等于 totalAmount（用券时 = total - discount）；
-        //   ★ discountAmount 不用券时是 0，不是 null —— 三列必须满足 pay = total - discount。
-        order.setPayAmount(payAmount);
+        order.setPayAmount(totalAmount.subtract(discountAmount));
         order.setDiscountAmount(discountAmount);
         order.setStatus(OrderStatus.PENDING_PAYMENT);
         order.setReceiverName(addr.getReceiverName());
         order.setReceiverPhone(addr.getReceiverPhone());
-        // 省市区 + 详址拼成一整串（表里就这么设计的，没有三个独立列）
         order.setReceiverAddress(addr.getProvince() + addr.getCity() + addr.getDistrict()
                 + addr.getDetailAddress());
-        orderMapper.insert(order);                             // ★ 插入后 id 自动回填
+        orderMapper.insert(order);
+        return order;
+    }
 
-        // ⑥.5 核销（Day 21）—— ★★ 必须在 insert【之后】：要写进 user_coupons.order_id 的
-        //      是【落库后的真实订单 id】。放在 insert 之前的话 order.getId() 是 null，
-        //      markUsed 的 `WHERE id = null` 恒假 → 0 行 → 抛异常 → 整单回滚（永远下不了单）。
-        //      ★ 触发条件用 use != null（「真算过」的凭据），而不是 dto.getUserCouponId() != null ——
-        //        后者在「将来重构让 ④.5 被跳过」时会造出「券被核销了但没抵扣」
-        //        （markUsed 只要求 status='UNUSED'，照样返回 1 行），是结构性的防错。
-        //      ★ 失败必须抛出去（不 catch）：本方法带 @Transactional，只有抛出去才会把
-        //        「订单 + 库存 + 金额」一起回滚。
-        if (use != null) {
-            // ★ 用 use.getUserCouponId() 而不是 dto.getUserCouponId()：销的必须是【算过价的那一张】，
-            //   这样「算」与「销」永远指向同一行，不会因参数来源变化而错配。
-            couponService.useCoupon(userId, use.getUserCouponId(), order.getId());
-        }
-
-        for (OrderItemSourceVO s : sources) {
+    /** 插订单明细（快照） */
+    private void insertItems(Long orderId, List<OrderItemSourceVO> items) {
+        for (OrderItemSourceVO s : items) {
             OrderItem item = new OrderItem();
-            item.setOrderId(order.getId());
+            item.setOrderId(orderId);
             item.setProductId(s.getProductId());
             item.setSkuId(s.getSkuId());
-            item.setProductName(s.getProductName());           // ← 以下四行全是快照
+            item.setProductName(s.getProductName());
             item.setSkuName(s.getSkuName());
             item.setPrice(s.getPrice());
             item.setImage(s.getImage());
@@ -236,42 +291,6 @@ public class OrderServiceImpl implements OrderService {
             item.setTotalAmount(s.getPrice().multiply(BigDecimal.valueOf(s.getQuantity())));
             orderItemMapper.insert(item);
         }
-
-        // ⑦ 清掉已勾选的购物车项（未勾选的必须留在车里）
-        orderMapper.deleteSelectedCartItems(userId);
-
-        // ⑧ 延迟关单消息（V1.1 · D41）—— ★ 必须 afterCommit 发布，不能在事务内发：
-        //    事务内发出去、事务却回滚 ⇒ 消费者会去关一张不存在的单（无害但要靠日志对账）；
-        //    afterCommit 保证「消息一定对应一张已落库的单」。
-        //    ★ 发布失败（MQ 宕机）只打 warn 不抛：订单照常存在，@Scheduled 扫描兜底关单
-        //      —— MQ 是加速，不是正确性的前提。
-        final Long placedOrderId = order.getId();
-        // ★ Day 48：下单成功是核心业务节点，INFO 级（低频、关键）。
-        //   ★ 六个字段各有用途：userId 定位人，orderId/orderNo 定位单，
-        //     payAmount 是事后对账的锚点，itemCount 用于判断是不是异常大单，
-        //     couponId 让「用券的订单出了问题」能立刻筛出来（不用去 join 数据库）。
-        log.info("下单成功 userId={} orderId={} orderNo={} payAmount={} itemCount={} couponId={}",
-                userId, placedOrderId, order.getOrderNo(), order.getPayAmount(),
-                orderItemMapper.selectCount(null) >= 0 ? sources.size() : sources.size(),
-                use == null ? null : use.getUserCouponId());
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    rabbitTemplate.convertAndSend(OrderDelayMqConfig.EXCHANGE, OrderDelayMqConfig.RK_TTL,
-                            String.valueOf(placedOrderId),
-                            m -> {
-                                m.getMessageProperties().setExpiration(String.valueOf(closeDelayMs));
-                                return m;
-                            });
-                    log.info("延迟关单消息已发布 orderId={} ttl={}ms", placedOrderId, closeDelayMs);
-                } catch (Exception e) {
-                    log.warn("延迟关单消息发布失败（扫描任务将兜底）orderId={}", placedOrderId, e);
-                }
-            }
-        });
-
-        return order.getId();
     }
 
     // ============================ 支付（Day 13 第 2 步） ============================

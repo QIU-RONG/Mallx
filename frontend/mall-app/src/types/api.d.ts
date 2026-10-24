@@ -231,6 +231,7 @@ export type OrderStatus =
   | 'SHIPPED'
   | 'COMPLETED'
   | 'CANCELLED'
+  | 'REFUNDED'
 
 /** 券面（可领列表） */
 export interface CouponVO {

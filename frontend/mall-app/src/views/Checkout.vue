@@ -50,9 +50,15 @@ async function submit() {
   submitting.value = true
   try {
     const j = await orderCreate(addressId.value, couponId.value)
-    ElMessage.success('下单成功')
+    const ids = j.data || []
     cartStore.clear()
-    router.push(`/orders/${j.data}`)
+    if (ids.length > 1) {
+      ElMessage.success(`购物车含多家店铺，已拆分为 ${ids.length} 个订单，请分别支付`)
+      router.push('/account/orders')
+    } else {
+      ElMessage.success('下单成功')
+      router.push(`/orders/${ids[0]}`)
+    }
   } finally {
     submitting.value = false
   }

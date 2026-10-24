@@ -17,6 +17,7 @@ const STATUS_META: Record<OrderStatus, { label: string; type: 'info' | 'warning'
   SHIPPED: { label: '已发货', type: 'primary' },
   COMPLETED: { label: '已完成', type: 'success' },
   CANCELLED: { label: '已取消', type: 'info' },
+  REFUNDED: { label: '已退款', type: 'info' },
 }
 
 async function load() {

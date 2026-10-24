@@ -30,6 +30,9 @@ public class OrderItemSourceVO {
 
     private Long productId;
 
+    /** Day 77：所属店铺（下单按店铺拆单用）；可为 null（历史商品未归属） */
+    private Long shopId;
+
     /** products.name（快照来源） */
     private String productName;
 

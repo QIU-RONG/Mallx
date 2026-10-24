@@ -31,6 +31,7 @@
                s.price,
                COALESCE(s.image, p.main_image) AS image,
                p.name                          AS product_name,
+               p.shop_id                       AS shop_id,
                p.status                        AS product_status,
                COALESCE(p.is_deleted, 0)       AS product_deleted,
                COALESCE(s.is_deleted, 0)       AS sku_deleted,

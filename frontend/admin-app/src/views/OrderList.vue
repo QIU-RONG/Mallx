@@ -21,6 +21,7 @@ const STATUS_LABEL: Record<string, string> = {
   SHIPPED: '已发货',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
+  REFUNDED: '已退款',
 }
 
 /**
@@ -118,6 +119,7 @@ onMounted(load)
           <el-option value="SHIPPED" label="已发货" />
           <el-option value="COMPLETED" label="已完成" />
           <el-option value="CANCELLED" label="已取消" />
+        <el-option value="REFUNDED" label="已退款" />
         </el-select>
         <el-button type="primary" @click="load">查询</el-button>
       </div>

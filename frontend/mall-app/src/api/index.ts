@@ -182,7 +182,8 @@ export function aiChat(message: string, history: AiChatTurn[] = []) {
 // ===================== FE2：订单 =====================
 /** ★ 买什么只认购物车里 selected 的行，入参只有 addressId（+ 可选 userCouponId） */
 export function orderCreate(addressId: number, userCouponId?: number | null) {
-  return http.post<never, Result<number>>('/orders', {
+  // Day 77：多店铺购物车会拆成多张订单，返回 id 数组（单店仍只有一个元素）
+  return http.post<never, Result<number[]>>('/orders', {
     addressId,
     userCouponId: userCouponId ?? null,
   })

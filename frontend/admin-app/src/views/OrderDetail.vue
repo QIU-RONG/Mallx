@@ -17,6 +17,7 @@ const STATUS_LABEL: Record<string, string> = {
   SHIPPED: '已发货',
   COMPLETED: '已完成',
   CANCELLED: '已取消',
+  REFUNDED: '已退款',
 }
 
 async function load() {
