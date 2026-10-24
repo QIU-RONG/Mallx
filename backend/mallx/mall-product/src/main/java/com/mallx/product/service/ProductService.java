@@ -30,7 +30,7 @@ public interface ProductService extends IService<Product> {
      * @param status 1=上架 0=下架；★ 必须是包装类型 Integer —— 只有 null 才表达得出「不过滤」
      */
     Page<ProductVO> pageAdminProducts(long current, long size, Long categoryId,
-                                      String keyword, Integer status);
+                                      String keyword, Integer status, Long shopScope);
 
     /**
      * ★★★ C 端商品搜索（Day 19）—— <b>骨架</b>，方法体由你写。
@@ -83,13 +83,13 @@ public interface ProductService extends IService<Product> {
      * <p>★ 之所以不写成 {@code getDetail(id, boolean forAdmin)}：布尔参数在调用点读不出语义，
      * 而这两条路是<b>可分别断言</b>的两种行为（验收判据：同一 id、同一时刻，两个接口结果必须不同）。
      */
-    ProductDetailVO getAdminDetail(Long id);
+    ProductDetailVO getAdminDetail(Long id, Long shopScope);
     //    创建商品
-    Long createProduct(ProductCreateDTO productCreateDTO);
+    Long createProduct(ProductCreateDTO productCreateDTO, Long shopScope);
     //    修改商品（id 走路径，body 只带这次要改的字段）
-    void updateProduct(Long id, ProductUpdateDTO productUpdateDTO);
+    void updateProduct(Long id, ProductUpdateDTO productUpdateDTO, Long shopScope);
     //    删除商品
-    void deleteProduct(Long id);
+    void deleteProduct(Long id, Long shopScope);
     //    批量删除商品
 //    void deleteBatchProduct(Long[] ids);
 }

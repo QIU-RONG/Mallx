@@ -37,6 +37,11 @@ export function adminLogin(username: string, password: string) {
   return http.post<never, Result<LoginData>>('/auth/admin/login', { username, password })
 }
 
+/** 商户登录（Day 75）：token 同样 type=ADMIN，perms 里多一条 SHOP_SCOPE_<id> */
+export function merchantLogin(username: string, password: string) {
+  return http.post<never, Result<LoginData>>('/auth/merchant/login', { username, password })
+}
+
 // ===================== 商品管理 =====================
 /** status 不传 = 全部（含下架）—— 与 C 端「写死 status=1」正好相反 */
 export function adminPageProducts(params: {

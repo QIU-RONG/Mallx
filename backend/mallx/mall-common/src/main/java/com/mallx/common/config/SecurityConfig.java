@@ -55,7 +55,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST,
                                  "/api/auth/sms/send",
                                  "/api/auth/sms/login",
-                                 "/api/auth/sms/register").permitAll()
+                                 "/api/auth/sms/register", "/api/auth/merchant/login").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
                 // ★ Day 20：优惠券「可领列表」公开。注意这里是【精确路径】，不是 "/api/coupons/**" ——

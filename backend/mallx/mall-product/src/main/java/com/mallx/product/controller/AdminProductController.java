@@ -80,7 +80,7 @@ public class AdminProductController {
             @RequestParam(required = false) String keyword,
             @RequestParam(required = false) Integer status) {
 
-        return Result.ok(PageResult.of(productService.pageAdminProducts(current, size, categoryId, keyword, status)));
+        return Result.ok(PageResult.of(productService.pageAdminProducts(current, size, categoryId, keyword, status, com.mallx.common.security.ShopScope.currentShopId())));
     }
 
     /**
@@ -94,14 +94,14 @@ public class AdminProductController {
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('product:detail')")
     public Result<ProductDetailVO> detail(@PathVariable Long id) {
-        return Result.ok(productService.getAdminDetail(id));
+        return Result.ok(productService.getAdminDetail(id, com.mallx.common.security.ShopScope.currentShopId()));
     }
 
     @Operation(summary = "新增商品（需 product:create）")
     @PostMapping
     @PreAuthorize("hasAuthority('product:create')")
     public Result<Long> create(@RequestBody @Valid ProductCreateDTO dto) {
-        return Result.ok(productService.createProduct(dto));
+        return Result.ok(productService.createProduct(dto, com.mallx.common.security.ShopScope.currentShopId()));
     }
 
     @Operation(summary = "修改商品（含上下架：{\"status\":0} 即下架）")
@@ -110,7 +110,7 @@ public class AdminProductController {
     public Result<Void> update(@PathVariable Long id, @RequestBody @Valid ProductUpdateDTO dto) {
         // ★ 本日【不】为上下架单独开端点：ProductUpdateDTO 里已有 status，
         //   单字段更新走 PUT 语义上就是「编辑商品」。
-        productService.updateProduct(id, dto);
+        productService.updateProduct(id, dto, com.mallx.common.security.ShopScope.currentShopId());
         return Result.ok();
     }
 
@@ -118,7 +118,7 @@ public class AdminProductController {
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('product:delete')")
     public Result<Void> delete(@PathVariable Long id) {
-        productService.deleteProduct(id);
+        productService.deleteProduct(id, com.mallx.common.security.ShopScope.currentShopId());
         return Result.ok();
     }
 }

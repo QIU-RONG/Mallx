@@ -44,5 +44,11 @@ export const ADMIN_MENUS: AdminMenuItem[] = [
  * `perms`，这个函数<b>不应该</b>有修改它的能力（顺带让「传常量数组」也通过类型检查）。
  */
 export function visibleMenus(perms: readonly string[]): AdminMenuItem[] {
+  // ★ Day 75：商户 token 带 SHOP_SCOPE_<id>，只能进商品页。
+  //   平台角色没有这条权限，菜单照旧按 perm 过滤。
+  const isMerchant = perms.some((p) => p.startsWith('SHOP_SCOPE_'))
+  if (isMerchant) {
+    return ADMIN_MENUS.filter((m) => m.label === '商品管理')
+  }
   return ADMIN_MENUS.filter((m) => !m.perm || perms.includes(m.perm))
 }

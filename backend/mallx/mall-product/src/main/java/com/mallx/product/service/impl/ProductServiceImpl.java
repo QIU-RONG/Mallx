@@ -111,7 +111,7 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
 
     @Override
     public Page<ProductVO> pageAdminProducts(long current, long size, Long categoryId,
-                                             String keyword, Integer status) {
+                                             String keyword, Integer status, Long shopScope) {
         // 与 C 端 pageProducts 的【唯一差别】就是 status 的过滤口径：
         //   C 端  ：.eq(Product::getStatus, 1)                      // 写死：只看上架
         //   管理端：.eq(status != null, Product::getStatus, status) // 条件：不传就全都要（含下架）
@@ -123,6 +123,8 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
                 .eq(status != null, Product::getStatus, status)
+                // ★ Day 75：商户只能看自己店铺的商品（平台账号 shopScope = null，不附加条件）
+                .eq(shopScope != null, Product::getShopId, shopScope)
                 .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
                 .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
                 .orderByDesc(Product::getId);
@@ -370,9 +372,13 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
      * 唯一判空：软删商品连行都查不到（{@code @TableLogic} 已过滤），那才是真 404。
      */
     @Override
-    public ProductDetailVO getAdminDetail(Long id) {
+    public ProductDetailVO getAdminDetail(Long id, Long shopScope) {
         Product product = this.getById(id);
         if (product == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        // ★ 商户越权访问别家商品：一律 404（不泄露「存在但不是你的」）
+        if (shopScope != null && !shopScope.equals(product.getShopId())) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
         return assembleDetail(product);
@@ -441,7 +447,11 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public Long createProduct(ProductCreateDTO productCreateDTO) {
+    public Long createProduct(ProductCreateDTO productCreateDTO, Long shopScope) {
+        // ★ 商户新建商品：店铺由 token 强制指定，忽略请求体里的 shopId
+        if (shopScope != null) {
+            productCreateDTO.setShopId(shopScope);
+        }
         // ① 校验分类存在 —— 不是给外键兜底，是为了给出人能看懂的提示
         if (categoryMapper.selectById(productCreateDTO.getCategoryId()) == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "分类不存在");
@@ -507,11 +517,20 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
      */
     @Transactional(rollbackFor = Exception.class)
     @Override
-    public void updateProduct(Long id, ProductUpdateDTO productUpdateDTO) {
+    public void updateProduct(Long id, ProductUpdateDTO productUpdateDTO, Long shopScope) {
         // ==================== ① 主表 ====================
         // 先确认存在，否则 updateById 会"静默成功"（影响行数 0，但接口返回 200）
-        if (this.getById(id) == null) {
+        Product exist = this.getById(id);
+        if (exist == null) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        // ★ 商户只能改自己店铺的商品
+        if (shopScope != null && !shopScope.equals(exist.getShopId())) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        // 商户不能把商品挪到别的店铺
+        if (shopScope != null) {
+            productUpdateDTO.setShopId(shopScope);
         }
         // 局部更新下，"没传 name"合法、"传了空串"不合法 —— 这个区别 @NotBlank 表达不了
         if (productUpdateDTO.getName() != null && productUpdateDTO.getName().isBlank()) {
@@ -623,8 +642,13 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void deleteProduct(Long id) {
-        if (this.getById(id) == null) {
+    public void deleteProduct(Long id, Long shopScope) {
+        Product product = this.getById(id);
+        if (product == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
+        }
+        // 商户没有 product:delete 权限，这里再兜一层范围（万一将来授权）
+        if (shopScope != null && !shopScope.equals(product.getShopId())) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "商品不存在");
         }
         this.removeById(id);

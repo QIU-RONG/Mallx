@@ -16,6 +16,8 @@ import { flattenCategories } from '../utils/tree'
 import type { BrandVO, CategoryVO, ProductVO, ShopVO, SkuCreateDTO } from '../types/api'
 
 const auth = useAuthStore()
+/** Day 75：商户（带 SHOP_SCOPE_*）看不到店铺选择，店铺由后端按 token 强制 */
+const isMerchant = computed(() => auth.perms.some((x) => x.startsWith('SHOP_SCOPE_')))
 
 const rows = ref<ProductVO[]>([])
 const total = ref(0)
@@ -59,7 +61,11 @@ async function loadDict() {
   } catch {
     brands.value = []
   }
-  // ★ 店铺字典（Day 64）：与分类/品牌一样，失败不阻断商品列表
+  // ★ 店铺字典（Day 64）：商户没有 shop:list 权限，不请求
+  if (isMerchant.value) {
+    shops.value = []
+    return
+  }
   try {
     shops.value = (await adminShopList()).data
   } catch {
@@ -136,7 +142,7 @@ async function submitCreate() {
   const id = (await adminProductCreate({
     categoryId: createForm.categoryId,
     brandId: createForm.brandId,
-    shopId: createForm.shopId,
+    shopId: isMerchant.value ? undefined : createForm.shopId,
     name: createForm.name,
     subtitle: createForm.subtitle || undefined,
     mainImage: createForm.mainImage || undefined,
@@ -317,7 +323,7 @@ onMounted(() => {
             <el-option v-for="b in brands" :key="b.id" :value="b.id" :label="b.name" />
           </el-select>
         </el-form-item>
-        <el-form-item label="店铺">
+        <el-form-item v-if="!isMerchant" label="店铺">
           <el-select v-model="createForm.shopId" clearable filterable style="width: 100%"
             placeholder="不选 = 不归属任何店铺">
             <el-option v-for="s in shops" :key="s.id" :value="s.id" :label="s.name" />
@@ -382,7 +388,7 @@ onMounted(() => {
         <el-form-item label="副标题">
           <el-input v-model="editForm.subtitle" maxlength="200" />
         </el-form-item>
-        <el-form-item label="店铺">
+        <el-form-item v-if="!isMerchant" label="店铺">
           <el-select v-model="editForm.shopId" clearable filterable style="width: 100%"
             placeholder="不选 = 保持原归属">
             <el-option v-for="s in shops" :key="s.id" :value="s.id" :label="s.name" />
