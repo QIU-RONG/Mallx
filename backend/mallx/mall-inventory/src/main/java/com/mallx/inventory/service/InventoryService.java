@@ -210,4 +210,15 @@ public interface InventoryService {
      * @param size  每页条数，最终落在 1..100
      */
     PageResult<InventoryLogVO> listLogs(Long skuId, String type, long page, long size);
+    // ================== C 端（Day 73 · 详情页库存展示） ==================
+
+    /**
+     * 批量查可售库存：{@code skuId → available_stock}。
+     *
+     * <p>★ 只返回存在的 SKU；查不到的不补 0（调用方按「无库存」处理即可）。
+     * ★ 一次 {@code IN} 查询，不做逐 SKU 调用。
+     *
+     * @param skuIds SKU 主键集合（为空直接返回空 Map）
+     */
+    java.util.Map<java.lang.Long, java.lang.Integer> availableStock(java.util.Collection<java.lang.Long> skuIds);
 }

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { cartAdd, pageProducts, productDetail, productReviews } from '../api'
+import { cartAdd, inventoryStock, pageProducts, productDetail, productReviews } from '../api'
 import ProductThumb from '../components/ProductThumb.vue'
 import type { ProductDetailVO, ProductVO, ReviewVO, SkuVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
@@ -32,6 +32,29 @@ const saved = computed(() => {
   if (!s?.originalPrice) return 0
   const diff = Number(s.originalPrice) - Number(s.price)
   return diff > 0 ? diff : 0
+})
+
+// ---------------- 库存（Day 73） ----------------
+/** skuId → 可售库存；接口只返回存在的 SKU，查不到按 0 处理 */
+const stockMap = ref<Record<number, number>>({})
+const stock = computed(() => (chosenSkuId.value == null ? 0 : (stockMap.value[chosenSkuId.value] ?? 0)))
+const maxQty = computed(() => Math.min(99, Math.max(1, stock.value)))
+const soldOut = computed(() => chosenSkuId.value != null && stock.value <= 0)
+
+async function loadStock(ids: number[]) {
+  if (!ids.length) return
+  try {
+    const j = await inventoryStock(ids)
+    stockMap.value = j.data || {}
+  } catch {
+    // ★ 库存查不到时不假装有货，也不阻塞页面：按「未显示库存」处理
+    stockMap.value = {}
+  }
+}
+
+// 换规格时把数量拉回合法范围（原本买了 5 件，换到的规格只剩 2 件）
+watch(chosenSkuId, () => {
+  if (quantity.value > maxQty.value) quantity.value = maxQty.value
 })
 
 // ---------------- 用户评价（Day 61） ----------------
@@ -103,6 +126,8 @@ onMounted(async () => {
     mainPic.value = pics.value[0] || ''
     // ★ 规格没有「上下架」字段（后端 SkuVO 只给价格/编码），默认选第一个
     chosenSkuId.value = j.data.skus[0]?.id ?? null
+    // 库存单独查：公开接口，失败不阻塞商品主体
+    loadStock(j.data.skus.map((s) => s.id))
   } finally {
     loading.value = false
   }
@@ -189,6 +214,10 @@ async function addToCart() {
               <span v-if="saved > 0" class="orig">¥{{ Number(chosenSku?.originalPrice).toFixed(2) }}</span>
             </div>
             <div v-if="saved > 0" class="saved">立省 ¥{{ saved.toFixed(2) }}</div>
+            <p class="stock-line" :class="{ out: soldOut }">
+              <span v-if="soldOut">该规格暂时缺货</span>
+              <span v-else>库存 {{ stock }} 件</span>
+            </p>
             <button class="review-link" type="button" @click="jumpToReviews">
               {{ reviewCount }} 条评价 ↓
             </button>
@@ -212,16 +241,16 @@ async function addToCart() {
           </div>
 
           <div class="buy-row">
-            <el-input-number v-model="quantity" :min="1" :max="99" />
+            <el-input-number v-model="quantity" :min="1" :max="maxQty" />
             <el-button
               class="buy-btn"
               type="primary"
               size="large"
               :loading="adding"
-              :disabled="chosenSkuId == null"
+              :disabled="chosenSkuId == null || soldOut"
               @click="addToCart"
             >
-              加入购物车
+              {{ soldOut ? '已售罄' : '加入购物车' }}
             </el-button>
             <button class="link-btn" type="button" @click="router.push('/cart')">
               去购物车结算
@@ -433,6 +462,14 @@ async function addToCart() {
 .saved {
   margin-top: 6px;
   font-size: 12px;
+  color: var(--mx-accent);
+}
+.stock-line {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--mx-ink-3);
+}
+.stock-line.out {
   color: var(--mx-accent);
 }
 

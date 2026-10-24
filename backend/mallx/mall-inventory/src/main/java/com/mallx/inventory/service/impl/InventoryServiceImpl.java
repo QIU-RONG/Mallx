@@ -343,4 +343,19 @@ public class InventoryServiceImpl implements InventoryService {
         vo.setCreatedAt(log.getCreatedAt());
         return vo;
     }
+    @Override
+    public java.util.Map<java.lang.Long, java.lang.Integer> availableStock(java.util.Collection<java.lang.Long> skuIds) {
+        java.util.Map<java.lang.Long, java.lang.Integer> result = new java.util.HashMap<>();
+        if (skuIds == null || skuIds.isEmpty()) {
+            return result;
+        }
+        // ★ 一次 IN 查询：详情页通常 3 个 SKU，不做逐条查
+        java.util.List<com.mallx.inventory.entity.Inventory> rows = inventoryMapper.selectList(
+                new LambdaQueryWrapper<com.mallx.inventory.entity.Inventory>()
+                        .in(com.mallx.inventory.entity.Inventory::getSkuId, skuIds));
+        for (com.mallx.inventory.entity.Inventory inv : rows) {
+            result.put(inv.getSkuId(), inv.getAvailableStock());
+        }
+        return result;
+    }
 }

@@ -139,6 +139,14 @@ export function userUpdateNickname(nickname: string) {
   return http.put<never, Result<void>>('/users/me/nickname', { nickname })
 }
 
+// ===================== 库存（Day 73） =====================
+/** 可售库存：{ skuId: available }；详情页展示与限购用，公开接口 */
+export function inventoryStock(skuIds: number[]) {
+  return http.get<never, Result<Record<string, number>>>('/inventory/stock', {
+    params: { skuIds: skuIds.join(',') },
+  })
+}
+
 // ---------- 商品评价（Day 61） ----------
 /** 商品评价列表：公开（游客可看），带平均分与总数 */
 export function productReviews(productId: number | string, page = 1, size = 5) {
