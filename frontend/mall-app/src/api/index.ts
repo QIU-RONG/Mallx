@@ -160,8 +160,8 @@ export function productReviews(productId: number | string, page = 1, size = 5) {
  * ★ 只能评「自己的、已完成的订单明细」且一条明细只能评一次 —— 这三条都在后端守。
  * ★ 入参刻意没有 productId：商品由 orderItemId 反查（防「一单刷全站」）。
  */
-export function createReview(orderItemId: number, rating: number, content: string) {
-  return http.post<never, Result<ReviewVO>>('/reviews', { orderItemId, rating, content })
+export function createReview(orderItemId: number, rating: number, content: string, images: string[] = []) {
+  return http.post<never, Result<ReviewVO>>('/reviews', { orderItemId, rating, content, images })
 }
 
 /** 我的评价（需登录） */

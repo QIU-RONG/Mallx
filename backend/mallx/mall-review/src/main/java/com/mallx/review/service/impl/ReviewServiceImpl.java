@@ -43,10 +43,12 @@ public class ReviewServiceImpl implements ReviewService {
     private static final long MAX_PAGE_SIZE = 100;
 
     private final ReviewMapper reviewMapper;      // 本模块
+    private final com.mallx.review.mapper.ReviewImageMapper reviewImageMapper;
     private final OrderService orderService;      // mall-order 的只读门面（getBuyContext）
 
-    public ReviewServiceImpl(ReviewMapper reviewMapper, OrderService orderService) {
+    public ReviewServiceImpl(ReviewMapper reviewMapper, com.mallx.review.mapper.ReviewImageMapper reviewImageMapper, OrderService orderService) {
         this.reviewMapper = reviewMapper;
+        this.reviewImageMapper = reviewImageMapper;
         this.orderService = orderService;
     }
 
@@ -72,6 +74,7 @@ public class ReviewServiceImpl implements ReviewService {
      * ⚠️ 因为 {@code ON CONFLICT} 存在，这里<b>不需要</b> try/catch DuplicateKeyException。
      */
     @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
     public ReviewVO create(Long userId, ReviewCreateDTO dto) {
         OrderItemBuyContext ctx = orderService.getBuyContext(userId, dto.getOrderItemId());
         if (ctx == null) {
@@ -92,7 +95,30 @@ public class ReviewServiceImpl implements ReviewService {
         if (rows == 0) {
             throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "该商品已评价过");
         }
-        return reviewMapper.selectByOrderItemId(ctx.getOrderItemId());
+        // ★ insertReview 是 XML 的 INSERT ... ON CONFLICT DO NOTHING，不回填自增 id
+        //   ⇒ 先回查拿到真实 review id，再写图（否则 review_images.review_id 为 null）
+        ReviewVO saved = reviewMapper.selectByOrderItemId(ctx.getOrderItemId());
+        if (saved == null) {
+            throw new BusinessException(ResultCode.FAIL.getCode(), "评价写入异常");
+        }
+        java.util.List<String> images = dto.getImages() == null ? java.util.List.of() : dto.getImages();
+        int sort = 0;
+        for (String url : images) {
+            if (url == null || url.isBlank() || sort >= 3) {
+                continue;
+            }
+            String clean = url.trim();
+            if (!(clean.startsWith("/uploads/") || clean.startsWith("http://") || clean.startsWith("https://"))) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "图片地址不合法");
+            }
+            com.mallx.review.entity.ReviewImage img = new com.mallx.review.entity.ReviewImage();
+            img.setReviewId(saved.getId());
+            img.setImageUrl(clean);
+            img.setSort(sort++);
+            reviewImageMapper.insert(img);
+        }
+        attachImages(java.util.List.of(saved));
+        return saved;
     }
 
     /**
@@ -128,6 +154,7 @@ public class ReviewServiceImpl implements ReviewService {
         // ③④ 组装：分页四件套取自 result，两个聚合取自评价域的独立查询
         ReviewPageVO vo = new ReviewPageVO();
         vo.setRecords(result.getRecords());
+        attachImages(vo.getRecords());
         vo.setTotal(result.getTotal());
         vo.setCurrent(result.getCurrent());
         vo.setSize(result.getSize());
@@ -155,6 +182,7 @@ public class ReviewServiceImpl implements ReviewService {
                 reviewMapper.selectMyReviews(new Page<>(safePage, safeSize), userId);
 
         // ③ 没有聚合，字段集正好是分页四件套 —— 直接复用公共壳
+        attachImages(result.getRecords());
         return PageResult.of(result);
     }
 
@@ -201,6 +229,25 @@ public class ReviewServiceImpl implements ReviewService {
         int rows = reviewMapper.updateReviewStatus(id, status);
         if (rows == 0) {
             throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "评价不存在");
+        }
+    }
+
+    /** 批量补晒图（Day 80）：一次 IN 查询，按 reviewId 分组 */
+    private void attachImages(java.util.List<ReviewVO> records) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        java.util.List<Long> ids = records.stream().map(ReviewVO::getId).toList();
+        java.util.List<com.mallx.review.entity.ReviewImage> rows = reviewImageMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.mallx.review.entity.ReviewImage>()
+                        .in(com.mallx.review.entity.ReviewImage::getReviewId, ids)
+                        .orderByAsc(com.mallx.review.entity.ReviewImage::getSort));
+        java.util.Map<Long, java.util.List<String>> byReview = new java.util.HashMap<>();
+        for (com.mallx.review.entity.ReviewImage img : rows) {
+            byReview.computeIfAbsent(img.getReviewId(), k -> new java.util.ArrayList<>()).add(img.getImageUrl());
+        }
+        for (ReviewVO r : records) {
+            r.setImages(byReview.getOrDefault(r.getId(), java.util.List.of()));
         }
     }
 }

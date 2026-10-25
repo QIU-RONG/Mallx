@@ -58,5 +58,8 @@ public class ReviewVO {
      */
     private String userNickname;
 
+    /** Day 80：晒图 URL 列表（按 sort 升序） */
+    private java.util.List<String> images;
+
     private LocalDateTime createdAt;
 }

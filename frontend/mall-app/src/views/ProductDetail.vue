@@ -295,6 +295,17 @@ async function addToCart() {
                 <span class="time">{{ fmtTime(r.createdAt) }}</span>
               </div>
               <p class="review-content">{{ r.content || '（未填写文字）' }}</p>
+              <!-- Day 80：晒图 -->
+              <div v-if="r.images?.length" class="review-imgs">
+                <img
+                  v-for="(u, i) in r.images"
+                  :key="i"
+                  :src="u"
+                  alt="评价图片"
+                  loading="lazy"
+                  @error="($event.target as HTMLImageElement).style.display = 'none'"
+                />
+              </div>
             </div>
           </article>
 
@@ -750,6 +761,19 @@ async function addToCart() {
   color: var(--mx-ink-2);
   white-space: pre-wrap;
   word-break: break-word;
+}
+.review-imgs {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.review-imgs img {
+  width: 76px;
+  height: 76px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--mx-line);
 }
 .more-btn {
   margin-top: 18px;

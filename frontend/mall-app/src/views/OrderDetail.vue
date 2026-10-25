@@ -5,9 +5,12 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { createReview, orderCancel, orderConfirm, orderDetail, payOrder, refundApply } from '../api'
 import type { OrderDetailVO, OrderItemVO, OrderStatus } from '../types/api'
 import ProductThumb from '../components/ProductThumb.vue'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
+const uploadHeaders = computed(() => ({ Authorization: `Bearer ${auth.token}` }))
 const vo = ref<OrderDetailVO | null>(null)
 const loading = ref(false)
 
@@ -63,12 +66,31 @@ const reviewVisible = ref(false)
 const reviewItem = ref<OrderItemVO | null>(null)
 const reviewRating = ref(5)
 const reviewContent = ref('')
+const reviewImages = ref<string[]>([])
+const reviewUploading = ref(false)
 const reviewSubmitting = ref(false)
+
+function onReviewImageUploaded(res: { code?: number; message?: string; data?: string }) {
+  reviewUploading.value = false
+  if (res?.code === 200 && res.data) {
+    reviewImages.value.push(res.data)
+  } else {
+    ElMessage.error(res?.message || '图片上传失败')
+  }
+}
+function onReviewImageError() {
+  reviewUploading.value = false
+  ElMessage.error('图片上传失败（≤2MB，jpg/png/webp/gif）')
+}
+function removeReviewImage(i: number) {
+  reviewImages.value.splice(i, 1)
+}
 
 function openReview(row: OrderItemVO) {
   reviewItem.value = row
   reviewRating.value = 5
   reviewContent.value = ''
+  reviewImages.value = []
   reviewVisible.value = true
 }
 
@@ -80,7 +102,7 @@ async function submitReview() {
   }
   reviewSubmitting.value = true
   try {
-    await createReview(reviewItem.value.id, reviewRating.value, reviewContent.value.trim())
+    await createReview(reviewItem.value.id, reviewRating.value, reviewContent.value.trim(), reviewImages.value)
     ElMessage.success('评价成功，感谢反馈')
     reviewVisible.value = false
   } catch {
@@ -286,6 +308,27 @@ onMounted(load)
             placeholder="说说这件商品怎么样（可选）"
           />
         </el-form-item>
+        <!-- Day 80：晒图（最多 3 张，≤2MB） -->
+        <el-form-item label="晒图（可选）">
+          <div class="review-upload">
+            <div v-for="(img, i) in reviewImages" :key="img" class="thumb-box">
+              <img :src="img" alt="" />
+              <button class="thumb-x" type="button" @click="removeReviewImage(i)">×</button>
+            </div>
+            <el-upload
+              v-if="reviewImages.length < 3"
+              action="/api/upload/image"
+              :headers="uploadHeaders"
+              :show-file-list="false"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              :on-success="onReviewImageUploaded"
+              :on-error="onReviewImageError"
+            >
+              <el-button :loading="reviewUploading">上传图片</el-button>
+            </el-upload>
+          </div>
+          <div class="hint">支持 jpg / png / webp / gif，单张 ≤ 2MB，最多 3 张</div>
+        </el-form-item>
       </el-form>
       <div class="hint">评价会展示在商品详情页，提交后不可修改。</div>
       <template #footer>
@@ -341,6 +384,39 @@ onMounted(load)
   font-size: 14px;
   font-weight: 600;
   color: var(--mx-ink);
+}
+.review-upload {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.thumb-box {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--mx-line);
+}
+.thumb-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.thumb-x {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
 }
 .actions {
   margin-top: 16px;

@@ -171,6 +171,8 @@ export interface ReviewVO {
   content?: string
   userNickname?: string
   createdAt?: string
+  /** Day 80：晒图 URL 列表 */
+  images?: string[]
 }
 
 /** 商品评价列表（带聚合） */

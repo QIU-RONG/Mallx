@@ -56,6 +56,16 @@ onMounted(load)
           <span class="time">{{ fmtTime(r.createdAt) }}</span>
         </div>
         <p class="content">{{ r.content || '（未填写文字）' }}</p>
+        <div v-if="r.images?.length" class="thumbs">
+          <img
+            v-for="(u, i) in r.images"
+            :key="i"
+            :src="u"
+            alt="评价图片"
+            loading="lazy"
+            @error="($event.target as HTMLImageElement).style.display = 'none'"
+          />
+        </div>
       </div>
     </article>
 
@@ -127,5 +137,18 @@ onMounted(load)
   line-height: 1.7;
   color: var(--mx-ink-2);
   white-space: pre-wrap;
+}
+.thumbs {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.thumbs img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--mx-line);
 }
 </style>

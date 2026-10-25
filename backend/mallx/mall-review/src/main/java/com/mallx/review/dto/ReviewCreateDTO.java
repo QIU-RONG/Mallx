@@ -58,4 +58,8 @@ public class ReviewCreateDTO {
     /** 评价内容，可空（列是 TEXT 无上限，长度只能靠这里守） */
     @Size(max = 500, message = "评价内容最多 500 字")
     private String content;
+
+    /** Day 80：晒图（最多 3 张，服务端只接受 /uploads/ 或 http(s) 地址） */
+    @jakarta.validation.constraints.Size(max = 3, message = "最多上传 3 张图片")
+    private java.util.List<String> images;
 }
