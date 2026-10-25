@@ -10,6 +10,7 @@ const router = createRouter({
     { path: '/register', name: 'register', component: () => import('../views/Register.vue') },
     { path: '/', name: 'home', component: () => import('../views/ProductList.vue') },
     { path: '/product/:id', name: 'product-detail', component: () => import('../views/ProductDetail.vue') },
+    { path: '/shop/:id', name: 'shop', component: () => import('../views/Shop.vue') },
     // FE2：交易链路（全部需要登录）
     {
       path: '/cart',

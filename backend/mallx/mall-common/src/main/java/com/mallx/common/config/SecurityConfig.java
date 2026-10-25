@@ -57,7 +57,7 @@ public class SecurityConfig {
                                  "/api/auth/sms/login",
                                  "/api/auth/sms/register", "/api/auth/merchant/login").permitAll()
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/products/**", "/api/categories/**", "/api/shops/**").permitAll()
                 // ★ Day 20：优惠券「可领列表」公开。注意这里是【精确路径】，不是 "/api/coupons/**" ——
                 //   通配会把 /api/coupons/my（我的券）一起公开，而白名单只认「路径 + 方法」，
                 //   不认「同一个 Controller 里的不同方法」⇒ 会【静默公开】别人的券。

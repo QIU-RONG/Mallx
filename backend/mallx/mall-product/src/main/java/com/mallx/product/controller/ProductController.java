@@ -45,8 +45,9 @@ public class ProductController {
             @RequestParam(defaultValue = "1") long current,
             @RequestParam(defaultValue = "10") long size,
             @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) String keyword) {
-        Page<ProductVO> voPage = productService.pageProducts(current, size, categoryId, keyword);
+            @RequestParam(required = false) String keyword,
+        @RequestParam(required = false) Long shopId) {
+        Page<ProductVO> voPage = productService.pageProducts(current, size, categoryId, keyword, shopId);
         return Result.ok(PageResult.of(voPage));
     }
 

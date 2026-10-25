@@ -59,6 +59,15 @@ export interface ProductDetailVO extends ProductVO {
   shopName?: string | null
 }
 
+/** 店铺（Day 81，C 端展示用） */
+export interface ShopVO {
+  id: number
+  name: string
+  logo?: string | null
+  description?: string | null
+  status?: number
+}
+
 export interface CategoryVO {
   id: number
   parentId?: number

@@ -79,11 +79,13 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
     }
 
     @Override
-    public Page<ProductVO> pageProducts(long current, long size, Long categoryId, String keyword) {
+    public Page<ProductVO> pageProducts(long current, long size, Long categoryId, String keyword, Long shopId) {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<Product>()
                 .eq(Product::getStatus, 1)                                    // C 端只看上架
                 // 条件为 false 时不拼进 SQL；为 true 时用「自己 + 直接子分类」的 id 集合做 IN 查询
                 .in(categoryId != null, Product::getCategoryId, expandCategoryIds(categoryId))
+                // ★ Day 81：店铺主页只列本店商品（shopId 可空 = 全站列表）
+                .eq(shopId != null, Product::getShopId, shopId)
                 .like(keyword != null && !keyword.isBlank(), Product::getName, keyword)
                 .orderByDesc(Product::getId);
 

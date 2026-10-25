@@ -17,6 +17,7 @@ import type {
   RefundVO,
   Result,
   ReviewPageVO,
+  ShopVO,
   ReviewVO,
   SmsSendData,
   UserCouponVO,
@@ -58,8 +59,13 @@ export function smsRegister(phone: string, code: string, nickname: string) {
 }
 
 // ---------- 商品（白名单只读，匿名可看） ----------
-export function pageProducts(params: { current: number; size: number; categoryId?: number; keyword?: string }) {
+export function pageProducts(params: { current: number; size: number; categoryId?: number; keyword?: string; shopId?: number }) {
   return http.get<never, Result<PageResult<ProductVO>>>('/products', { params })
+}
+
+/** 店铺信息（Day 81，公开；停用店铺 404） */
+export function shopDetail(id: number | string) {
+  return http.get<never, Result<ShopVO>>(`/shops/${id}`)
 }
 
 export function productDetail(id: number | string) {

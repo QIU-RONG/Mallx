@@ -12,8 +12,7 @@ import com.mallx.product.vo.ProductVO;
 
 public interface ProductService extends IService<Product> {
 //    分页查商品
-    Page<ProductVO> pageProducts(long current , long size , Long categoryId
-    , String keyword);
+    Page<ProductVO> pageProducts(long current, long size, Long categoryId, String keyword, Long shopId);
 
     /**
      * 管理端商品分页（Day 18）—— 与 C 端【唯一的区别就是过滤口径】：

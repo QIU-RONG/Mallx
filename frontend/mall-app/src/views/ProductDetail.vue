@@ -198,7 +198,7 @@ async function addToCart() {
           <h1 class="title">{{ vo.name }}</h1>
           <p v-if="vo.subtitle" class="subtitle">{{ vo.subtitle }}</p>
           <!-- ★ Day 64：店铺归属（展示层）。没有店铺的商品不显示，而不是写「平台自营」 -->
-          <p v-if="vo.shopName" class="shop-line">
+          <p v-if="vo.shopName" class="shop-line" title="进入店铺" @click="vo.shopId && router.push(`/shop/${vo.shopId}`)">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
               stroke-width="1.6" stroke-linejoin="round">
               <path d="M4 9h16v10a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9Z" />
@@ -428,6 +428,7 @@ async function addToCart() {
   color: var(--mx-ink-2);
 }
 .shop-line {
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
