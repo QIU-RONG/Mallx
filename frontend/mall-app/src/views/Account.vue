@@ -29,6 +29,7 @@ const menus = [
   { to: '/account/coupons', label: '优惠券' },
   { to: '/account/reviews', label: '我的评价' },
   { to: '/account/history', label: '浏览记录' },
+  { to: '/account/favorites', label: '我的收藏' },
   { to: '/account/addresses', label: '收货地址' },
   { to: '/account/profile', label: '资料设置' },
 ]

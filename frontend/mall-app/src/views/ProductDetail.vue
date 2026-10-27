@@ -2,21 +2,44 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { cartAdd, inventoryStock, pageProducts, productDetail, productReviews } from '../api'
+import { cartAdd, favoriteAdd, favoriteExists, favoriteRemove, inventoryStock, pageProducts, productDetail, productReviews } from '../api'
 import ProductThumb from '../components/ProductThumb.vue'
 import type { ProductDetailVO, ProductVO, ReviewVO, SkuVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
+import { useAuthStore } from '../stores/auth'
 import { addViewHistory } from '../utils/history'
 
 const route = useRoute()
 const router = useRouter()
 const cartStore = useCartStore()
+const auth = useAuthStore()
 const vo = ref<ProductDetailVO | null>(null)
 const mainPic = ref('')
 const loading = ref(false)
 const chosenSkuId = ref<number | null>(null)
 const quantity = ref(1)
 const adding = ref(false)
+
+// Day 82：收藏状态（登录后才查）
+const faved = ref(false)
+
+async function toggleFavorite() {
+  if (!auth.token) {
+    ElMessage.warning('登录后才能收藏')
+    router.push('/login')
+    return
+  }
+  if (!vo.value) return
+  if (faved.value) {
+    await favoriteRemove(vo.value.id)
+    faved.value = false
+    ElMessage.success('已取消收藏')
+  } else {
+    await favoriteAdd(vo.value.id)
+    faved.value = true
+    ElMessage.success('已收藏')
+  }
+}
 
 /** 主图 + 图集合并为可迭代字符串数组（模板里不再碰 undefined） */
 const pics = ref<string[]>([])
@@ -134,6 +157,9 @@ onMounted(async () => {
   // ★ 评价与相关推荐是公开接口，不阻塞商品主体渲染
   loadReviews(true)
   if (vo.value) loadRelated(vo.value.categoryId, vo.value.id)
+  if (auth.token && vo.value) {
+    favoriteExists(vo.value.id).then((r) => (faved.value = !!r.data)).catch(() => (faved.value = false))
+  }
 })
 
 function pickMain(url: string) {
@@ -254,6 +280,13 @@ async function addToCart() {
             </el-button>
             <button class="link-btn" type="button" @click="router.push('/cart')">
               去购物车结算
+            </button>
+            <button class="fav-btn" :class="{ on: faved }" type="button" @click="toggleFavorite">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20s-7-4.6-7-9.6A4.4 4.4 0 0 1 12 7a4.4 4.4 0 0 1 7 3.4c0 5-7 9.6-7 9.6Z" />
+              </svg>
+              {{ faved ? '已收藏' : '收藏' }}
             </button>
           </div>
 
@@ -562,6 +595,23 @@ async function addToCart() {
 }
 .link-btn:hover {
   color: var(--mx-ink);
+}
+.fav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--mx-line);
+  border-radius: var(--mx-btn-r);
+  background: var(--mx-surface);
+  color: var(--mx-ink-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.fav-btn.on {
+  color: var(--mx-accent);
+  border-color: var(--mx-accent);
 }
 
 .promise {

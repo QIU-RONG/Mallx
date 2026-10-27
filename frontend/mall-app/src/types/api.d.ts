@@ -60,6 +60,18 @@ export interface ProductDetailVO extends ProductVO {
 }
 
 /** 店铺（Day 81，C 端展示用） */
+/** 收藏列表行（Day 82） */
+export interface FavoriteVO {
+  productId: number
+  name?: string
+  mainImage?: string | null
+  status?: number
+  minPrice?: number | null
+  maxPrice?: number | null
+  defaultSkuId?: number | null
+  createdAt?: string
+}
+
 export interface ShopVO {
   id: number
   name: string

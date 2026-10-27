@@ -7,6 +7,7 @@ import type {
   CartVO,
   CategoryVO,
   CouponVO,
+  FavoriteVO,
   LoginData,
   OrderDetailVO,
   OrderVO,
@@ -143,6 +144,21 @@ export function userMe() {
 /** 改昵称：@NotBlank + 最长 50（后端 NicknameUpdateDTO），空串会被挡 */
 export function userUpdateNickname(nickname: string) {
   return http.put<never, Result<void>>('/users/me/nickname', { nickname })
+}
+
+
+// ---------- 收藏（Day 82） ----------
+export function favoritePage(current = 1, size = 12) {
+  return http.get<never, Result<PageResult<FavoriteVO>>>('/favorites', { params: { current, size } })
+}
+export function favoriteExists(productId: number | string) {
+  return http.get<never, Result<boolean>>(`/favorites/${productId}/exists`)
+}
+export function favoriteAdd(productId: number | string) {
+  return http.post<never, Result<void>>(`/favorites/${productId}`)
+}
+export function favoriteRemove(productId: number | string) {
+  return http.delete<never, Result<void>>(`/favorites/${productId}`)
 }
 
 // ===================== 库存（Day 73） =====================
