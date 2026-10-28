@@ -460,7 +460,7 @@ function clearHistory() {
   flex: none;
 }
 
-@media (max-width: 1199px) {
+@media (max-width: 1319px) {
   .topbar-inner {
     gap: 16px;
   }
@@ -482,15 +482,16 @@ function clearHistory() {
     gap: 12px;
   }
 }
+/* ★ 1140 以下顶栏放不下 8 个品类：整排收起（首页仍有分类下拉）。
+   以前让它横向滚动，873px 时最后一项被截成半个字。 */
+@media (max-width: 1140px) {
+  .cats {
+    display: none;
+  }
+}
 @media (max-width: 1080px) {
   .topbar-inner {
     gap: 12px;
-  }
-  .cats {
-    gap: 12px;
-  }
-  .cat {
-    font-size: 12.5px;
   }
   .search {
     width: 170px;
