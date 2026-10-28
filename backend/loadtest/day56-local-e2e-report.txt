@@ -12,28 +12,28 @@
 [OK]   A.仪表盘概览 /api/admin/dashboard/overview 200   http=200 code=200
 [OK]   A.10 权限字典共 51 条（Day 55 评价 2 条 + Day 64 店铺 3 条）   n=51
 [OK]   A.11 review:list / review:status 都在字典里   missing=set()
-[OK]   B.1 新增收货地址   id=11
+[OK]   B.1 新增收货地址   id=25
 [OK]   B.2 商品 1 有可售 SKU   skuId=1
 [OK]   B.3 加入购物车   http=200 code=200
-[OK]   B.4 从购物车下单（PENDING_PAYMENT）   orderId=10 code=200
+[OK]   B.4 从购物车下单（PENDING_PAYMENT）   orderIds=[33] code=200
 [OK]   B.5 支付成功（order → PAID）   code=200
 [OK]   B.6 管理员发货   code=200
 [OK]   B.7 买家确认收货（order → COMPLETED）   code=200
 [OK]   B.8 订单详情含明细（可评价）   status=COMPLETED items=1
-[OK]   B.9 发表评价（5 星）   reviewId=10
-[OK]   C.1 隐藏前：C 端评价数 ≥1 且平均分 5.0   count=10 avg=5.0
+[OK]   B.9 发表评价（5 星）   reviewId=28
+[OK]   C.1 隐藏前：C 端评价数 ≥1 且平均分 5.0   count=23 avg=5.0
 [OK]   C.2 管理员隐藏该评价   code=200
-[OK]   C.3 隐藏后：C 端评价数 -1 且记录消失   count=9 (before=10)
+[OK]   C.3 隐藏后：C 端评价数 -1 且记录消失   count=22 (before=23)
 [OK]   C.4 隐藏后：平均分随实时聚合回退（无评价时 0）   avg=5.0
-[OK]   C.5 管理端 status=0 能看到它（不是单向失明）   hidden=[10]
-[OK]   C.6 恢复后：评价数回到原值且记录重新出现   count=10 avg=5.0
-[OK]   D.1 新建二级分类   id=41
+[OK]   C.5 管理端 status=0 能看到它（不是单向失明）   hidden=[28]
+[OK]   C.6 恢复后：评价数回到原值且记录重新出现   count=23 avg=5.0
+[OK]   D.1 新建二级分类   id=54
 [OK]   D.2 改分类名（局部更新）   code=200
 [OK]   D.3 删分类（无引用可物理删）   code=200
-[OK]   D.4 新建品牌   id=17
+[OK]   D.4 新建品牌   id=30
 [OK]   D.5 重名品牌 → 400（UNIQUE 被翻译成人话，不是 500）   code=400
 [OK]   D.6 删品牌（无商品引用）   code=200
-[OK]   D.7 新建满减券（FIXED）   id=10
+[OK]   D.7 新建满减券（FIXED）   id=23
 [OK]   D.8 两个面额字段同时出现 → 400（后端关系校验）   code=400
 [OK]   D.9 删券（未被领取）   code=200
 [OK]   E.1 C 端 token 打管理端接口 → 403（已认证但无权限码）   http=403
