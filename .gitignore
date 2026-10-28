@@ -26,6 +26,8 @@ backend/_scaffold_backup_*/
 
 # --- 工具临时文件 ---
 .omo/
+# 代码地图工具缓存（本机 DSH 侧生成）
+.codegraph/
 .tmp-zen-models.json
 
 # --- Python（backend/loadtest 下压测脚本的字节码缓存） ---
