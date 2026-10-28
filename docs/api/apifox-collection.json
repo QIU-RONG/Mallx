@@ -1,0 +1,1139 @@
+{
+  "info": {
+    "name": "MallX 验收集合（Apifox 导入）",
+    "description": "按 01→07 顺序跑；登录请求会自动写入 userToken/adminToken/merchantToken。基础地址见环境变量 baseUrl（默认 http://localhost:8080）。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "userToken",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "merchantToken",
+      "value": ""
+    },
+    {
+      "key": "productId",
+      "value": "1"
+    },
+    {
+      "key": "skuId",
+      "value": "1"
+    },
+    {
+      "key": "shopId",
+      "value": "1"
+    },
+    {
+      "key": "addressId",
+      "value": "1"
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "orderIds",
+      "value": ""
+    },
+    {
+      "key": "cartItemId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 认证",
+      "item": [
+        {
+          "name": "C 端登录（demo）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"demo\", \"password\": \"demo123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));",
+                  "pm.collectionVariables.set(\"userToken\", body.data.token);",
+                  "pm.test(\"拿到 userToken\", () => pm.expect(body.data.token).to.be.a(\"string\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "管理员登录（admin）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/admin/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"admin\", \"password\": \"admin123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));",
+                  "pm.collectionVariables.set(\"adminToken\", body.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "商户登录（merchant）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/merchant/login"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"merchant\", \"password\": \"merchant123\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));",
+                  "pm.collectionVariables.set(\"merchantToken\", body.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "手机号发码（登录/注册）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/sms/send"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"phone\": \"13900000000\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 商品 / 店铺 / 评价",
+      "item": [
+        {
+          "name": "商品列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?current=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "商品详情",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "库存查询（公开）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/inventory/stock?skuIds=1,2,3"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "店铺主页信息",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/shops/{{shopId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "商品评价列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{productId}}/reviews?page=1&size=5"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "店铺商品列表",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?shopId={{shopId}}&current=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 购物车 → 下单 → 支付",
+      "item": [
+        {
+          "name": "加入购物车",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"skuId\": \"{{skuId}}\", \"quantity\": 1}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "查看购物车（并记下 cartItemId）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));",
+                  "const items = (body.data && body.data.items) || [];",
+                  "if (items.length) { pm.collectionVariables.set(\"cartItemId\", items[0].id); }",
+                  "pm.test(\"购物车有商品\", () => pm.expect(items.length).to.be.above(0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "勾选购物车项",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/cart/select"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"itemIds\": [\"{{cartItemId}}\"], \"selected\": true}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "结算预览（可用券）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coupons?page=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "提交订单（返回 id 数组）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"addressId\": \"{{addressId}}\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));",
+                  "const ids = body.data || [];",
+                  "pm.test(\"返回至少一张订单\", () => pm.expect(ids.length).to.be.above(0));",
+                  "if (ids.length) { pm.collectionVariables.set(\"orderId\", ids[0]); }",
+                  "pm.collectionVariables.set(\"orderIds\", JSON.stringify(ids));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "批量支付（合并支付）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/payments/batch"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"orderIds\": [\"{{orderId}}\"], \"method\": \"BALANCE\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 订单 / 收藏 / 优惠券",
+      "item": [
+        {
+          "name": "我的订单列表",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders?page=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "订单详情",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders/{{orderId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "收藏商品（幂等）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/favorites/{{productId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "我的收藏",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/favorites"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "取消收藏",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/favorites/{{productId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "我的优惠券",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{userToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/coupons/my?page=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "我的浏览记录（前端本地，占位说明）",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?page=1&size=1"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 管理端",
+      "item": [
+        {
+          "name": "管理端商品列表",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products?current=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "管理端店铺列表",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/shops"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "管理端订单列表",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/orders?page=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "管理端评价列表（含晒图）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reviews?current=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "新建优惠券",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/coupons"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Apifox 测试券\", \"type\": \"FIXED\", \"discountAmount\": 20, \"minAmount\": 200, \"totalCount\": 10, \"startTime\": \"2026-01-01T00:00:00\", \"endTime\": \"2027-12-31T23:59:59\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "管理端订单详情",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/orders/{{orderId}}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 商户端（数据隔离验证）",
+      "item": [
+        {
+          "name": "商户：商品列表（只看到自己店铺）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{merchantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products?current=1&size=50"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));",
+                  "const rows = (body.data && body.data.records) || [];",
+                  "pm.test(\"全部属于 MallX 自营(shopId=1)\", () => rows.forEach(r => pm.expect(r.shopId).to.eql(1)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "商户：尝试看别家商品（应 404）",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{merchantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products/1"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"跨店访问被拒（业务 404）\", () => pm.expect(body.code).to.eql(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "商户：订单列表",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{merchantToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/orders?page=1&size=10"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 AI 客服",
+      "item": [
+        {
+          "name": "AI 客服对话",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/chat"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"message\": \"有什么手机推荐\"}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AI 客服对话（带历史）",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/chat"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\"message\": \"我的订单到哪了\", \"history\": [{\"role\": \"user\", \"content\": \"你好\"}, {\"role\": \"assistant\", \"content\": \"你好，我是 MallX 客服小 M。\"}]}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"业务码 code=200\", () => pm.expect(body.code).to.eql(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

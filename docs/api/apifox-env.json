@@ -1,0 +1,25 @@
+{
+  "name": "MallX Local (8080)",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "enabled": true
+    },
+    {
+      "key": "userToken",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "enabled": true
+    },
+    {
+      "key": "merchantToken",
+      "value": "",
+      "enabled": true
+    }
+  ]
+}
