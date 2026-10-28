@@ -204,7 +204,22 @@ public class ReviewServiceImpl implements ReviewService {
         IPage<AdminReviewVO> result = reviewMapper.selectAdminReviews(
                 new Page<>(safePage, safeSize), productId, rating, status);
 
-        // ③ 没有聚合，直接复用公共壳
+        // ③ 补晒图（Day 83）：审核时也要能看到用户传了什么
+        java.util.List<AdminReviewVO> records = result.getRecords();
+        if (records != null && !records.isEmpty()) {
+            java.util.List<Long> ids = records.stream().map(AdminReviewVO::getId).toList();
+            java.util.List<com.mallx.review.entity.ReviewImage> rows = reviewImageMapper.selectList(
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.mallx.review.entity.ReviewImage>()
+                            .in(com.mallx.review.entity.ReviewImage::getReviewId, ids)
+                            .orderByAsc(com.mallx.review.entity.ReviewImage::getSort));
+            java.util.Map<Long, java.util.List<String>> byReview = new java.util.HashMap<>();
+            for (com.mallx.review.entity.ReviewImage img : rows) {
+                byReview.computeIfAbsent(img.getReviewId(), k -> new java.util.ArrayList<>()).add(img.getImageUrl());
+            }
+            for (AdminReviewVO r : records) {
+                r.setImages(byReview.getOrDefault(r.getId(), java.util.List.of()));
+            }
+        }
         return PageResult.of(result);
     }
 

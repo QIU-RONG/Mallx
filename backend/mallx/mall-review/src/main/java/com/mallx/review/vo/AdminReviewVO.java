@@ -46,6 +46,9 @@ public class AdminReviewVO {
 
     private String content;
 
+    /** Day 83：晒图 URL（管理端审核也要能看到） */
+    private java.util.List<String> images;
+
     /** 评价人昵称（SQL 兜底「用户****」；★ 与 C 端一样不暴露 userId） */
     private String userNickname;
 

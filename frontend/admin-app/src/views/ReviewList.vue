@@ -144,6 +144,23 @@ onMounted(load)
           <el-rate :model-value="row.rating" disabled size="small" />
         </template>
       </el-table-column>
+      <el-table-column label="晒图" width="150">
+        <template #default="{ row }">
+          <div v-if="row.images?.length" class="review-imgs">
+            <el-image
+              v-for="(u, i) in row.images"
+              :key="i"
+              :src="u"
+              :preview-src-list="row.images"
+              :initial-index="i"
+              fit="cover"
+              class="review-img"
+              preview-teleported
+            />
+          </div>
+          <span v-else class="muted">无</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="content" label="内容" min-width="260" show-overflow-tooltip>
         <template #default="{ row }">{{ row.content || '（无文字）' }}</template>
       </el-table-column>
@@ -199,6 +216,21 @@ onMounted(load)
 </template>
 
 <style scoped>
+.review-imgs {
+  display: flex;
+  gap: 4px;
+}
+.review-img {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  border: 1px solid var(--el-border-color);
+}
+.muted {
+  color: var(--el-text-color-placeholder);
+  font-size: 12px;
+}
+
 .bar {
   display: flex;
   gap: 10px;

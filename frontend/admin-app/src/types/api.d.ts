@@ -374,6 +374,8 @@ export interface PermissionVO {
  * ⚠️ 与 C 端一样【没有 userId】：展示只用 userNickname，不暴露内部归属 id。
  */
 export interface AdminReviewVO {
+  /** Day 83：晒图 */
+  images?: string[]
   id: number
   orderItemId: number
   productId: number
