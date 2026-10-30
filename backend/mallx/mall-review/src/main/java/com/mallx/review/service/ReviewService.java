@@ -66,7 +66,7 @@ public interface ReviewService {
      * @param page      页码，从 1 开始
      * @param size      每页条数，最终落在 1..100
      */
-    ReviewPageVO pageByProduct(Long productId, long page, long size, Integer rating, Boolean withImage);
+    ReviewPageVO pageByProduct(Long productId, long page, long size, Integer rating, Boolean withImage, Long viewerId);
 
     /**
      * ★ 我的评价列表（分页）—— <b>需登录</b>。
@@ -115,4 +115,7 @@ public interface ReviewService {
      * @throws com.mallx.common.exception.BusinessException code=404 评价不存在；code=400 status 非法
      */
     void updateStatus(Long id, Integer status);
+
+    /** 点赞 / 取消点赞（Day 89）；review 不存在或已隐藏 → 404 */
+    com.mallx.review.vo.ReviewLikeVO toggleLike(Long userId, Long reviewId);
 }

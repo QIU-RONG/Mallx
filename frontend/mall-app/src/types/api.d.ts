@@ -194,6 +194,9 @@ export interface ReviewVO {
   createdAt?: string
   /** Day 80：晒图 URL 列表 */
   images?: string[]
+  /** Day 89：有用数 / 我是否点过 */
+  likeCount?: number
+  liked?: boolean
 }
 
 /** 商品评价列表（带聚合） */

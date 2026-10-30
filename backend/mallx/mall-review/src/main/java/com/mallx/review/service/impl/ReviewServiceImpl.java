@@ -44,11 +44,14 @@ public class ReviewServiceImpl implements ReviewService {
 
     private final ReviewMapper reviewMapper;      // 本模块
     private final com.mallx.review.mapper.ReviewImageMapper reviewImageMapper;
+    private final com.mallx.review.mapper.ReviewLikeMapper reviewLikeMapper;
     private final OrderService orderService;      // mall-order 的只读门面（getBuyContext）
 
-    public ReviewServiceImpl(ReviewMapper reviewMapper, com.mallx.review.mapper.ReviewImageMapper reviewImageMapper, OrderService orderService) {
+    public ReviewServiceImpl(ReviewMapper reviewMapper, com.mallx.review.mapper.ReviewImageMapper reviewImageMapper,
+                             com.mallx.review.mapper.ReviewLikeMapper reviewLikeMapper, OrderService orderService) {
         this.reviewMapper = reviewMapper;
         this.reviewImageMapper = reviewImageMapper;
+        this.reviewLikeMapper = reviewLikeMapper;
         this.orderService = orderService;
     }
 
@@ -142,7 +145,7 @@ public class ReviewServiceImpl implements ReviewService {
      *   com.baomidou.mybatisplus.extension.plugins.pagination.Page
      */
     @Override
-    public ReviewPageVO pageByProduct(Long productId, long page, long size, Integer rating, Boolean withImage) {
+    public ReviewPageVO pageByProduct(Long productId, long page, long size, Integer rating, Boolean withImage, Long viewerId) {
         // ① 夹紧分页 —— ★ 必须在 new Page 之前，构造进去的值就是最终发给 DB 的值
         long safePage = Math.max(page, 1);
         long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
@@ -155,6 +158,7 @@ public class ReviewServiceImpl implements ReviewService {
         ReviewPageVO vo = new ReviewPageVO();
         vo.setRecords(result.getRecords());
         attachImages(vo.getRecords());
+        attachLikes(vo.getRecords(), viewerId);
         vo.setTotal(result.getTotal());
         vo.setCurrent(result.getCurrent());
         vo.setSize(result.getSize());
@@ -264,5 +268,63 @@ public class ReviewServiceImpl implements ReviewService {
         for (ReviewVO r : records) {
             r.setImages(byReview.getOrDefault(r.getId(), java.util.List.of()));
         }
+    }
+
+    /** 批量补「有用数 + 当前用户是否点过」（Day 89） */
+    private void attachLikes(java.util.List<ReviewVO> records, Long viewerId) {
+        if (records == null || records.isEmpty()) {
+            return;
+        }
+        java.util.List<Long> ids = records.stream().map(ReviewVO::getId).toList();
+        java.util.List<com.mallx.review.entity.ReviewLike> likes = reviewLikeMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.mallx.review.entity.ReviewLike>()
+                        .in(com.mallx.review.entity.ReviewLike::getReviewId, ids));
+        java.util.Map<Long, Long> counts = new java.util.HashMap<>();
+        java.util.Set<Long> mine = new java.util.HashSet<>();
+        for (com.mallx.review.entity.ReviewLike like : likes) {
+            counts.merge(like.getReviewId(), 1L, Long::sum);
+            if (viewerId != null && viewerId.equals(like.getUserId())) {
+                mine.add(like.getReviewId());
+            }
+        }
+        for (ReviewVO r : records) {
+            r.setLikeCount(counts.getOrDefault(r.getId(), 0L));
+            r.setLiked(mine.contains(r.getId()));
+        }
+    }
+
+    @Override
+    @org.springframework.transaction.annotation.Transactional(rollbackFor = Exception.class)
+    public com.mallx.review.vo.ReviewLikeVO toggleLike(Long userId, Long reviewId) {
+        Review review = reviewMapper.selectById(reviewId);
+        if (review == null || review.getStatus() == null || review.getStatus() != 1) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "评价不存在");
+        }
+        com.mallx.review.entity.ReviewLike existing = reviewLikeMapper.selectOne(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.mallx.review.entity.ReviewLike>()
+                        .eq(com.mallx.review.entity.ReviewLike::getReviewId, reviewId)
+                        .eq(com.mallx.review.entity.ReviewLike::getUserId, userId).last("LIMIT 1"));
+        boolean liked;
+        if (existing == null) {
+            com.mallx.review.entity.ReviewLike like = new com.mallx.review.entity.ReviewLike();
+            like.setReviewId(reviewId);
+            like.setUserId(userId);
+            try {
+                reviewLikeMapper.insert(like);
+            } catch (org.springframework.dao.DuplicateKeyException ignored) {
+                // 并发下已经点过：当作已点赞
+            }
+            liked = true;
+        } else {
+            reviewLikeMapper.deleteById(existing.getId());
+            liked = false;
+        }
+        long count = reviewLikeMapper.selectCount(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.mallx.review.entity.ReviewLike>()
+                        .eq(com.mallx.review.entity.ReviewLike::getReviewId, reviewId));
+        com.mallx.review.vo.ReviewLikeVO vo = new com.mallx.review.vo.ReviewLikeVO();
+        vo.setLiked(liked);
+        vo.setLikeCount(count);
+        return vo;
     }
 }

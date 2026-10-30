@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { cartAdd, favoriteAdd, favoriteExists, favoriteRemove, inventoryStock, pageProducts, productDetail, productReviews } from '../api'
+import { cartAdd, favoriteAdd, favoriteExists, favoriteRemove, inventoryStock, pageProducts, productDetail, productReviews, toggleReviewLike } from '../api'
 import ProductThumb from '../components/ProductThumb.vue'
 import type { ProductDetailVO, ProductVO, ReviewVO, SkuVO } from '../types/api'
 import { useCartStore } from '../stores/cart'
@@ -113,6 +113,21 @@ async function loadReviews(reset = false) {
     reviews.value = reset ? j.data.records : [...reviews.value, ...j.data.records]
   } finally {
     reviewLoading.value = false
+  }
+}
+
+async function likeReview(r: ReviewVO) {
+  if (!auth.token) {
+    ElMessage.warning('登录后才能点赞')
+    router.push('/login')
+    return
+  }
+  try {
+    const j = await toggleReviewLike(r.id)
+    r.liked = j.data.liked
+    r.likeCount = j.data.likeCount
+  } catch {
+    /* 拦截器已提示 */
   }
 }
 
@@ -355,6 +370,15 @@ async function addToCart() {
               </div>
               <p class="review-content">{{ r.content || '（未填写文字）' }}</p>
               <!-- Day 80：晒图 -->
+              <div class="review-actions">
+                <button type="button" class="like-btn" :class="{ on: r.liked }" @click.stop="likeReview(r)">
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                    stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M7 11v9H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3Zm0 0 3.5-7a2 2 0 0 1 3.7 1.5L13 11h5.5a2 2 0 0 1 1.9 2.6l-1.8 6A2 2 0 0 1 16.7 21H7" />
+                  </svg>
+                  有用{{ r.likeCount ? ' ' + r.likeCount : '' }}
+                </button>
+              </div>
               <div v-if="r.images?.length" class="review-imgs">
                 <img
                   v-for="(u, i) in r.images"
@@ -858,6 +882,26 @@ async function addToCart() {
   color: var(--mx-ink-2);
   white-space: pre-wrap;
   word-break: break-word;
+}
+.review-actions {
+  margin-top: 10px;
+}
+.like-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--mx-line);
+  border-radius: 999px;
+  background: var(--mx-surface);
+  color: var(--mx-ink-3);
+  font-size: 12px;
+  cursor: pointer;
+}
+.like-btn.on {
+  color: var(--mx-accent);
+  border-color: var(--mx-accent);
 }
 .review-imgs {
   display: flex;

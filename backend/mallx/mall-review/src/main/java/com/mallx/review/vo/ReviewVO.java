@@ -61,5 +61,10 @@ public class ReviewVO {
     /** Day 80：晒图 URL 列表（按 sort 升序） */
     private java.util.List<String> images;
 
+    /** Day 89：有用数 / 当前用户是否点过 */
+    private long likeCount;
+
+    private boolean liked;
+
     private LocalDateTime createdAt;
 }

@@ -93,8 +93,10 @@ public class ReviewController {
                                               @RequestParam(defaultValue = "1") long page,
                                               @RequestParam(defaultValue = "10") long size,
                                               @RequestParam(required = false) Integer rating,
-                                              @RequestParam(required = false) Boolean withImage) {
-        return Result.ok(reviewService.pageByProduct(productId, page, size, rating, withImage));
+                                              @RequestParam(required = false) Boolean withImage,
+                                              org.springframework.security.core.Authentication authentication) {
+        Long viewerId = (authentication != null && authentication.getPrincipal() instanceof Long id) ? id : null;
+        return Result.ok(reviewService.pageByProduct(productId, page, size, rating, withImage, viewerId));
     }
 
     /**
@@ -107,5 +109,14 @@ public class ReviewController {
                                                  @RequestParam(defaultValue = "1") long page,
                                                  @RequestParam(defaultValue = "10") long size) {
         return Result.ok(reviewService.pageMine((Long) authentication.getPrincipal(), page, size));
+    }
+
+    @Operation(summary = "评价「有用」：点赞 / 取消（需登录）")
+    @org.springframework.web.bind.annotation.PostMapping("/reviews/{id}/like")
+    public Result<com.mallx.review.vo.ReviewLikeVO> toggleLike(
+            org.springframework.security.core.Authentication authentication,
+            @PathVariable Long id) {
+        Long userId = (Long) authentication.getPrincipal();
+        return Result.ok(reviewService.toggleLike(userId, id));
     }
 }

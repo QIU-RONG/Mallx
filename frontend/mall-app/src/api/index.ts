@@ -191,6 +191,11 @@ export function createReview(orderItemId: number, rating: number, content: strin
   return http.post<never, Result<ReviewVO>>('/reviews', { orderItemId, rating, content, images })
 }
 
+/** 评价「有用」点赞 / 取消（Day 89，需登录） */
+export function toggleReviewLike(id: number | string) {
+  return http.post<never, Result<{ liked: boolean; likeCount: number }>>(`/reviews/${id}/like`)
+}
+
 /** 我的评价（需登录） */
 export function myReviews(page = 1, size = 10) {
   return http.get<never, Result<PageResult<ReviewVO>>>('/reviews/my', { params: { page, size } })
