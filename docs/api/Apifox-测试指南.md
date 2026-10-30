@@ -14,7 +14,7 @@ Apifox → 项目 → **导入数据** → 选择 **Postman**（或「OpenAPI/Sw
 
 1. 导入 `apifox-collection.json`，会自动生成同名集合；
 2. 导入 `apifox-env.json` 作为环境，或在「环境管理」里手动加 `baseUrl`；
-3. 后端地址默认 `http://localhost:8080`（IDEA 里跑的端口）。如果跑在 8081，把 `baseUrl` 改掉即可。
+3. 后端地址默认 `http://localhost:8081`（IDEA 里跑的端口）。如果跑在 8081，把 `baseUrl` 改掉即可。
 
 ## 跑的顺序
 

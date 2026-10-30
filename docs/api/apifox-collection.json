@@ -1,13 +1,13 @@
 {
   "info": {
     "name": "MallX 验收集合（Apifox 导入）",
-    "description": "按 01→07 顺序跑；登录请求会自动写入 userToken/adminToken/merchantToken。基础地址见环境变量 baseUrl（默认 http://localhost:8080）。",
+    "description": "按 01→07 顺序跑；登录请求会自动写入 userToken/adminToken/merchantToken。基础地址见环境变量 baseUrl（默认 http://localhost:8081）。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:8080"
+      "value": "http://localhost:8081"
     },
     {
       "key": "userToken",
