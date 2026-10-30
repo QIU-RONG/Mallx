@@ -91,8 +91,10 @@ public class ReviewController {
     @GetMapping("/products/{productId}/reviews")
     public Result<ReviewPageVO> listByProduct(@PathVariable Long productId,
                                               @RequestParam(defaultValue = "1") long page,
-                                              @RequestParam(defaultValue = "10") long size) {
-        return Result.ok(reviewService.pageByProduct(productId, page, size));
+                                              @RequestParam(defaultValue = "10") long size,
+                                              @RequestParam(required = false) Integer rating,
+                                              @RequestParam(required = false) Boolean withImage) {
+        return Result.ok(reviewService.pageByProduct(productId, page, size, rating, withImage));
     }
 
     /**

@@ -72,6 +72,12 @@
           LEFT JOIN users u ON u.id = r.user_id
           LEFT JOIN order_items oi ON oi.id = r.order_item_id
          WHERE r.product_id = #{productId} AND r.status = 1
+        <if test="rating != null">
+            AND r.rating = #{rating}
+        </if>
+        <if test="withImage != null and withImage">
+            AND EXISTS (SELECT 1 FROM review_images ri WHERE ri.review_id = r.id)
+        </if>
          ORDER BY r.created_at DESC, r.id DESC
     </select>
 

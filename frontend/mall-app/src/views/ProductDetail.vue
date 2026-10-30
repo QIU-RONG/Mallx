@@ -88,6 +88,8 @@ const reviewCount = ref(0)
 const reviewTotal = ref(0)
 const reviewPage = ref(1)
 const reviewLoading = ref(false)
+// Day 88：评价筛选（全部 / 有图 / 5 星 / 4 星）
+const reviewFilter = ref<'all' | 'image' | '5' | '4'>('all')
 
 async function loadReviews(reset = false) {
   if (reset) {
@@ -96,7 +98,15 @@ async function loadReviews(reset = false) {
   }
   reviewLoading.value = true
   try {
-    const j = await productReviews(route.params.id as string, reviewPage.value, REVIEW_SIZE)
+    const filter =
+      reviewFilter.value === 'image'
+        ? { withImage: true }
+        : reviewFilter.value === '5'
+          ? { rating: 5 }
+          : reviewFilter.value === '4'
+            ? { rating: 4 }
+            : {}
+    const j = await productReviews(route.params.id as string, reviewPage.value, REVIEW_SIZE, filter)
     reviewAvg.value = Number(j.data.avgRating || 0)
     reviewCount.value = j.data.reviewCount
     reviewTotal.value = j.data.total
@@ -104,6 +114,12 @@ async function loadReviews(reset = false) {
   } finally {
     reviewLoading.value = false
   }
+}
+
+function changeReviewFilter(f: 'all' | 'image' | '5' | '4') {
+  if (reviewFilter.value === f) return
+  reviewFilter.value = f
+  loadReviews(true)
 }
 
 function moreReviews() {
@@ -316,8 +332,18 @@ async function addToCart() {
           </div>
         </div>
 
+        <div class="review-filters">
+          <button type="button" :class="{ on: reviewFilter === 'all' }" @click="changeReviewFilter('all')">全部</button>
+          <button type="button" :class="{ on: reviewFilter === 'image' }" @click="changeReviewFilter('image')">有图</button>
+          <button type="button" :class="{ on: reviewFilter === '5' }" @click="changeReviewFilter('5')">5 星</button>
+          <button type="button" :class="{ on: reviewFilter === '4' }" @click="changeReviewFilter('4')">4 星</button>
+        </div>
+
         <div v-loading="reviewLoading" class="reviews-body">
-          <el-empty v-if="!reviews.length && !reviewLoading" description="还没有评价，买过的人可以说两句" />
+          <el-empty
+            v-if="!reviews.length && !reviewLoading"
+            :description="reviewFilter === 'all' ? '还没有评价，买过的人可以说两句' : '没有符合条件的评价'"
+          />
 
           <article v-for="r in reviews" :key="r.id" class="review">
             <div class="avatar">{{ (r.userNickname || '匿').charAt(0) }}</div>
@@ -762,6 +788,26 @@ async function addToCart() {
 .review-summary .count {
   font-size: 12px;
   color: var(--mx-ink-3);
+}
+.review-filters {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0 4px;
+}
+.review-filters button {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--mx-line);
+  border-radius: 999px;
+  background: var(--mx-surface);
+  color: var(--mx-ink-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.review-filters button.on {
+  border-color: var(--mx-ink);
+  background: var(--mx-ink);
+  color: #fff;
 }
 .reviews-body {
   margin-top: 8px;

@@ -131,7 +131,7 @@ public class ReviewServiceImpl implements ReviewService {
      *         size = 0 会返回空列表但 total 正常（用户以为没数据，比报错更难发现）；
      *         size = 999 不被截断就会一次拖走整张表。page 那行只是防御性规范化。
      *   ② IPage&lt;ReviewVO&gt; result =
-     *        reviewMapper.selectProductReviews(new Page<>(safePage, safeSize), productId);
+     *        reviewMapper.selectProductReviews(new Page<>(safePage, safeSize), productId, rating, withImage);
      *      ★ 首参必须传 IPage，否则插件不改写 SQL（不报错，静默查全表）
      *   ③ 聚合：reviewMapper.selectProductAvgRating(productId) / selectProductReviewCount(productId)
      *   ④ 组装 ReviewPageVO：records / total / current / size 从 result 取，
@@ -142,14 +142,14 @@ public class ReviewServiceImpl implements ReviewService {
      *   com.baomidou.mybatisplus.extension.plugins.pagination.Page
      */
     @Override
-    public ReviewPageVO pageByProduct(Long productId, long page, long size) {
+    public ReviewPageVO pageByProduct(Long productId, long page, long size, Integer rating, Boolean withImage) {
         // ① 夹紧分页 —— ★ 必须在 new Page 之前，构造进去的值就是最终发给 DB 的值
         long safePage = Math.max(page, 1);
         long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
 
         // ② 首参必须传 IPage，否则分页插件不改写 SQL（不报错，静默查全表）
         IPage<ReviewVO> result =
-                reviewMapper.selectProductReviews(new Page<>(safePage, safeSize), productId);
+                reviewMapper.selectProductReviews(new Page<>(safePage, safeSize), productId, rating, withImage);
 
         // ③④ 组装：分页四件套取自 result，两个聚合取自评价域的独立查询
         ReviewPageVO vo = new ReviewPageVO();

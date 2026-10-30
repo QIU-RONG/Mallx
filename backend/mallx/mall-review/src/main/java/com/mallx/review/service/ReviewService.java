@@ -66,7 +66,7 @@ public interface ReviewService {
      * @param page      页码，从 1 开始
      * @param size      每页条数，最终落在 1..100
      */
-    ReviewPageVO pageByProduct(Long productId, long page, long size);
+    ReviewPageVO pageByProduct(Long productId, long page, long size, Integer rating, Boolean withImage);
 
     /**
      * ★ 我的评价列表（分页）—— <b>需登录</b>。

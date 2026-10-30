@@ -110,7 +110,9 @@ public interface ReviewMapper extends BaseMapper<Review> {
      * @param page      分页参数（由 Service 夹紧后构造，★ 夹紧必须在 new Page 之前）
      * @param productId 商品 id
      */
-    IPage<ReviewVO> selectProductReviews(IPage<ReviewVO> page, @Param("productId") Long productId);
+    IPage<ReviewVO> selectProductReviews(IPage<ReviewVO> page, @Param("productId") Long productId,
+                                             @Param("rating") Integer rating,
+                                             @Param("withImage") Boolean withImage);
 
     /**
      * ★ 我的评价列表（分页）—— <b>需登录</b>。

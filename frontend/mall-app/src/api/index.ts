@@ -171,9 +171,14 @@ export function inventoryStock(skuIds: number[]) {
 
 // ---------- 商品评价（Day 61） ----------
 /** 商品评价列表：公开（游客可看），带平均分与总数 */
-export function productReviews(productId: number | string, page = 1, size = 5) {
+export function productReviews(
+  productId: number | string,
+  page = 1,
+  size = 5,
+  filter: { rating?: number; withImage?: boolean } = {},
+) {
   return http.get<never, Result<ReviewPageVO>>(`/products/${productId}/reviews`, {
-    params: { page, size },
+    params: { page, size, ...filter },
   })
 }
 
