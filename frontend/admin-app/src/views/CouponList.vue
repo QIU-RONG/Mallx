@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { adminCouponCreate, adminCouponDelete, adminCouponList } from '../api'
+import { adminCouponCreate, adminCouponDelete, adminCouponEnd, adminCouponList } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { buildCouponPayload, couponFaceText } from '../utils/coupon'
 import { confirmAction } from '../utils/confirm'
@@ -85,6 +85,17 @@ async function submitCreate() {
   }
 }
 
+async function endCoupon(row: CouponVO) {
+  await confirmAction(`提前结束「${row.name}」？已领取的券不受影响，只是不能再领。`, {
+    title: '提前结束',
+    confirmButtonText: '结束发放',
+    type: 'warning',
+  })
+  await adminCouponEnd(row.id)
+  ElMessage.success('已结束发放')
+  load()
+}
+
 async function remove(row: CouponVO) {
   const ok = await confirmAction(
     `确定删除「${row.name}」？\n已被领取过的券删不掉（后端会拒绝），已领的券不受影响。`,
@@ -156,8 +167,16 @@ onMounted(load)
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="90" fixed="right">
+      <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
+          <el-button
+            v-if="row.status === 1 && auth.hasPerm('coupon:create')"
+            link
+            type="warning"
+            @click="endCoupon(row)"
+          >
+            提前结束
+          </el-button>
           <el-button v-if="auth.hasPerm('coupon:delete')" link type="danger" @click="remove(row)">
             删除
           </el-button>

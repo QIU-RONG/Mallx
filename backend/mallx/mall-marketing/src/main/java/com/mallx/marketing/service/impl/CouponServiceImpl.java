@@ -651,4 +651,19 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         //   缝隙里发生的事就靠它接住 —— 否则方法会返回 null 消息。
         return "优惠券暂不可领取";
     }
+
+    @Override
+    public void endCoupon(Long id) {
+        com.mallx.marketing.entity.Coupon c = this.getById(id);
+        if (c == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "优惠券不存在");
+        }
+        if (c.getEndTime() != null && !c.getEndTime().isAfter(java.time.LocalDateTime.now())) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "优惠券已结束");
+        }
+        com.mallx.marketing.entity.Coupon update = new com.mallx.marketing.entity.Coupon();
+        update.setId(id);
+        update.setEndTime(java.time.LocalDateTime.now());
+        this.updateById(update);
+    }
 }

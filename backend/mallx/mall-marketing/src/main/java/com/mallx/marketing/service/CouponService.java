@@ -51,6 +51,9 @@ public interface CouponService {
     /** 管理端：删券。★ 被 {@code user_coupons} 引用过就拒 —— 见实现里的守卫说明 */
     void deleteCoupon(Long id);
 
+    /** 提前结束发放（Day 93）：把 end_time 改成现在，已领的券不受影响 */
+    void endCoupon(Long id);
+
     /** C 端：可领券列表（<b>公开</b>，无 userId 参数 —— 匿名也要能看） */
     PageResult<CouponVO> listAvailable(long page, long size);
 

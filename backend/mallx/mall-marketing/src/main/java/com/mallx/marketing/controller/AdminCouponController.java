@@ -87,6 +87,13 @@ public class AdminCouponController {
      * 而不是让外键抛异常变成 500）—— 这就是「谁引用我决定我能否物理删」（FK 全是 NO ACTION）。
      */
     @Operation(summary = "删除优惠券（需 coupon:delete；已被领取过的券删不掉）")
+
+    @org.springframework.web.bind.annotation.PutMapping("/{id}/end")
+    @PreAuthorize("hasAuthority('coupon:create')")
+    public Result<Void> end(@PathVariable Long id) {
+        couponService.endCoupon(id);
+        return Result.ok();
+    }
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('coupon:delete')")
     public Result<Void> delete(@PathVariable Long id) {
