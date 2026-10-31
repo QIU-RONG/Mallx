@@ -76,6 +76,7 @@ public class AdminCouponController {
 
 
     @org.springframework.web.bind.annotation.PutMapping("/{id}")
+    @com.mallx.common.audit.AuditLog(action = "优惠券编辑", targetType = "coupon")
     @PreAuthorize("hasAuthority('coupon:create')")
     public Result<Void> update(@PathVariable Long id,
                                @RequestBody @jakarta.validation.Valid com.mallx.marketing.dto.CouponCreateDTO dto) {
@@ -106,6 +107,7 @@ public class AdminCouponController {
     @Operation(summary = "删除优惠券（需 coupon:delete；已被领取过的券删不掉）")
 
     @org.springframework.web.bind.annotation.PutMapping("/{id}/end")
+    @com.mallx.common.audit.AuditLog(action = "优惠券提前结束", targetType = "coupon")
     @PreAuthorize("hasAuthority('coupon:create')")
     public Result<Void> end(@PathVariable Long id) {
         couponService.endCoupon(id);

@@ -348,3 +348,24 @@ export function adminRoleAssignPermissions(id: number | string, permissionIds: n
 export function adminPermissionList() {
   return http.get<never, Result<PermissionVO[]>>('/admin/permissions')
 }
+
+/** 操作审计（Day 106） */
+export function adminAuditLogs(params: {
+  page: number
+  size: number
+  action?: string
+  adminName?: string
+}) {
+  return http.get<never, Result<{
+    records: Array<{
+      id: number
+      adminName: string
+      action: string
+      targetType?: string
+      targetId?: string
+      detail?: string
+      createdAt: string
+    }>
+    total: number
+  }>>('/admin/audit-logs', { params })
+}

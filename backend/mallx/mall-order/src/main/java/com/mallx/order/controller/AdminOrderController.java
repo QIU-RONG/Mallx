@@ -148,6 +148,7 @@ public class AdminOrderController {
      */
     @Operation(summary = "管理端取消订单（仅待支付，需 order:cancel 权限）")
     @PreAuthorize("hasAuthority('order:cancel')")
+    @com.mallx.common.audit.AuditLog(action = "订单取消", targetType = "order")
     @PostMapping("/{id}/cancel")
     public Result<Void> cancel(@PathVariable Long id) {
         orderService.cancelByAdmin(id);

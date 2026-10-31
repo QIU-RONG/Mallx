@@ -27,6 +27,7 @@ const router = createRouter({
         { path: 'coupons', component: () => import('../views/CouponList.vue') },
         { path: 'users', component: () => import('../views/UserList.vue') },
         { path: 'roles', component: () => import('../views/RoleList.vue') },
+        { path: 'audit-logs', component: () => import('../views/AuditLogList.vue') },
       ],
     },
   ],

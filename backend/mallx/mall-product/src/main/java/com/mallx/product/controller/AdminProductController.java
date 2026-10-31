@@ -105,6 +105,7 @@ public class AdminProductController {
     }
 
     @Operation(summary = "修改商品（含上下架：{\"status\":0} 即下架）")
+    @com.mallx.common.audit.AuditLog(action = "商品编辑", targetType = "product")
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('product:update')")
     public Result<Void> update(@PathVariable Long id, @RequestBody @Valid ProductUpdateDTO dto) {
@@ -115,6 +116,7 @@ public class AdminProductController {
     }
 
     @Operation(summary = "批量上下架（最多 100 个，商户只能改自己店铺）")
+    @com.mallx.common.audit.AuditLog(action = "批量上下架", targetType = "product")
     @PutMapping("/batch-status")
     @PreAuthorize("hasAuthority('product:update')")
     public Result<Integer> batchStatus(@RequestBody @jakarta.validation.Valid com.mallx.product.dto.BatchProductStatusDTO dto) {
@@ -123,6 +125,7 @@ public class AdminProductController {
     }
 
     @Operation(summary = "删除商品（软删主表）")
+    @com.mallx.common.audit.AuditLog(action = "商品删除", targetType = "product")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('product:delete')")
     public Result<Void> delete(@PathVariable Long id) {
