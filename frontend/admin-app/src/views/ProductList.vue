@@ -8,6 +8,7 @@ import {
   adminProductCreate,
   adminProductDelete,
   adminProductUpdate,
+  adminProductDetail,
   adminProductBatchStatus,
   adminShopList,
 } from '../api'
@@ -158,15 +159,61 @@ async function submitCreate() {
 
 // ---------- 编辑（★ 局部更新：只发要改的字段） ----------
 const editVisible = ref(false)
-const editForm = reactive({ id: 0, name: '', subtitle: '', status: 1, shopId: null as number | null })
+interface EditSku {
+  id?: number
+  skuCode: string
+  name: string
+  price: number
+  originalPrice?: number | null
+  image?: string
+}
+const editForm = reactive({
+  id: 0,
+  name: '',
+  subtitle: '',
+  status: 1,
+  shopId: null as number | null,
+  skus: [] as EditSku[],
+  images: [] as string[],
+})
 
-function openEdit(row: ProductVO) {
+async function openEdit(row: ProductVO) {
   editForm.id = row.id
   editForm.name = row.name
   editForm.subtitle = row.subtitle || ''
   editForm.status = row.status
   editForm.shopId = row.shopId ?? null
+  editForm.skus = []
+  editForm.images = []
   editVisible.value = true
+  const d = (await adminProductDetail(row.id)).data as {
+    skus?: Array<{ id: number; skuCode: string; name?: string; price: number; originalPrice?: number | null; image?: string }>
+    images?: string[]
+  }
+  editForm.skus = (d.skus || []).map((s) => ({
+    id: s.id,
+    skuCode: s.skuCode,
+    name: s.name || '',
+    price: Number(s.price),
+    originalPrice: s.originalPrice ?? undefined,
+    image: s.image,
+  }))
+  editForm.images = [...(d.images || [])]
+}
+
+function addEditSku() {
+  editForm.skus.push({ skuCode: '', name: '', price: 0, originalPrice: null })
+}
+
+function removeEditSku(i: number) {
+  editForm.skus.splice(i, 1)
+}
+
+function moveImage(i: number, delta: number) {
+  const j = i + delta
+  if (j < 0 || j >= editForm.images.length) return
+  const arr = editForm.images
+  ;[arr[i], arr[j]] = [arr[j], arr[i]]
 }
 
 async function submitEdit() {
@@ -174,8 +221,16 @@ async function submitEdit() {
     name: editForm.name,
     subtitle: editForm.subtitle,
     status: editForm.status,
-    // ★ null 会被后端当「不动」；这里只在选了店铺时下发
     shopId: editForm.shopId ?? undefined,
+    images: editForm.images,
+    skus: editForm.skus.map((s) => ({
+      id: s.id,
+      skuCode: s.skuCode,
+      name: s.name,
+      price: s.price,
+      originalPrice: s.originalPrice ?? undefined,
+      image: s.image,
+    })),
   })
   ElMessage.success('已保存')
   editVisible.value = false
@@ -455,6 +510,35 @@ onMounted(() => {
             <el-radio :value="0">下架</el-radio>
           </el-radio-group>
         </el-form-item>
+        <el-form-item label="SKU">
+          <div class="sku-editor">
+            <div v-for="(s, i) in editForm.skus" :key="s.id ?? 'n' + i" class="sku-row">
+              <el-input v-model="s.skuCode" placeholder="编码" :disabled="!!s.id" style="width: 130px" />
+              <el-input v-model="s.name" placeholder="规格名" style="width: 160px" />
+              <el-input-number v-model="s.price" :min="0.01" :precision="2" style="width: 120px" />
+              <el-input-number
+                v-model="s.originalPrice"
+                :min="0"
+                :precision="2"
+                placeholder="原价"
+                style="width: 120px"
+              />
+              <el-button v-if="!s.id" link type="danger" @click="removeEditSku(i)">删除</el-button>
+            </div>
+            <el-button size="small" @click="addEditSku">+ 新增 SKU</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item v-if="editForm.images.length" label="图片顺序">
+          <div class="img-sort">
+            <div v-for="(img, i) in editForm.images" :key="img + i" class="img-item">
+              <img :src="img" alt="" />
+              <div class="img-btns">
+                <el-button link size="small" :disabled="i === 0" @click="moveImage(i, -1)">↑</el-button>
+                <el-button link size="small" :disabled="i === editForm.images.length - 1" @click="moveImage(i, 1)">↓</el-button>
+              </div>
+            </div>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editVisible = false">取消</el-button>
@@ -465,6 +549,36 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.sku-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+.sku-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.img-sort {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.img-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.img-item img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--el-border-color);
+}
+
 .batch-bar {
   display: flex;
   align-items: center;
