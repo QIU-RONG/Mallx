@@ -57,12 +57,15 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiProperties props;
     private final AiTools tools;
     private final LlmClient llm;
+    private final com.mallx.ai.service.langchain.LangChainService langChain;
     private final ObjectMapper om = new ObjectMapper();
 
-    public AiChatServiceImpl(AiProperties props, AiTools tools, LlmClient llm) {
+    public AiChatServiceImpl(AiProperties props, AiTools tools, LlmClient llm,
+                             com.mallx.ai.service.langchain.LangChainService langChain) {
         this.props = props;
         this.tools = tools;
         this.llm = llm;
+        this.langChain = langChain;
     }
 
     @Override
@@ -141,55 +144,10 @@ public class AiChatServiceImpl implements AiChatService {
     // ==================== 真实模型（含工具循环） ====================
 
     private AiChatReply viaLlm(Long userId, String message, List<ChatTurn> history) throws Exception {
-        ArrayNode messages = om.createArrayNode();
-        messages.add(msg("system", SYSTEM_PROMPT));
-        if (history != null) {
-            // ★ 只接受 user/assistant，且只取最后 6 条 —— 客服不需要长记忆，也不接受客户端塞 system
-            List<ChatTurn> safe = history.stream()
-                    .filter(t -> t != null && t.getContent() != null && !t.getContent().isBlank())
-                    .filter(t -> "user".equals(t.getRole()) || "assistant".equals(t.getRole()))
-                    .toList();
-            int from = Math.max(0, safe.size() - 6);
-            for (ChatTurn t : safe.subList(from, safe.size())) {
-                messages.add(msg(t.getRole().toLowerCase(Locale.ROOT), t.getContent()));
-            }
-        }
-        messages.add(msg("user", message));
-
-        ArrayNode toolsJson = toolDefinitions();
+        // Day 107：工具循环交给 LangChain4j（AiServices + @Tool），这里只负责身份与提示词
         List<String> used = new ArrayList<>();
-
-        for (int round = 0; round < props.getMaxToolRounds(); round++) {
-            JsonNode assistant = llm.complete(messages, toolsJson);
-            JsonNode toolCalls = assistant.path("tool_calls");
-            if (!toolCalls.isArray() || toolCalls.isEmpty()) {
-                return new AiChatReply(assistant.path("content").asText(""), "llm", used);
-            }
-
-            // 原样回填 assistant 的 tool_calls，否则下一轮模型看不到自己调过什么
-            ObjectNode assistantMsg = om.createObjectNode();
-            assistantMsg.put("role", "assistant");
-            assistantMsg.put("content", assistant.path("content").asText(""));
-            assistantMsg.set("tool_calls", toolCalls);
-            messages.add(assistantMsg);
-
-            for (JsonNode call : toolCalls) {
-                String name = call.path("function").path("name").asText("");
-                JsonNode args = parseArgs(call.path("function").path("arguments").asText("{}"));
-                String result = executeTool(userId, name, args);
-                used.add(name);
-
-                ObjectNode toolMsg = om.createObjectNode();
-                toolMsg.put("role", "tool");
-                toolMsg.put("tool_call_id", call.path("id").asText(""));
-                toolMsg.put("name", name);
-                toolMsg.put("content", result);
-                messages.add(toolMsg);
-            }
-        }
-
-        // 用完轮数还没收敛：给出兜底，不编造
-        return new AiChatReply("这次没有查到确定的信息。你可以换个说法，或直接去「个人中心」查看。", "llm", used);
+        String text = langChain.chat(userId, message, history, used);
+        return new AiChatReply(withNotice(text), "llm", used);
     }
 
     private String executeTool(Long userId, String name, JsonNode args) {

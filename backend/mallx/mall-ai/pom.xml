@@ -15,6 +15,17 @@
     <description>MallX AI 客服：售前导购 + 售后查询（只读工具，模型不直接读库）</description>
 
     <dependencies>
+        <!-- Day 107：AI 编排改用 LangChain4j（OpenAI 兼容协议，可指向 DeepSeek） -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>1.3.0</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>1.3.0</version>
+        </dependency>
         <dependency>
             <groupId>com.mallx</groupId>
             <artifactId>mall-common</artifactId>
