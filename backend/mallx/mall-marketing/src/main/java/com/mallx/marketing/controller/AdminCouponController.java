@@ -73,6 +73,15 @@ public class AdminCouponController {
      * ★ 所以验收权限矩阵时<b>必须给合法载荷</b>（Day 18 立下的判据）。
      */
     @Operation(summary = "新建优惠券（需 coupon:create）")
+
+    @org.springframework.web.bind.annotation.GetMapping("/{id}/records")
+    @PreAuthorize("hasAuthority('coupon:list')")
+    public Result<com.mallx.common.api.PageResult<com.mallx.marketing.vo.CouponRecordVO>> records(
+            @PathVariable Long id,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "1") long page,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "10") long size) {
+        return Result.ok(couponService.pageRecords(id, page, size));
+    }
     @PostMapping
     @PreAuthorize("hasAuthority('coupon:create')")
     public Result<Long> create(@RequestBody @Valid CouponCreateDTO dto) {

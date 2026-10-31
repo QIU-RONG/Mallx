@@ -666,4 +666,17 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
         update.setEndTime(java.time.LocalDateTime.now());
         this.updateById(update);
     }
+
+    @Override
+    public PageResult<com.mallx.marketing.vo.CouponRecordVO> pageRecords(Long couponId, long page, long size) {
+        if (this.getById(couponId) == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "优惠券不存在");
+        }
+        long safePage = Math.max(page, 1);
+        long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
+        com.baomidou.mybatisplus.core.metadata.IPage<com.mallx.marketing.vo.CouponRecordVO> result =
+                userCouponMapper.selectCouponRecords(
+                        new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(safePage, safeSize), couponId);
+        return PageResult.of(result);
+    }
 }

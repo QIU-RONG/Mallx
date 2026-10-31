@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { adminCouponCreate, adminCouponDelete, adminCouponEnd, adminCouponList } from '../api'
+import { adminCouponCreate, adminCouponDelete, adminCouponEnd, adminCouponList, adminCouponRecords } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { buildCouponPayload, couponFaceText } from '../utils/coupon'
 import { confirmAction } from '../utils/confirm'
@@ -71,6 +71,31 @@ function fmt(t?: string) {
 }
 
 // ---------------- 新建 ----------------
+const recordsVisible = ref(false)
+const recordsLoading = ref(false)
+const records = ref<Array<Record<string, unknown>>>([])
+const recordsTitle = ref('')
+const recordsQuery = reactive({ couponId: 0, page: 1, size: 10, total: 0 })
+
+async function openRecords(row: CouponVO) {
+  recordsQuery.couponId = row.id
+  recordsQuery.page = 1
+  recordsTitle.value = row.name
+  recordsVisible.value = true
+  await loadRecords()
+}
+
+async function loadRecords() {
+  recordsLoading.value = true
+  try {
+    const j = await adminCouponRecords(recordsQuery.couponId, recordsQuery.page, recordsQuery.size)
+    records.value = j.data.records as Array<Record<string, unknown>>
+    recordsQuery.total = j.data.total
+  } finally {
+    recordsLoading.value = false
+  }
+}
+
 const createVisible = ref(false)
 // ★ 页面内用「一定有值」的数字：el-input-number 的 modelValue 是 number | undefined，
 //   绑 null 过不了 vue-tsc。空的语义（未填 / 无门槛）在提交时由 buildCouponPayload 判。
@@ -201,6 +226,7 @@ onMounted(load)
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
+          <el-button link type="primary" @click="openRecords(row)">领取记录</el-button>
           <el-button
             v-if="row.status === 1 && auth.hasPerm('coupon:create')"
             link
@@ -278,6 +304,24 @@ onMounted(load)
       </template>
     </el-dialog>
   </el-card>
+
+    <el-dialog v-model="recordsVisible" :title="`领取记录 · ${recordsTitle}`" width="640px">
+      <el-table v-loading="recordsLoading" :data="records" border size="small">
+        <el-table-column prop="userId" label="用户 ID" width="100" />
+        <el-table-column prop="userName" label="昵称" min-width="140" />
+        <el-table-column prop="status" label="状态" width="110" />
+        <el-table-column prop="receivedAt" label="领取时间" width="180" />
+        <el-table-column prop="usedAt" label="使用时间" width="180" />
+      </el-table>
+      <el-pagination
+        v-model:current-page="recordsQuery.page"
+        :page-size="recordsQuery.size"
+        :total="recordsQuery.total"
+        layout="total, prev, pager, next"
+        style="margin-top: 12px; justify-content: flex-end"
+        @current-change="loadRecords"
+      />
+    </el-dialog>
 </template>
 
 <style scoped>

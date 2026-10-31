@@ -73,6 +73,15 @@
         order by uc.id desc
     </select>
 
+    <select id="selectCouponRecords" resultType="com.mallx.marketing.vo.CouponRecordVO">
+        select uc.id, uc.user_id, coalesce(u.nickname, u.username) as user_name,
+               uc.status, uc.received_at, uc.used_at, uc.order_id
+          from user_coupons uc
+          left join users u on u.id = uc.user_id
+         where uc.coupon_id = #{couponId}
+         order by uc.id desc
+    </select>
+
     <!--
       =================================================================
       ★★★ Day 21（阶段二）：算抵扣 / 核销 / 退券（3 条，骨架期【方法体留空】）

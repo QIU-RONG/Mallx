@@ -76,6 +76,10 @@ public interface UserCouponMapper extends BaseMapper<UserCoupon> {
      */
     IPage<UserCouponVO> selectMyCoupons(IPage<UserCouponVO> page, @Param("userId") Long userId);
 
+    /** 管理端：某张券的领取记录（带领取人昵称） */
+    IPage<com.mallx.marketing.vo.CouponRecordVO> selectCouponRecords(IPage<com.mallx.marketing.vo.CouponRecordVO> page,
+                                                                    @Param("couponId") Long couponId);
+
     // ================================================================
     // ★★★ Day 21（阶段二）：算抵扣 / 核销 / 退券 —— 三条，全部手写 SQL
     //     前两条的难点在「并发下不能算错」，第三条的难点在「擦干净」。

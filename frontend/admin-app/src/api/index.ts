@@ -257,6 +257,21 @@ export function adminCouponCreate(payload: CouponCreateDTO) {
 }
 
 /** ★ 已被 user_coupons 引用过的券删不掉（后端 400，不是 500） */
+export function adminCouponRecords(id: number | string, page = 1, size = 10) {
+  return http.get<never, Result<{
+    records: Array<{
+      id: number
+      userId: number
+      userName?: string
+      status: string
+      receivedAt?: string
+      usedAt?: string
+      orderId?: number
+    }>
+    total: number
+  }>>(`/admin/coupons/${id}/records`, { params: { page, size } })
+}
+
 export function adminCouponEnd(id: number | string) {
   return http.put<never, Result<void>>(`/admin/coupons/${id}/end`)
 }
