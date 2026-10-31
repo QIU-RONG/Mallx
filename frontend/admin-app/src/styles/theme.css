@@ -111,3 +111,16 @@
 .el-select__wrapper {
   border-radius: 6px;
 }
+/* ── Day 100：空态与标题细节 ── */
+.el-empty {
+  padding: 44px 0;
+}
+.el-empty__description p {
+  color: #786f64;
+}
+.el-dialog__title {
+  font-weight: 600;
+}
+.el-dialog {
+  border-radius: 10px;
+}
