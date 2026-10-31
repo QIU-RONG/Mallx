@@ -208,6 +208,27 @@ async function remove(row: ProductVO) {
   }
 }
 
+function exportCsv() {
+  if (!rows.value.length) {
+    ElMessage.warning('当前页没有商品')
+    return
+  }
+  const head = ['ID', '商品名', '状态', '店铺']
+  const lines = rows.value.map((r) =>
+    [r.id, r.name, r.status === 1 ? '上架' : '下架', r.shopName ?? '']
+      .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+      .join(','),
+  )
+  const blob = new Blob(['\ufeff' + [head.join(','), ...lines].join('\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 function onSelect(rowsSel: ProductVO[]) {
   selected.value = rowsSel
 }
@@ -255,6 +276,7 @@ onMounted(() => {
           <el-option :value="0" label="仅下架" />
         </el-select>
         <el-button type="primary" @click="load">查询</el-button>
+      <el-button @click="exportCsv">导出 CSV</el-button>
         <!-- ★ 按钮级权限码：只是体验，真正的边界在后端 @PreAuthorize -->
         <el-button v-if="auth.hasPerm('product:create')" type="primary" @click="openCreate">
           新建商品
