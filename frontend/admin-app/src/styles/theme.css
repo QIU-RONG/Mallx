@@ -91,3 +91,23 @@
 .money-num {
   font-variant-numeric: tabular-nums;
 }
+/* ── Day 96：管理端视觉细节统一（品牌纸色 + 圆角 + 表头） ── */
+.el-card {
+  border-radius: 10px;
+  border-color: var(--mx-line, #e7e2d9);
+}
+.el-table th.el-table__cell {
+  background: #faf8f4;
+  color: #57534c;
+  font-weight: 600;
+}
+.el-table {
+  --el-table-border-color: #eee9e0;
+}
+.el-button {
+  border-radius: 6px;
+}
+.el-input__wrapper,
+.el-select__wrapper {
+  border-radius: 6px;
+}
