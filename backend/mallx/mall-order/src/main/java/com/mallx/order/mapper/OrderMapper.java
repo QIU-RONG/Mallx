@@ -245,7 +245,10 @@ public interface OrderMapper extends BaseMapper<Order> {
     IPage<AdminOrderVO> selectAdminOrders(IPage<AdminOrderVO> page,
                                           @Param("status") String status,
                                           @Param("userId") Long userId,
-                                          @Param("shopId") Long shopId);
+                                          @Param("shopId") Long shopId,
+                                          @Param("keyword") String keyword,
+                                          @Param("from") String from,
+                                          @Param("to") String to);
 
     // ================== 售后域（Day 46） ==================
 

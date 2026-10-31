@@ -556,7 +556,8 @@ public class OrderServiceImpl implements OrderService {
      * 与传不传 userId 无关。</b>
      */
     @Override
-    public PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size, Long shopScope) {
+    public PageResult<AdminOrderVO> listAllOrders(String status, Long userId, long page, long size, Long shopScope,
+                                                   String keyword, String from, String to) {
         // ① 夹紧分页 —— ★ 必须在 new Page 之前：构造进去的值就是最终发给 DB 的值
         long safePage = Math.max(page, 1);
         long safeSize = Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
@@ -569,7 +570,8 @@ public class OrderServiceImpl implements OrderService {
         //    ★ 此处【故意】不传「当前登录用户的 id」—— XML 里没有归属条件，
         //      那一行的缺席就是「数据权限反转」本身
         IPage<AdminOrderVO> result =
-                orderMapper.selectAdminOrders(new Page<>(safePage, safeSize), safeStatus, userId, shopScope);
+                orderMapper.selectAdminOrders(new Page<>(safePage, safeSize), safeStatus, userId, shopScope,
+                    keyword == null ? null : keyword.trim(), from, to);
 
         // ④ 不需要转换：selectAdminOrders 返回的本来就是 IPage<AdminOrderVO>
         //    （转换发生在 SQL 别名 -> VO 字段的映射里，不像 listMyOrders 还要 result.convert）

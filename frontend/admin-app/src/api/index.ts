@@ -82,6 +82,9 @@ export function adminOrderList(params: {
   size: number
   status?: string
   userId?: number
+  keyword?: string
+  from?: string
+  to?: string
 }) {
   return http.get<never, Result<PageResult<AdminOrderVO>>>('/admin/orders', { params })
 }

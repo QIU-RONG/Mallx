@@ -286,6 +286,16 @@
             AND o.user_id = #{userId}
         </if>
         <!-- Day 76：商户只看「含本店商品」的订单（平台账号 shopId=null，不附加条件） -->
+        <!-- Day 102：订单号模糊 + 下单日期区间（from/to 为 yyyy-MM-dd，to 含当天） -->
+        <if test="keyword != null and keyword != ''">
+            AND o.order_no LIKE '%' || #{keyword} || '%'
+        </if>
+        <if test="from != null and from != ''">
+            AND o.created_at &gt;= CAST(#{from} AS date)
+        </if>
+        <if test="to != null and to != ''">
+            AND o.created_at &lt; (CAST(#{to} AS date) + INTERVAL '1 day')
+        </if>
         <if test="shopId != null">
             AND EXISTS (SELECT 1 FROM order_items oi JOIN products p ON p.id = oi.product_id
                          WHERE oi.order_id = o.id AND p.shop_id = #{shopId})

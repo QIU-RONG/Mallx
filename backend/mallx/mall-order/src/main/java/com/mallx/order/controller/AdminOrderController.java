@@ -95,9 +95,13 @@ public class AdminOrderController {
     @GetMapping
     public Result<PageResult<AdminOrderVO>> list(@RequestParam(required = false) String status,
                                                  @RequestParam(required = false) Long userId,
+                                                 @RequestParam(required = false) String keyword,
+                                                 @RequestParam(required = false) String from,
+                                                 @RequestParam(required = false) String to,
                                                  @RequestParam(defaultValue = "1") long page,
                                                  @RequestParam(defaultValue = "10") long size) {
-        return Result.ok(orderService.listAllOrders(status, userId, page, size, com.mallx.common.security.ShopScope.currentShopId()));
+        return Result.ok(orderService.listAllOrders(status, userId, page, size,
+                com.mallx.common.security.ShopScope.currentShopId(), keyword, from, to));
     }
 
     /**

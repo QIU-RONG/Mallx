@@ -13,7 +13,7 @@ const route = useRoute()
 
 const rows = ref<AdminOrderVO[]>([])
 const total = ref(0)
-const query = reactive({ page: 1, size: 10, status: '' as string })
+const query = reactive({ page: 1, size: 10, status: '' as string, keyword: '', dateRange: [] as string[] })
 const loading = ref(false)
 
 const STATUS_LABEL: Record<string, string> = {
@@ -80,6 +80,9 @@ async function load() {
       page: query.page,
       size: query.size,
       status: query.status || undefined,
+      keyword: query.keyword.trim() || undefined,
+      from: query.dateRange[0] || undefined,
+      to: query.dateRange[1] || undefined,
     })
     rows.value = j.data.records
     total.value = j.data.total
@@ -147,6 +150,21 @@ onMounted(() => {
           <el-option value="CANCELLED" label="已取消" />
         <el-option value="REFUNDED" label="已退款" />
         </el-select>
+        <el-input
+          v-model="query.keyword"
+          placeholder="订单号"
+          clearable
+          style="width: 180px"
+          @keyup.enter="load"
+        />
+        <el-date-picker
+          v-model="query.dateRange"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="开始日期"
+          end-placeholder="结束日期"
+          style="width: 240px"
+        />
         <el-button type="primary" @click="load">查询</el-button>
       <el-button @click="exportCsv">导出 CSV</el-button>
       </div>
