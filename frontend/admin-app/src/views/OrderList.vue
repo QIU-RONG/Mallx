@@ -38,6 +38,27 @@ const STATUS_LABEL: Record<string, string> = {
  *   <li>info = 终止态（取消）</li>
  * </ul>
  */
+function exportCsv() {
+  if (!rows.value.length) {
+    ElMessage.warning('当前页没有订单')
+    return
+  }
+  const head = ['订单号', '状态', '买家ID', '商品', '应付金额', '下单时间']
+  const lines = rows.value.map((r) =>
+    [r.orderNo, STATUS_LABEL[r.status] || r.status, r.userId ?? '', r.userNickname ?? '', r.payAmount, r.createdAt]
+      .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+      .join(','),
+  )
+  const blob = new Blob(['\ufeff' + [head.join(','), ...lines].join('\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `orders-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 function statusTagType(status: string) {
   switch (status) {
     case 'PENDING_PAYMENT':
@@ -127,6 +148,7 @@ onMounted(() => {
         <el-option value="REFUNDED" label="已退款" />
         </el-select>
         <el-button type="primary" @click="load">查询</el-button>
+      <el-button @click="exportCsv">导出 CSV</el-button>
       </div>
 
       <el-table v-loading="loading" :data="rows" border stripe style="margin-top: 12px">
