@@ -58,14 +58,17 @@ public class AiChatServiceImpl implements AiChatService {
     private final AiTools tools;
     private final LlmClient llm;
     private final com.mallx.ai.service.langchain.LangChainService langChain;
+    private final com.mallx.ai.service.AiServiceClient aiServiceClient;
     private final ObjectMapper om = new ObjectMapper();
 
     public AiChatServiceImpl(AiProperties props, AiTools tools, LlmClient llm,
-                             com.mallx.ai.service.langchain.LangChainService langChain) {
+                             com.mallx.ai.service.langchain.LangChainService langChain,
+                             com.mallx.ai.service.AiServiceClient aiServiceClient) {
         this.props = props;
         this.tools = tools;
         this.llm = llm;
         this.langChain = langChain;
+        this.aiServiceClient = aiServiceClient;
     }
 
     @Override
@@ -144,7 +147,13 @@ public class AiChatServiceImpl implements AiChatService {
     // ==================== 真实模型（含工具循环） ====================
 
     private AiChatReply viaLlm(Long userId, String message, List<ChatTurn> history) throws Exception {
-        // Day 107：工具循环交给 LangChain4j（AiServices + @Tool），这里只负责身份与提示词
+        // Day 108：配了 Python AI 服务就交给它（FastAPI + LangChain，模型与工具都在 Python）
+        String serviceUrl = props.getServiceUrl();
+        if (serviceUrl != null && !serviceUrl.isBlank()) {
+            com.mallx.ai.service.AiServiceClient.Reply reply = aiServiceClient.chat(userId, message, history);
+            return new AiChatReply(withNotice(reply.text()), "langchain", reply.tools());
+        }
+        // Day 107：否则用 Java 内置 LangChain4j（AiServices + @Tool）
         List<String> used = new ArrayList<>();
         String text = langChain.chat(userId, message, history, used);
         return new AiChatReply(withNotice(text), "llm", used);

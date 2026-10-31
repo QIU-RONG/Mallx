@@ -34,4 +34,7 @@ public class AiProperties {
 
     /** 单用户（游客按 IP）每分钟最多几次 */
     private int ratePerMinute = 20;
+
+    /** Python AI 服务地址（FastAPI + LangChain）；为空时用 Java 内置的 LangChain4j/mock */
+    private String serviceUrl = "";
 }

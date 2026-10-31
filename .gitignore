@@ -64,3 +64,6 @@ replay_pid*.log
 
 # --- 本地运行数据（PG 临时集群 / 日志；不要放 %TEMP%，会被系统清理） ---
 /.local/
+
+# Python AI 服务虚拟环境
+/ai-service/.venv/

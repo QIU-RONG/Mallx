@@ -71,6 +71,8 @@ mallx:
     max-tool-rounds: 3
     timeout-seconds: 20
     rate-per-minute: 20
+    # 配了就用 Python(FastAPI+LangChain) 服务，否则走 Java 内置 LangChain4j / mock
+    service-url: ${AI_SERVICE_URL:}
   order:
     # D41：延迟关单消息的 TTL（毫秒）。与 OrderTimeoutTask 的 2 分钟扫描兜底对齐；
     # 验收时用 ORDER_CLOSE_DELAY_MS 环境变量压短（如 5000）来证明 MQ 路径快于扫描。
