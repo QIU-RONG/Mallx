@@ -155,6 +155,8 @@ const steps = computed(() => {
 onMounted(() => {
   const s = route.query.status
   if (typeof s === 'string' && s) query.status = s
+  const u = route.query.userId
+  if (typeof u === 'string' && u) query.userId = u
   load()
 })
 </script>

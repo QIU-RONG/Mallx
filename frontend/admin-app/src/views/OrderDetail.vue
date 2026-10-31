@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { adminOrderDetail, adminOrderShip } from '../api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { adminOrderCancel, adminOrderDetail, adminOrderShip } from '../api'
+import { useAuthStore } from '../stores/auth'
 import type { OrderDetailVO } from '../types/api'
 
 const route = useRoute()
+const auth = useAuthStore()
 const router = useRouter()
 
 const detail = ref<OrderDetailVO | null>(null)
@@ -32,6 +34,15 @@ async function load() {
 async function ship() {
   await adminOrderShip(route.params.id as string)
   ElMessage.success('已发货')
+  load()
+}
+
+async function cancel() {
+  await ElMessageBox.confirm(`确认取消订单 #${detail.value?.id}？仅待支付订单可取消。`, '取消订单', {
+    type: 'warning',
+  })
+  await adminOrderCancel(route.params.id as string)
+  ElMessage.success('已取消')
   load()
 }
 
@@ -70,6 +81,15 @@ onMounted(load)
 
       <div class="foot">
         <el-button @click="router.back()">返回列表</el-button>
+        <el-button @click="router.push({ path: '/refunds', query: { userId: detail.userId } })">
+          该用户售后
+        </el-button>
+        <el-button
+          v-if="detail.status === 'PENDING_PAYMENT' && auth.hasPerm('order:cancel')"
+          @click="cancel"
+        >
+          取消订单
+        </el-button>
         <el-button v-if="detail.status === 'PAID'" type="primary" @click="ship">发货</el-button>
       </div>
     </template>
