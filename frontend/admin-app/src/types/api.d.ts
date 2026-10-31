@@ -156,6 +156,11 @@ export interface DashboardOverviewVO {
   orderCount: number
   /** ★ 口径：payments 表 status='SUCCESS' 的 sum，不是 orders.pay_amount */
   salesAmount: number
+  /** Day 90：今日口径与待办数 */
+  todaySalesAmount: number
+  todayOrderCount: number
+  pendingShipCount: number
+  pendingRefundCount: number
 }
 
 export interface TrendPointVO {

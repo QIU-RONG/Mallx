@@ -62,4 +62,16 @@ public interface DashboardMapper {
      *                  显式定类型，要么像本方法这样直接传算好的日期字符串。
      */
     List<TrendPointVO> selectDailyTrend(@Param("startDate") String startDate);
+
+    /** 今日订单数（created_at 当天） */
+    long countTodayOrders();
+
+    /** 今日销售额（支付流水口径，paid_at 当天） */
+    BigDecimal sumTodayPaidAmount();
+
+    /** 待发货订单数（status=PAID） */
+    long countPendingShip();
+
+    /** 待处理售后数（refunds.status=APPLIED，待审核） */
+    long countPendingRefund();
 }

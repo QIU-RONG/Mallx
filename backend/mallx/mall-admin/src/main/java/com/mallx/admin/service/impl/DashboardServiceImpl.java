@@ -57,6 +57,11 @@ public class DashboardServiceImpl implements DashboardService {
         //   刻意不补 == null ? ZERO : x —— 那会让 SQL 里的 coalesce 显得可有可无，
         //   掩盖真正该修的地方（空表时前端显示 "null" 的根因在 SQL）。
         vo.setSalesAmount(dashboardMapper.sumPaidAmount());
+        // Day 90：今日口径 + 两个待办数
+        vo.setTodayOrderCount(dashboardMapper.countTodayOrders());
+        vo.setTodaySalesAmount(dashboardMapper.sumTodayPaidAmount());
+        vo.setPendingShipCount(dashboardMapper.countPendingShip());
+        vo.setPendingRefundCount(dashboardMapper.countPendingRefund());
         return vo;
     }
 

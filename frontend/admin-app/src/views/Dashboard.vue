@@ -2,9 +2,11 @@
 import { computed, onMounted, ref } from 'vue'
 import { dashboardOverview, dashboardTrend } from '../api'
 import { useAuthStore } from '../stores/auth'
+import { useRouter } from 'vue-router'
 import type { DashboardOverviewVO, TrendPointVO } from '../types/api'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 const overview = ref<DashboardOverviewVO | null>(null)
 const trend = ref<TrendPointVO[]>([])
@@ -63,6 +65,35 @@ onMounted(load)
   <div v-loading="loading">
     <!-- ★ 只读汇总也各有一个权限码（dashboard:overview / dashboard:trend） -->
     <template v-if="auth.hasPerm('dashboard:overview')">
+      <div class="section-title">今日</div>
+      <el-row :gutter="16">
+        <el-col :span="6">
+          <el-card shadow="never" class="metric">
+            <div class="label">今日销售额</div>
+            <div class="value money">¥ {{ overview?.todaySalesAmount ?? '-' }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="never" class="metric">
+            <div class="label">今日订单</div>
+            <div class="value">{{ overview?.todayOrderCount ?? '-' }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="never" class="metric click" @click="router.push({ path: '/orders', query: { status: 'PAID' } })">
+            <div class="label">待发货</div>
+            <div class="value warn">{{ overview?.pendingShipCount ?? '-' }}</div>
+          </el-card>
+        </el-col>
+        <el-col :span="6">
+          <el-card shadow="never" class="metric click" @click="router.push({ path: '/refunds', query: { status: 'APPLIED' } })">
+            <div class="label">待处理售后</div>
+            <div class="value warn">{{ overview?.pendingRefundCount ?? '-' }}</div>
+          </el-card>
+        </el-col>
+      </el-row>
+
+      <div class="section-title">累计</div>
       <el-row :gutter="16">
         <el-col :span="6">
           <el-card shadow="never">
@@ -153,6 +184,22 @@ onMounted(load)
 </template>
 
 <style scoped>
+.section-title {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--el-text-color-secondary);
+  text-transform: uppercase;
+}
+.metric.click {
+  cursor: pointer;
+}
+.metric.click:hover {
+  border-color: var(--brand-color);
+}
+.value.warn {
+  color: var(--brand-color);
+}
 .label {
   font-size: 13px;
   color: var(--el-text-color-secondary);

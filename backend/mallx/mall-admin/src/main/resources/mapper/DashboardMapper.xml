@@ -84,4 +84,21 @@
         ORDER BY days.date
     </select>
 
+    <select id="countTodayOrders" resultType="long">
+        SELECT count(*) FROM orders WHERE created_at >= CURRENT_DATE
+    </select>
+
+    <select id="sumTodayPaidAmount" resultType="java.math.BigDecimal">
+        SELECT coalesce(sum(amount), 0) FROM payments
+         WHERE status = 'SUCCESS' AND paid_at >= CURRENT_DATE
+    </select>
+
+    <select id="countPendingShip" resultType="long">
+        SELECT count(*) FROM orders WHERE status = 'PAID'
+    </select>
+
+    <select id="countPendingRefund" resultType="long">
+        SELECT count(*) FROM refunds WHERE status = 'APPLIED'
+    </select>
+
 </mapper>

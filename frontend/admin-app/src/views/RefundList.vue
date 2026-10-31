@@ -8,11 +8,13 @@ import {
   adminRefundReceive,
   adminRefundReject,
 } from '../api'
+import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { confirmAction } from '../utils/confirm'
 import type { AdminRefundVO } from '../types/api'
 
 const auth = useAuthStore()
+const route = useRoute()
 
 const rows = ref<AdminRefundVO[]>([])
 const total = ref(0)
@@ -150,7 +152,11 @@ const steps = computed(() => {
     .map(([label, time]) => ({ label, time }))
 })
 
-onMounted(load)
+onMounted(() => {
+  const s = route.query.status
+  if (typeof s === 'string' && s) query.status = s
+  load()
+})
 </script>
 
 <template>

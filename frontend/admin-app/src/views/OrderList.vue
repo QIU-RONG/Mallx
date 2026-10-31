@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { adminOrderCancel, adminOrderDetail, adminOrderList, adminOrderShip } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { confirmAction } from '../utils/confirm'
@@ -9,6 +9,7 @@ import type { AdminOrderVO, OrderDetailVO } from '../types/api'
 
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 
 const rows = ref<AdminOrderVO[]>([])
 const total = ref(0)
@@ -106,7 +107,11 @@ async function cancel(row: AdminOrderVO) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  const s = route.query.status
+  if (typeof s === 'string' && s) query.status = s
+  load()
+})
 </script>
 
 <template>

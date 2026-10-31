@@ -37,4 +37,13 @@ public class DashboardOverviewVO {
      * ⚠️ 这是本项目反复踩的口径漂移，所以口径<b>写进 javadoc</b>，不只写在文档里。
      */
     private BigDecimal salesAmount;
+
+    /** Day 90：今日订单数 / 今日销售额（支付流水口径） / 待发货 / 待处理售后 */
+    private Long todayOrderCount;
+
+    private BigDecimal todaySalesAmount;
+
+    private Long pendingShipCount;
+
+    private Long pendingRefundCount;
 }
