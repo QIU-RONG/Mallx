@@ -38,6 +38,30 @@ async function load() {
   }
 }
 
+function exportCsv() {
+  if (!rows.value.length) {
+    ElMessage.warning('当前页没有用户')
+    return
+  }
+  const head = ['ID', '用户名', '昵称', '手机号', '邮箱', '状态', '注册时间']
+  const lines = rows.value.map((r) =>
+    [
+      r.id, r.username, r.nickname ?? '', r.phone ?? '', r.email ?? '',
+      r.status === 1 ? '正常' : '已禁用', r.createdAt ?? '',
+    ]
+      .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+      .join(','),
+  )
+  const blob = new Blob(['\ufeff' + [head.join(','), ...lines].join('\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 function search() {
   query.current = 1
   load()
@@ -113,6 +137,7 @@ onMounted(load)
         <el-option :value="0" label="已禁用" />
       </el-select>
       <el-button type="primary" @click="search">查询</el-button>
+      <el-button @click="exportCsv">导出 CSV</el-button>
     </div>
 
     <el-table v-loading="loading" :data="rows" border stripe style="margin-top: 12px">
