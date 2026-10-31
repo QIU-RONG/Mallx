@@ -8,6 +8,7 @@ import {
   adminProductCreate,
   adminProductDelete,
   adminProductUpdate,
+  adminProductBatchStatus,
   adminShopList,
 } from '../api'
 import { useAuthStore } from '../stores/auth'
@@ -20,6 +21,7 @@ const auth = useAuthStore()
 const isMerchant = computed(() => auth.perms.some((x) => x.startsWith('SHOP_SCOPE_')))
 
 const rows = ref<ProductVO[]>([])
+const selected = ref<ProductVO[]>([])
 const total = ref(0)
 const query = reactive({ current: 1, size: 10, keyword: '', status: null as number | null })
 const loading = ref(false)
@@ -206,6 +208,24 @@ async function remove(row: ProductVO) {
   }
 }
 
+function onSelect(rowsSel: ProductVO[]) {
+  selected.value = rowsSel
+}
+
+async function batchStatus(status: 0 | 1) {
+  if (!selected.value.length) {
+    ElMessage.warning('先勾选商品')
+    return
+  }
+  await adminProductBatchStatus(
+    selected.value.map((r) => r.id),
+    status,
+  )
+  ElMessage.success(status === 1 ? '已批量上架' : '已批量下架')
+  selected.value = []
+  load()
+}
+
 onMounted(() => {
   load()
   loadDict()
@@ -241,7 +261,20 @@ onMounted(() => {
         </el-button>
       </div>
 
-      <el-table v-loading="loading" :data="rows" border stripe style="margin-top: 12px">
+      <div class="batch-bar">
+        <el-button size="small" :disabled="!selected.length" @click="batchStatus(1)">批量上架</el-button>
+        <el-button size="small" :disabled="!selected.length" @click="batchStatus(0)">批量下架</el-button>
+        <span v-if="selected.length" class="batch-tip">已选 {{ selected.length }} 个</span>
+      </div>
+      <el-table
+        v-loading="loading"
+        :data="rows"
+        border
+        stripe
+        style="margin-top: 12px"
+        @selection-change="onSelect"
+      >
+        <el-table-column type="selection" width="44" />
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column label="图" width="70">
           <template #default="{ row }">
@@ -410,6 +443,17 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.batch-tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
 .bar {
   display: flex;
   gap: 10px;

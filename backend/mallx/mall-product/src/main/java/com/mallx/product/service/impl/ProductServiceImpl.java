@@ -658,4 +658,19 @@ public class ProductServiceImpl extends ServiceImpl<ProductMapper, Product> impl
         // 旧缓存若不失效，已删商品还能被读到（D38 验收的对照场景之一）。
         catalogCache.bump();
     }
+
+    @Override
+    public int updateStatusBatch(java.util.List<Long> ids, Integer status, Long shopScope) {
+        if (ids == null || ids.isEmpty() || status == null || (status != 0 && status != 1)) {
+            throw new IllegalArgumentException("参数不合法");
+        }
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<com.mallx.product.entity.Product> w =
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        w.in(com.mallx.product.entity.Product::getId, ids)
+                .eq(shopScope != null, com.mallx.product.entity.Product::getShopId, shopScope)
+                .set(com.mallx.product.entity.Product::getStatus, status);
+        int rows = baseMapper.update(null, w);
+        catalogCache.bump();
+        return rows;
+    }
 }

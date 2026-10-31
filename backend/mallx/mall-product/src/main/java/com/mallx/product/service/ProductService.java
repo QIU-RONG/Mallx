@@ -87,6 +87,9 @@ public interface ProductService extends IService<Product> {
     Long createProduct(ProductCreateDTO productCreateDTO, Long shopScope);
     //    修改商品（id 走路径，body 只带这次要改的字段）
     void updateProduct(Long id, ProductUpdateDTO productUpdateDTO, Long shopScope);
+
+    /** 批量上下架；返回受影响行数（商户只能改自己店铺的商品） */
+    int updateStatusBatch(java.util.List<Long> ids, Integer status, Long shopScope);
     //    删除商品
     void deleteProduct(Long id, Long shopScope);
     //    批量删除商品

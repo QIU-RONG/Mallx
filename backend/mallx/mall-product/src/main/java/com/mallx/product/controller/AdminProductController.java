@@ -114,6 +114,14 @@ public class AdminProductController {
         return Result.ok();
     }
 
+    @Operation(summary = "批量上下架（最多 100 个，商户只能改自己店铺）")
+    @PutMapping("/batch-status")
+    @PreAuthorize("hasAuthority('product:update')")
+    public Result<Integer> batchStatus(@RequestBody @jakarta.validation.Valid com.mallx.product.dto.BatchProductStatusDTO dto) {
+        return Result.ok(productService.updateStatusBatch(dto.getIds(), dto.getStatus(),
+                com.mallx.common.security.ShopScope.currentShopId()));
+    }
+
     @Operation(summary = "删除商品（软删主表）")
     @DeleteMapping("/{id}")
     @PreAuthorize("hasAuthority('product:delete')")

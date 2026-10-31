@@ -64,6 +64,10 @@ export function adminProductCreate(payload: ProductCreateDTO) {
 }
 
 /** ★ 局部更新：只发要改的字段（下架 = { status: 0 }） */
+export function adminProductBatchStatus(ids: number[], status: 0 | 1) {
+  return http.put<never, Result<number>>('/admin/products/batch-status', { ids, status })
+}
+
 export function adminProductUpdate(id: number | string, payload: ProductUpdateDTO) {
   return http.put<never, Result<void>>(`/admin/products/${id}`, payload)
 }
