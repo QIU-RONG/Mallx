@@ -76,6 +76,9 @@ public interface CouponService {
     /** C 端：我的券（分页）。归属过滤在 SQL 里，{@code userId} 来自 token */
     PageResult<UserCouponVO> listMine(Long userId, long page, long size);
 
+    /** 管理端：编辑券（类型不可改；总量不得低于已领取数） */
+    void updateCoupon(Long id, com.mallx.marketing.dto.CouponCreateDTO dto);
+
     /** 管理端：某张券的领取记录（券不存在 → 404） */
     PageResult<com.mallx.marketing.vo.CouponRecordVO> pageRecords(Long couponId, long page, long size);
 

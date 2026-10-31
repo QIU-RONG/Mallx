@@ -272,6 +272,19 @@ export function adminCouponRecords(id: number | string, page = 1, size = 10) {
   }>>(`/admin/coupons/${id}/records`, { params: { page, size } })
 }
 
+export function adminCouponUpdate(id: number | string, payload: {
+  name: string
+  type: string
+  discountAmount?: number | null
+  discountRate?: number | null
+  minAmount?: number | null
+  totalCount: number
+  startTime: string
+  endTime: string
+}) {
+  return http.put<never, Result<void>>(`/admin/coupons/${id}`, payload)
+}
+
 export function adminCouponEnd(id: number | string) {
   return http.put<never, Result<void>>(`/admin/coupons/${id}/end`)
 }

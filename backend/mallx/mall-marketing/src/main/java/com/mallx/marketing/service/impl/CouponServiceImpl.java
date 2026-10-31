@@ -679,4 +679,36 @@ public class CouponServiceImpl extends ServiceImpl<CouponMapper, Coupon> impleme
                         new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(safePage, safeSize), couponId);
         return PageResult.of(result);
     }
+
+    @Override
+    public void updateCoupon(Long id, com.mallx.marketing.dto.CouponCreateDTO dto) {
+        com.mallx.marketing.entity.Coupon existing = this.getById(id);
+        if (existing == null) {
+            throw new BusinessException(ResultCode.NOT_FOUND.getCode(), "优惠券不存在");
+        }
+        if (!existing.getType().equals(dto.getType())) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "不允许修改券类型");
+        }
+        int received = existing.getReceivedCount() == null ? 0 : existing.getReceivedCount();
+        if (dto.getTotalCount() < received) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "发行总量不能小于已领取数");
+        }
+        if (com.mallx.marketing.common.CouponType.FIXED.equals(dto.getType())) {
+            if (dto.getDiscountAmount() == null || dto.getDiscountRate() != null) {
+                throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "满减券不能同时填写 discountRate");
+            }
+        } else if (dto.getDiscountRate() == null || dto.getDiscountAmount() != null) {
+            throw new BusinessException(ResultCode.VALIDATE_FAILED.getCode(), "折扣券不能同时填写 discountAmount");
+        }
+        com.mallx.marketing.entity.Coupon update = new com.mallx.marketing.entity.Coupon();
+        update.setId(id);
+        update.setName(dto.getName());
+        update.setDiscountAmount(dto.getDiscountAmount());
+        update.setDiscountRate(dto.getDiscountRate());
+        update.setMinAmount(dto.getMinAmount());
+        update.setTotalCount(dto.getTotalCount());
+        update.setStartTime(dto.getStartTime());
+        update.setEndTime(dto.getEndTime());
+        this.updateById(update);
+    }
 }

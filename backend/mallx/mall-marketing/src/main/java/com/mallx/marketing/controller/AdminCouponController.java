@@ -74,6 +74,14 @@ public class AdminCouponController {
      */
     @Operation(summary = "新建优惠券（需 coupon:create）")
 
+
+    @org.springframework.web.bind.annotation.PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('coupon:create')")
+    public Result<Void> update(@PathVariable Long id,
+                               @RequestBody @jakarta.validation.Valid com.mallx.marketing.dto.CouponCreateDTO dto) {
+        couponService.updateCoupon(id, dto);
+        return Result.ok();
+    }
     @org.springframework.web.bind.annotation.GetMapping("/{id}/records")
     @PreAuthorize("hasAuthority('coupon:list')")
     public Result<com.mallx.common.api.PageResult<com.mallx.marketing.vo.CouponRecordVO>> records(

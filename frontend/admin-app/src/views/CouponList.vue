@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { adminCouponCreate, adminCouponDelete, adminCouponEnd, adminCouponList, adminCouponRecords } from '../api'
+import { adminCouponCreate, adminCouponDelete, adminCouponEnd, adminCouponList, adminCouponRecords, adminCouponUpdate } from '../api'
 import { useAuthStore } from '../stores/auth'
 import { buildCouponPayload, couponFaceText } from '../utils/coupon'
 import { confirmAction } from '../utils/confirm'
@@ -97,6 +97,7 @@ async function loadRecords() {
 }
 
 const createVisible = ref(false)
+const editId = ref<number | null>(null)
 // ★ 页面内用「一定有值」的数字：el-input-number 的 modelValue 是 number | undefined，
 //   绑 null 过不了 vue-tsc。空的语义（未填 / 无门槛）在提交时由 buildCouponPayload 判。
 const form = reactive({
@@ -109,7 +110,22 @@ const form = reactive({
   timeRange: null as [string, string] | null,
 })
 
+function openEdit(row: CouponVO) {
+  editId.value = row.id
+  Object.assign(form, {
+    name: row.name,
+    type: row.type,
+    discountAmount: row.discountAmount ?? 20,
+    discountRate: row.discountRate ?? 0.8,
+    minAmount: row.minAmount ?? 0,
+    totalCount: row.totalCount,
+    timeRange: [row.startTime, row.endTime] as [string, string],
+  })
+  createVisible.value = true
+}
+
 function openCreate() {
+  editId.value = null
   Object.assign(form, {
     name: '',
     type: 'FIXED',
@@ -131,8 +147,13 @@ async function submitCreate() {
     return
   }
   try {
-    await adminCouponCreate(r.payload)
-    ElMessage.success('优惠券已创建')
+    if (editId.value) {
+      await adminCouponUpdate(editId.value, r.payload)
+      ElMessage.success('优惠券已更新')
+    } else {
+      await adminCouponCreate(r.payload)
+      ElMessage.success('优惠券已创建')
+    }
     createVisible.value = false
     query.page = 1
     await load()
@@ -226,6 +247,9 @@ onMounted(load)
       </el-table-column>
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
+          <el-button v-if="row.status === 1 && auth.hasPerm('coupon:create')" link type="primary" @click="openEdit(row)">
+            编辑
+          </el-button>
           <el-button link type="primary" @click="openRecords(row)">领取记录</el-button>
           <el-button
             v-if="row.status === 1 && auth.hasPerm('coupon:create')"
@@ -258,7 +282,7 @@ onMounted(load)
       @current-change="load"
     />
 
-    <el-dialog v-model="createVisible" title="新建优惠券" width="560px">
+    <el-dialog v-model="createVisible" :title="editId ? '编辑优惠券' : '新建优惠券'" width="560px">
       <el-form label-width="100px">
         <el-form-item label="券名" required>
           <el-input v-model="form.name" maxlength="100" placeholder="例：全场满 100 减 20" />
