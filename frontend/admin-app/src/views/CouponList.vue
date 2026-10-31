@@ -24,6 +24,37 @@ const total = ref(0)
 const loading = ref(false)
 const query = reactive({ page: 1, size: 10, status: null as number | null })
 
+function exportCsv() {
+  if (!rows.value.length) {
+    ElMessage.warning('当前页没有优惠券')
+    return
+  }
+  const head = ['ID', '名称', '类型', '面额', '门槛', '发行量', '已领取', '状态', '结束时间']
+  const lines = rows.value.map((r) =>
+    [
+      r.id,
+      r.name,
+      r.type === 'FIXED' ? '满减' : '折扣',
+      r.discountAmount ?? r.discountRate ?? '',
+      r.minAmount ?? '',
+      r.totalCount ?? '',
+      r.receivedCount ?? '',
+      r.status === 1 ? '进行中' : '已结束',
+      r.endTime ?? '',
+    ]
+      .map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`)
+      .join(','),
+  )
+  const blob = new Blob(['\ufeff' + [head.join(','), ...lines].join('\n')], {
+    type: 'text/csv;charset=utf-8',
+  })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `coupons-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
 async function load() {
   loading.value = true
   try {
@@ -128,6 +159,7 @@ onMounted(load)
         <el-option :value="0" label="已下架" />
       </el-select>
       <el-button type="primary" @click="load">查询</el-button>
+      <el-button @click="exportCsv">导出 CSV</el-button>
       <span class="spacer" />
       <el-button v-if="auth.hasPerm('coupon:create')" type="primary" @click="openCreate">
         新建优惠券
