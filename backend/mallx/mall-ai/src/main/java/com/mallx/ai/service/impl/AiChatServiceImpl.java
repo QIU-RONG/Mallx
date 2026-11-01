@@ -151,7 +151,8 @@ public class AiChatServiceImpl implements AiChatService {
         String serviceUrl = props.getServiceUrl();
         if (serviceUrl != null && !serviceUrl.isBlank()) {
             com.mallx.ai.service.AiServiceClient.Reply reply = aiServiceClient.chat(userId, message, history);
-            return new AiChatReply(withNotice(reply.text()), "langchain", reply.tools());
+            return new AiChatReply(withNotice(reply.text()), "langchain", reply.tools(),
+                    reply.sources(), reply.elapsedMs());
         }
         // Day 107：否则用 Java 内置 LangChain4j（AiServices + @Tool）
         List<String> used = new ArrayList<>();
@@ -247,7 +248,9 @@ public class AiChatServiceImpl implements AiChatService {
                 }
                 emitter.send(SseEmitter.event().name("done").data(Map.of(
                         "mock", "mock".equals(reply.getMode()),
-                        "tools", reply.getTools() == null ? List.of() : reply.getTools())));
+                        "tools", reply.getTools() == null ? List.of() : reply.getTools(),
+                        "sources", reply.getSources() == null ? List.of() : reply.getSources(),
+                        "elapsedMs", reply.getElapsedMs())));
                 emitter.complete();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

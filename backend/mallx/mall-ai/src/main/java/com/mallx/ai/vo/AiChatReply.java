@@ -21,4 +21,13 @@ public class AiChatReply {
 
     /** 本轮执行过的工具（可能为空） */
     private List<String> tools;
+
+    /** Day 110：知识库引用来源与耗时（mock 为空 / 0） */
+    private List<AiSource> sources;
+
+    private long elapsedMs;
+
+    public AiChatReply(String reply, String mode, List<String> tools) {
+        this(reply, mode, tools, List.of(), 0L);
+    }
 }

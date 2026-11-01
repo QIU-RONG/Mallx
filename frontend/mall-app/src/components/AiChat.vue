@@ -19,6 +19,8 @@ interface Msg {
   content: string
   tools?: string[]
   mock?: boolean
+  sources?: Array<{ source: string; heading?: string }>
+  elapsedMs?: number
 }
 
 const auth = useAuthStore()
@@ -175,6 +177,8 @@ async function send(text?: string) {
     }, (meta) => {
       target.mock = !!meta.mock
       target.tools = meta.tools
+      target.sources = meta.sources
+      target.elapsedMs = meta.elapsedMs
     })
     if (!streamed) {
       messages.value.pop()
@@ -183,6 +187,8 @@ async function send(text?: string) {
         role: 'assistant',
         content: r.data.reply,
         tools: r.data.tools,
+        sources: r.data.sources,
+        elapsedMs: r.data.elapsedMs,
         mock: r.data.mode === 'mock',
       })
     }
@@ -207,7 +213,7 @@ async function streamChat(
   content: string,
   history: { role: string; content: string }[],
   onDelta: (t: string) => void,
-  onDone: (meta: { mock?: boolean; tools?: string[] }) => void,
+  onDone: (meta: { mock?: boolean; tools?: string[]; sources?: Msg['sources']; elapsedMs?: number }) => void,
 ): Promise<boolean> {
   try {
     const res = await fetch('/api/ai/chat/stream', {
@@ -236,7 +242,7 @@ async function streamChat(
           else if (line.startsWith('data:')) data += line.slice(5).trim()
         }
         if (!data) continue
-        const obj = JSON.parse(data) as { text?: string; mock?: boolean; tools?: string[]; message?: string }
+        const obj = JSON.parse(data) as { text?: string; mock?: boolean; tools?: string[]; sources?: Msg['sources']; elapsedMs?: number; message?: string }
         if (event === 'delta' && obj.text) onDelta(obj.text)
         else if (event === 'done') onDone(obj)
         else if (event === 'error') throw new Error(obj.message || 'stream error')
@@ -305,6 +311,12 @@ onUnmounted(() => {
         <div v-if="m.mock" class="meta">开发模式（未接大模型）</div>
         <div v-else-if="m.tools && m.tools.length" class="meta">
           查了：{{ m.tools.join(' · ') }}
+          <span v-if="m.elapsedMs"> · {{ m.elapsedMs }} ms</span>
+        </div>
+        <div v-if="m.sources && m.sources.length" class="sources">
+          <span v-for="(s, si) in m.sources" :key="si" class="source-chip">
+            {{ s.source }}<template v-if="s.heading"> · {{ s.heading }}</template>
+          </span>
         </div>
       </div>
       <div v-if="sending" class="msg msg--assistant">
@@ -332,6 +344,21 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.source-chip {
+  font-size: 11px;
+  color: var(--mx-ink-3);
+  border: 1px solid var(--mx-line);
+  border-radius: 999px;
+  padding: 1px 8px;
+  background: var(--mx-line-soft);
+}
+
 .fab {
   position: fixed;
   right: 28px;

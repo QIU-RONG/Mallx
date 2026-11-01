@@ -27,7 +27,7 @@ import java.util.List;
 @Component
 public class AiServiceClient {
 
-    public record Reply(String text, List<String> tools) {
+    public record Reply(String text, List<String> tools, List<com.mallx.ai.vo.AiSource> sources, long elapsedMs) {
     }
 
     private final AiProperties props;
@@ -68,7 +68,10 @@ public class AiServiceClient {
         JsonNode json = om.readTree(resp.body());
         List<String> tools = new ArrayList<>();
         json.path("tools").forEach(n -> tools.add(n.asText()));
-        return new Reply(json.path("reply").asText(""), tools);
+        List<com.mallx.ai.vo.AiSource> sources = new ArrayList<>();
+        json.path("sources").forEach(n -> sources.add(new com.mallx.ai.vo.AiSource(
+                n.path("source").asText(""), n.path("heading").asText(""))));
+        return new Reply(json.path("reply").asText(""), tools, sources, json.path("elapsed_ms").asLong(0));
     }
 
     private String currentAuthorization() {

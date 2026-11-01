@@ -8,6 +8,8 @@
 启动：uvicorn main:app --host 127.0.0.1 --port 8008
 """
 import os
+import re
+import time
 from typing import List, Optional
 
 import httpx
@@ -118,10 +120,31 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
         MessagesPlaceholder("agent_scratchpad"),
     ])
     agent = create_tool_calling_agent(llm, tools, prompt)
-    executor = AgentExecutor(agent=agent, tools=tools, max_iterations=3, verbose=False)
+    executor = AgentExecutor(
+        agent=agent, tools=tools, max_iterations=3, verbose=False, return_intermediate_steps=True,
+    )
+    started = time.time()
     result = executor.invoke({
         "input": message,
         "history": [(m.get("role"), m.get("content")) for m in history if m.get("content")],
     })
-    used = [step[0].tool for step in result.get("intermediate_steps", [])]
-    return {"code": 200, "reply": result.get("output", ""), "tools": used}
+    elapsed_ms = int((time.time() - started) * 1000)
+    steps = result.get("intermediate_steps", [])
+    used = [step[0].tool for step in steps]
+    sources, seen = [], set()
+    for step in steps:
+        if step[0].tool != "search_knowledge_base":
+            continue
+        for m in re.finditer(r"【来源：([^·】]+)(?: · ([^】]+))?】", str(step[1])):
+            key = (m.group(1).strip(), (m.group(2) or "").strip())
+            if key in seen:
+                continue
+            seen.add(key)
+            sources.append({"source": key[0], "heading": key[1]})
+    return {
+        "code": 200,
+        "reply": result.get("output", ""),
+        "tools": used,
+        "sources": sources,
+        "elapsed_ms": elapsed_ms,
+    }

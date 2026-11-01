@@ -173,6 +173,9 @@ export interface AiChatReply {
   mode: 'mock' | 'llm' | string
   /** 本轮执行过的工具名 */
   tools: string[]
+  /** Day 110：知识库引用来源与耗时 */
+  sources?: Array<{ source: string; heading?: string }>
+  elapsedMs?: number
 }
 
 export interface AiChatTurn {
