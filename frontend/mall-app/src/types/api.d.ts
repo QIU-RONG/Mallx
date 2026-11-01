@@ -176,6 +176,9 @@ export interface AiChatReply {
   /** Day 110：知识库引用来源与耗时 */
   sources?: Array<{ source: string; heading?: string }>
   elapsedMs?: number
+  /** Day 111：会话 id 与 token 用量 */
+  conversationId?: number | null
+  tokens?: number
 }
 
 export interface AiChatTurn {

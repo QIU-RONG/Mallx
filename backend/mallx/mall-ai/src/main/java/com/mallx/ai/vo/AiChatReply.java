@@ -27,7 +27,12 @@ public class AiChatReply {
 
     private long elapsedMs;
 
+    /** Day 111：会话 id 与 token 用量（未知为 0） */
+    private Long conversationId;
+
+    private int tokens;
+
     public AiChatReply(String reply, String mode, List<String> tools) {
-        this(reply, mode, tools, List.of(), 0L);
+        this(reply, mode, tools, List.of(), 0L, null, 0);
     }
 }

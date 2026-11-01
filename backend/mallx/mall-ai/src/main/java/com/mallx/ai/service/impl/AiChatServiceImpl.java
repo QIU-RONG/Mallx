@@ -78,7 +78,7 @@ public class AiChatServiceImpl implements AiChatService {
             return mock(userId, message);
         }
         try {
-            return viaLlm(userId, message, request.getHistory());
+            return viaLlm(userId, message, request.getHistory(), request.getConversationId());
         } catch (Exception e) {
             // ★ 不把上游错误原样吐给用户（可能含 key 所在网关的内网地址）
             log.warn("AI 调用失败：{}", e.toString());
@@ -146,13 +146,14 @@ public class AiChatServiceImpl implements AiChatService {
 
     // ==================== 真实模型（含工具循环） ====================
 
-    private AiChatReply viaLlm(Long userId, String message, List<ChatTurn> history) throws Exception {
+    private AiChatReply viaLlm(Long userId, String message, List<ChatTurn> history, Long conversationId) throws Exception {
         // Day 108：配了 Python AI 服务就交给它（FastAPI + LangChain，模型与工具都在 Python）
         String serviceUrl = props.getServiceUrl();
         if (serviceUrl != null && !serviceUrl.isBlank()) {
-            com.mallx.ai.service.AiServiceClient.Reply reply = aiServiceClient.chat(userId, message, history);
+            com.mallx.ai.service.AiServiceClient.Reply reply =
+                    aiServiceClient.chat(userId, message, history, conversationId);
             return new AiChatReply(withNotice(reply.text()), "langchain", reply.tools(),
-                    reply.sources(), reply.elapsedMs());
+                    reply.sources(), reply.elapsedMs(), reply.conversationId(), reply.tokens());
         }
         // Day 107：否则用 Java 内置 LangChain4j（AiServices + @Tool）
         List<String> used = new ArrayList<>();
@@ -246,11 +247,14 @@ public class AiChatServiceImpl implements AiChatService {
                     emitter.send(SseEmitter.event().name("delta").data(Map.of("text", delta)));
                     Thread.sleep(18);
                 }
-                emitter.send(SseEmitter.event().name("done").data(Map.of(
-                        "mock", "mock".equals(reply.getMode()),
-                        "tools", reply.getTools() == null ? List.of() : reply.getTools(),
-                        "sources", reply.getSources() == null ? List.of() : reply.getSources(),
-                        "elapsedMs", reply.getElapsedMs())));
+                java.util.Map<String, Object> done = new java.util.LinkedHashMap<>();
+                done.put("mock", "mock".equals(reply.getMode()));
+                done.put("tools", reply.getTools() == null ? List.of() : reply.getTools());
+                done.put("sources", reply.getSources() == null ? List.of() : reply.getSources());
+                done.put("elapsedMs", reply.getElapsedMs());
+                done.put("conversationId", reply.getConversationId());
+                done.put("tokens", reply.getTokens());
+                emitter.send(SseEmitter.event().name("done").data(done));
                 emitter.complete();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

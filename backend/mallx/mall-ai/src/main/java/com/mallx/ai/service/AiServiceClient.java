@@ -27,7 +27,8 @@ import java.util.List;
 @Component
 public class AiServiceClient {
 
-    public record Reply(String text, List<String> tools, List<com.mallx.ai.vo.AiSource> sources, long elapsedMs) {
+    public record Reply(String text, List<String> tools, List<com.mallx.ai.vo.AiSource> sources,
+                        long elapsedMs, Long conversationId, int tokens) {
     }
 
     private final AiProperties props;
@@ -39,10 +40,13 @@ public class AiServiceClient {
         this.props = props;
     }
 
-    public Reply chat(Long userId, String message, List<ChatTurn> history) throws Exception {
+    public Reply chat(Long userId, String message, List<ChatTurn> history, Long conversationId) throws Exception {
         ObjectNode body = om.createObjectNode();
         body.put("message", message);
         body.put("user_id", userId == null ? 0 : userId);
+        if (conversationId != null) {
+            body.put("conversation_id", conversationId);
+        }
         ArrayNode arr = body.putArray("history");
         if (history != null) {
             for (ChatTurn t : history) {
@@ -71,7 +75,11 @@ public class AiServiceClient {
         List<com.mallx.ai.vo.AiSource> sources = new ArrayList<>();
         json.path("sources").forEach(n -> sources.add(new com.mallx.ai.vo.AiSource(
                 n.path("source").asText(""), n.path("heading").asText(""))));
-        return new Reply(json.path("reply").asText(""), tools, sources, json.path("elapsed_ms").asLong(0));
+        long conv = json.path("conversation_id").asLong(0);
+        int tokens = json.path("tokens").path("prompt_tokens").asInt(0)
+                + json.path("tokens").path("completion_tokens").asInt(0);
+        return new Reply(json.path("reply").asText(""), tools, sources,
+                json.path("elapsed_ms").asLong(0), conv == 0 ? null : conv, tokens);
     }
 
     private String currentAuthorization() {

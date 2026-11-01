@@ -15,11 +15,12 @@ from typing import List, Optional
 import httpx
 from fastapi import FastAPI, Header, Query
 from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 
-from kb_lib import store
+from kb_lib import memory, store
 
 app = FastAPI(title="MallX AI Service", version="1.0.0")
 
@@ -27,6 +28,24 @@ JAVA_BASE = os.getenv("JAVA_BASE_URL", "http://127.0.0.1:8081")
 MODEL = os.getenv("OPENAI_MODEL", "deepseek-chat")
 BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 API_KEY = os.getenv("OPENAI_API_KEY", "")
+
+class UsageTracker(BaseCallbackHandler):
+    """收集 OpenAI 返回的 token 用量；流式下由 stream_usage=True 提供。"""
+
+    def __init__(self):
+        self.usage = {}
+
+    def on_llm_end(self, response, **kwargs):
+        for generations in response.generations:
+            for gen in generations:
+                meta = getattr(getattr(gen, "message", None), "response_metadata", {}) or {}
+                usage = meta.get("token_usage") or meta.get("usage")
+                if usage:
+                    self.usage = {
+                        "prompt_tokens": usage.get("prompt_tokens"),
+                        "completion_tokens": usage.get("completion_tokens"),
+                    }
+
 
 SYSTEM_PROMPT = """你是 MallX 商城的在线客服「小 M」。
 回答政策/规则类问题时，先调用 search_knowledge_base 检索知识库，并在回答末尾标注来源，格式：【来源：文件名 · 小节】。
@@ -100,7 +119,7 @@ def kb_search(q: str = Query(..., min_length=1), k: int = 4):
 
 @app.get("/kb/stats")
 def kb_stats():
-    return {"code": 200, **store.stats()}
+    return {"code": 200, **store.stats(), **memory.stats()}
 
 
 @app.post("/chat")
@@ -110,8 +129,17 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
     token = authorization.split(" ", 1)[-1] if authorization else None
     message = (body.get("message") or "").strip()
     history: List[dict] = body.get("history") or []
+    conversation_id = body.get("conversation_id")
+    user_id = body.get("user_id")
+    conv_id = memory.ensure_conversation(user_id, conversation_id)
+    db_history = memory.history(conv_id)
+    if db_history:
+        history = db_history
 
-    llm = ChatOpenAI(model=MODEL, base_url=BASE_URL, api_key=API_KEY, temperature=0.3, timeout=20)
+    llm = ChatOpenAI(
+        model=MODEL, base_url=BASE_URL, api_key=API_KEY, temperature=0.3, timeout=20,
+        stream_usage=True,
+    )
     tools = _build_tools(token)
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
@@ -124,10 +152,14 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
         agent=agent, tools=tools, max_iterations=3, verbose=False, return_intermediate_steps=True,
     )
     started = time.time()
-    result = executor.invoke({
-        "input": message,
-        "history": [(m.get("role"), m.get("content")) for m in history if m.get("content")],
-    })
+    tracker = UsageTracker()
+    result = executor.invoke(
+        {
+            "input": message,
+            "history": [(m.get("role"), m.get("content")) for m in history if m.get("content")],
+        },
+        config={"callbacks": [tracker]},
+    )
     elapsed_ms = int((time.time() - started) * 1000)
     steps = result.get("intermediate_steps", [])
     used = [step[0].tool for step in steps]
@@ -141,10 +173,13 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
                 continue
             seen.add(key)
             sources.append({"source": key[0], "heading": key[1]})
+    memory.append(conv_id, message, result.get("output", ""), tracker.usage)
     return {
         "code": 200,
         "reply": result.get("output", ""),
         "tools": used,
         "sources": sources,
         "elapsed_ms": elapsed_ms,
+        "conversation_id": conv_id,
+        "tokens": tracker.usage,
     }

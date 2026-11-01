@@ -23,4 +23,7 @@ public class AiChatRequest {
     /** 最近几轮对话（服务端只取最后 6 条，且过滤掉非 user/assistant） */
     @Size(max = 10, message = "history 最多 10 条")
     private List<ChatTurn> history;
+
+    /** Day 111：会话 id（为空 = 新会话） */
+    private Long conversationId;
 }

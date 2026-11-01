@@ -21,6 +21,8 @@ interface Msg {
   mock?: boolean
   sources?: Array<{ source: string; heading?: string }>
   elapsedMs?: number
+  conversationId?: number | null
+  tokens?: number
 }
 
 const auth = useAuthStore()
@@ -134,6 +136,7 @@ function onResize() {
   }
 }
 
+const conversationId = ref<number | null>(Number(localStorage.getItem('mallx_ai_conv')) || null)
 const messages = ref<Msg[]>([
   {
     role: 'assistant',
@@ -179,16 +182,22 @@ async function send(text?: string) {
       target.tools = meta.tools
       target.sources = meta.sources
       target.elapsedMs = meta.elapsedMs
+      if (meta.conversationId) {
+        conversationId.value = meta.conversationId
+        localStorage.setItem('mallx_ai_conv', String(meta.conversationId))
+      }
+      target.tokens = meta.tokens
     })
     if (!streamed) {
       messages.value.pop()
-      const r = await aiChat(content, history)
+      const r = await aiChat(content, history, conversationId.value)
       messages.value.push({
         role: 'assistant',
         content: r.data.reply,
         tools: r.data.tools,
         sources: r.data.sources,
         elapsedMs: r.data.elapsedMs,
+        tokens: r.data.tokens,
         mock: r.data.mode === 'mock',
       })
     }
@@ -213,7 +222,7 @@ async function streamChat(
   content: string,
   history: { role: string; content: string }[],
   onDelta: (t: string) => void,
-  onDone: (meta: { mock?: boolean; tools?: string[]; sources?: Msg['sources']; elapsedMs?: number }) => void,
+  onDone: (meta: { mock?: boolean; tools?: string[]; sources?: Msg['sources']; elapsedMs?: number; conversationId?: number | null; tokens?: number }) => void,
 ): Promise<boolean> {
   try {
     const res = await fetch('/api/ai/chat/stream', {
@@ -222,7 +231,7 @@ async function streamChat(
         'Content-Type': 'application/json',
         ...(auth.token ? { Authorization: `Bearer ${auth.token}` } : {}),
       },
-      body: JSON.stringify({ message: content, history }),
+      body: JSON.stringify({ message: content, history, conversationId: conversationId.value }),
     })
     if (!res.ok || !res.body) return false
     const reader = res.body.getReader()
@@ -242,7 +251,7 @@ async function streamChat(
           else if (line.startsWith('data:')) data += line.slice(5).trim()
         }
         if (!data) continue
-        const obj = JSON.parse(data) as { text?: string; mock?: boolean; tools?: string[]; sources?: Msg['sources']; elapsedMs?: number; message?: string }
+        const obj = JSON.parse(data) as { text?: string; mock?: boolean; tools?: string[]; sources?: Msg['sources']; elapsedMs?: number; conversationId?: number | null; tokens?: number; message?: string }
         if (event === 'delta' && obj.text) onDelta(obj.text)
         else if (event === 'done') onDone(obj)
         else if (event === 'error') throw new Error(obj.message || 'stream error')
@@ -312,6 +321,7 @@ onUnmounted(() => {
         <div v-else-if="m.tools && m.tools.length" class="meta">
           查了：{{ m.tools.join(' · ') }}
           <span v-if="m.elapsedMs"> · {{ m.elapsedMs }} ms</span>
+          <span v-if="m.tokens"> · {{ m.tokens }} tokens</span>
         </div>
         <div v-if="m.sources && m.sources.length" class="sources">
           <span v-for="(s, si) in m.sources" :key="si" class="source-chip">

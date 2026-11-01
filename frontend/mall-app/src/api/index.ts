@@ -207,8 +207,8 @@ export function myReviews(page = 1, size = 10) {
  * ★ 游客也能调（后端对该精确路径 POST 放行）；是否登录决定能不能查订单。
  * ★ history 由服务端再过滤一遍：只认 user/assistant，客户端塞 system 无效。
  */
-export function aiChat(message: string, history: AiChatTurn[] = []) {
-  return http.post<never, Result<AiChatReply>>('/ai/chat', { message, history })
+export function aiChat(message: string, history: AiChatTurn[] = [], conversationId?: number | null) {
+  return http.post<never, Result<AiChatReply>>('/ai/chat', { message, history, conversationId })
 }
 
 // ===================== FE2：订单 =====================
