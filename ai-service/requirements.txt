@@ -4,3 +4,4 @@ langchain==0.3.25
 langchain-openai==0.3.7
 httpx==0.28.1
 psycopg2-binary==2.9.10
+python-dotenv==1.0.1

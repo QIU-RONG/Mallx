@@ -74,7 +74,10 @@ public class AiChatServiceImpl implements AiChatService {
     @Override
     public AiChatReply chat(Long userId, AiChatRequest request) {
         String message = request.getMessage() == null ? "" : request.getMessage().trim();
-        if (props.getApiKey() == null || props.getApiKey().isBlank()) {
+        boolean hasKey = props.getApiKey() != null && !props.getApiKey().isBlank();
+        boolean hasService = props.getServiceUrl() != null && !props.getServiceUrl().isBlank();
+        // Day 112：配了 Python 服务就不要求 Java 侧也有 key（key 只在 .env 里）
+        if (!hasKey && !hasService) {
             return mock(userId, message);
         }
         try {

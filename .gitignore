@@ -67,3 +67,4 @@ replay_pid*.log
 
 # Python AI 服务虚拟环境
 /ai-service/.venv/
+/ai-service/.env

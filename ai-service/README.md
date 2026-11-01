@@ -34,3 +34,9 @@ Java 侧设置 `AI_SERVICE_URL=http://127.0.0.1:8008` 后，`/api/ai/chat` 会�
 - 模型不可用（无 key）时 `/chat` 返回 503，Java 侧按调用失败处理并给出兜底文案；
 - 迭代上限 3 轮（`max_iterations`），与 Java 版 `max-tool-rounds` 同口径；
 - 依赖版本锁定在 `requirements.txt`。
+
+## API Key 放哪里
+
+复制 `ai-service/.env.example` 为 `ai-service/.env`，把真实 key 填进 `OPENAI_API_KEY`。
+`.env` 已被 `.gitignore` 排除，不要提交；服务启动时会自动加载（python-dotenv）。
+Java 侧只需配置 `AI_SERVICE_URL`，不再需要 `AI_API_KEY`。

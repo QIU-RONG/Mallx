@@ -13,7 +13,11 @@ import time
 from typing import List, Optional
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Header, Query
+
+# ★ 本地密钥放 ai-service/.env（已被 .gitignore 排除），不要提交到仓库
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
