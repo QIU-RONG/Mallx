@@ -11,11 +11,13 @@ import os
 from typing import List, Optional
 
 import httpx
-from fastapi import FastAPI, Header
+from fastapi import FastAPI, Header, Query
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
+
+from kb_lib import store
 
 app = FastAPI(title="MallX AI Service", version="1.0.0")
 
@@ -25,12 +27,23 @@ BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 SYSTEM_PROMPT = """你是 MallX 商城的在线客服「小 M」。
+回答政策/规则类问题时，先调用 search_knowledge_base 检索知识库，并在回答末尾标注来源，格式：【来源：文件名 · 小节】。
 只回答商品咨询、订单状态、售后进度；不编造订单号/金额/物流，不承诺未发生的事。
 涉及用户数据时必须调用工具，禁止根据提问内容猜测。"""
 
 
 def _build_tools(token: Optional[str]):
     headers = {"Authorization": f"Bearer {token}"} if token else {}
+
+    @tool
+    def search_knowledge_base(query: str) -> str:
+        """检索 MallX 的规则与政策知识库（运费、退换货、支付、优惠券、账号等）。"""
+        rows = store.search(query, k=4)
+        if not rows:
+            return "知识库没有相关内容，请转人工或让用户查看订单详情"
+        return "\n\n".join(
+            f"【来源：{r['source']} · {r['heading']}】\n{r['content']}" for r in rows
+        )
 
     @tool
     def search_products(keyword: str) -> str:
@@ -70,12 +83,22 @@ def _build_tools(token: Optional[str]):
             return "当前没有售后记录"
         return "\n".join(f"售后 #{x.get('id')}：{x.get('status')}，订单 {x.get('orderNo')}" for x in rows)
 
-    return [search_products, my_orders, my_refunds]
+    return [search_knowledge_base, search_products, my_orders, my_refunds]
 
 
 @app.get("/health")
 def health():
     return {"status": "UP", "model": MODEL, "baseUrl": BASE_URL, "configured": bool(API_KEY)}
+
+
+@app.get("/kb/search")
+def kb_search(q: str = Query(..., min_length=1), k: int = 4):
+    return {"code": 200, "query": q, "chunks": store.search(q, k=k)}
+
+
+@app.get("/kb/stats")
+def kb_stats():
+    return {"code": 200, **store.stats()}
 
 
 @app.post("/chat")

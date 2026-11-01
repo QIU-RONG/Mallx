@@ -1,0 +1,188 @@
+{
+  "cases": 15,
+  "hit@1": "14/15",
+  "hit@4": "15/15",
+  "hit@4_rate": 1.0,
+  "details": [
+    {
+      "q": "满多少免运费",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 6,
+        "source": "02-shipping.md",
+        "heading": "运费规则",
+        "content": "单笔订单满 99 元免运费，不满 99 元收取 8 元运费；拆单后按每个子订单分别计算。",
+        "score": 0.1718
+      }
+    },
+    {
+      "q": "怎么申请七天无理由退货",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 9,
+        "source": "03-returns.md",
+        "heading": "七天无理由",
+        "content": "自签收次日起 7 天内，商品完好、配件齐全、不影响二次销售，可申请七天无理由退货；定制类、拆封后的食品和贴身用品不支持。",
+        "score": 0.3239
+      }
+    },
+    {
+      "q": "退款多久到账",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 11,
+        "source": "03-returns.md",
+        "heading": "退款时效",
+        "content": "审核通过后，退款原路返回：余额即时到账，银行卡/第三方支付一般 1-3 个工作日。",
+        "score": 0.1451
+      }
+    },
+    {
+      "q": "多店铺的商品怎么发货",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 3,
+        "source": "01-products.md",
+        "heading": "店铺与发货",
+        "content": "MallX 有平台自营店和入驻店铺。同一订单里如果包含多个店铺的商品，系统会拆成多个订单分别发货，但可以合并支付。",
+        "score": 0.25
+      }
+    },
+    {
+      "q": "优惠券过期还能用吗",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 14,
+        "source": "04-payment-coupon.md",
+        "heading": "优惠券规则",
+        "content": "优惠券有使用门槛（满 X 元可用）和有效期；过期或已使用的券不能再次使用。拆单订单暂不支持使用优惠券。",
+        "score": 0.2144
+      }
+    },
+    {
+      "q": "发票怎么开",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 15,
+        "source": "04-payment-coupon.md",
+        "heading": "发票",
+        "content": "目前支持电子普通发票，下单后可在订单详情申请；发票抬头和税号在申请时填写。",
+        "score": 0.1622
+      }
+    },
+    {
+      "q": "待支付订单可以取消吗",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 16,
+        "source": "04-payment-coupon.md",
+        "heading": "订单取消",
+        "content": "待支付订单可以直接取消，库存会释放；已支付订单需要走售后流程。",
+        "score": 0.5556
+      }
+    },
+    {
+      "q": "库存为零还能买吗",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 2,
+        "source": "01-products.md",
+        "heading": "库存说明",
+        "content": "商品详情页会显示所选规格的库存。库存为 0 时无法加入购物车，可以联系客服到货提醒。",
+        "score": 0.1729
+      }
+    },
+    {
+      "q": "售后类型有哪些",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 10,
+        "source": "03-returns.md",
+        "heading": "售后流程",
+        "content": "个人中心 → 我的订单 → 申请售后，选择售后类型（仅退款 / 退货退款），填写原因并提交。商家或平台审核通过后，按提示寄回或等待退款。",
+        "score": 0.1792
+      }
+    },
+    {
+      "q": "手机号验证码多久有效",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 17,
+        "source": "05-account.md",
+        "heading": "登录与注册",
+        "content": "支持用户名密码登录和手机号验证码登录。验证码 5 分钟内有效，同一手机号 60 秒内只能发送一次。",
+        "score": 0.4303
+      }
+    },
+    {
+      "q": "拆单后运费怎么算",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 6,
+        "source": "02-shipping.md",
+        "heading": "运费规则",
+        "content": "单笔订单满 99 元免运费，不满 99 元收取 8 元运费；拆单后按每个子订单分别计算。",
+        "score": 0.242
+      }
+    },
+    {
+      "q": "评价可以传图片吗",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 20,
+        "source": "05-account.md",
+        "heading": "评价",
+        "content": "确认收货后可以对商品评分、写评价并上传最多 3 张图片；评价可以在商品页按「有图 / 星级」筛选。",
+        "score": 0.3145
+      }
+    },
+    {
+      "q": "怎么查物流",
+      "hit@1": false,
+      "hit@4": true,
+      "top": {
+        "id": 17,
+        "source": "05-account.md",
+        "heading": "登录与注册",
+        "content": "支持用户名密码登录和手机号验证码登录。验证码 5 分钟内有效，同一手机号 60 秒内只能发送一次。",
+        "score": 0.1291
+      }
+    },
+    {
+      "q": "质量问题退货运费谁出",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 12,
+        "source": "03-returns.md",
+        "heading": "运费承担",
+        "content": "质量问题由商家承担退回运费；七天无理由退回运费由买家承担。",
+        "score": 0.1826
+      }
+    },
+    {
+      "q": "合并支付怎么操作",
+      "hit@1": true,
+      "hit@4": true,
+      "top": {
+        "id": 13,
+        "source": "04-payment-coupon.md",
+        "heading": "支付方式",
+        "content": "支持余额支付和模拟第三方支付。跨店拆单后会在结算页自动合并支付，一次完成多个订单的付款。",
+        "score": 0.2817
+      }
+    }
+  ]
+}
