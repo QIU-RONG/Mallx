@@ -5,7 +5,7 @@ DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'vector') THEN
         CREATE EXTENSION IF NOT EXISTS vector;
-        ALTER TABLE ai_kb_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(384);
+        ALTER TABLE ai_kb_chunks ADD COLUMN IF NOT EXISTS embedding_vec vector(512);
         CREATE INDEX IF NOT EXISTS idx_ai_kb_vec ON ai_kb_chunks
             USING ivfflat (embedding_vec vector_cosine_ops) WITH (lists = 10);
         RAISE NOTICE '[29] pgvector enabled';
