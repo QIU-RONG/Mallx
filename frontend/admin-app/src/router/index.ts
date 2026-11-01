@@ -29,6 +29,7 @@ const router = createRouter({
         { path: 'roles', component: () => import('../views/RoleList.vue') },
         { path: 'audit-logs', component: () => import('../views/AuditLogList.vue') },
         { path: 'ai-ops', component: () => import('../views/AiOps.vue') },
+        { path: 'ai-kb', component: () => import('../views/AiKb.vue') },
       ],
     },
   ],

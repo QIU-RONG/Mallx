@@ -382,3 +382,28 @@ export function adminAiStats() {
     refusalRate: number
   }>>('/admin/ai/stats')
 }
+
+/** AI 知识库（Day 120） */
+export function adminKbDocs() {
+  return http.get<never, Result<{ code: number; items: Array<{ source: string; chunks: number; indexedAt: string }> }>>(
+    '/admin/ai/kb/docs',
+  )
+}
+
+export function adminKbChunks(source: string) {
+  return http.get<never, Result<{ code: number; items: Array<{ id: number; heading: string; content: string }> }>>(
+    '/admin/ai/kb/chunks',
+    { params: { source } },
+  )
+}
+
+export function adminKbRebuild() {
+  return http.post<never, Result<{ code: number; files: number; chunks: number }>>('/admin/ai/kb/rebuild')
+}
+
+export function adminKbUpload(name: string, content: string) {
+  return http.post<never, Result<{ code: number; saved: string; files: number; chunks: number }>>(
+    '/admin/ai/kb/upload',
+    { name, content },
+  )
+}

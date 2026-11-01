@@ -153,3 +153,32 @@ def fingerprint() -> str:
     for r in rows:
         h.update((r["content"] or "").encode("utf-8"))
     return h.hexdigest()[:12]
+
+
+def documents() -> list[dict]:
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT source, count(*), min(created_at)
+              FROM ai_kb_chunks GROUP BY source ORDER BY source
+        """)
+        return [{"source": r[0], "chunks": r[1], "indexedAt": r[2].isoformat(sep=' ', timespec='seconds')}
+                for r in cur.fetchall()]
+
+
+def chunks_of(source: str) -> list[dict]:
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT id, heading, content FROM ai_kb_chunks WHERE source = %s ORDER BY id", (source,))
+        return [{"id": r[0], "heading": r[1], "content": r[2]} for r in cur.fetchall()]
+
+
+def save_document(name: str, content: str) -> str:
+    """上传/覆盖一篇知识文档（只允许 .md，文件名做白名单）。"""
+    import re
+    safe = re.sub(r"[^0-9A-Za-z_.\-\u4e00-\u9fa5]", "_", name)
+    if not safe.endswith(".md"):
+        safe += ".md"
+    base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "kb")
+    os.makedirs(base, exist_ok=True)
+    with open(os.path.join(base, safe), "w", encoding="utf-8") as f:
+        f.write(content)
+    return safe

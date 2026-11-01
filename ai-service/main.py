@@ -169,6 +169,36 @@ def ai_stats():
             "refusals": refusals, "refusalRate": round(refusals / calls, 3) if calls else 0}
 
 
+@app.get("/kb/docs")
+def kb_docs():
+    return {"code": 200, "items": store.documents()}
+
+
+@app.get("/kb/chunks")
+def kb_chunks(source: str = Query(..., min_length=1)):
+    return {"code": 200, "items": store.chunks_of(source)}
+
+
+@app.post("/kb/rebuild")
+def kb_rebuild():
+    import os as _os
+    base = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "kb")
+    return {"code": 200, **store.ingest_dir(base)}
+
+
+@app.post("/kb/upload")
+def kb_upload(body: dict):
+    name = (body.get("name") or "").strip()
+    content = body.get("content") or ""
+    if not name or not content.strip():
+        return {"code": 400, "message": "文件名和内容不能为空"}
+    saved = store.save_document(name, content)
+    import os as _os
+    base = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "kb")
+    stats = store.ingest_dir(base)
+    return {"code": 200, "saved": saved, **stats}
+
+
 @app.get("/kb/stats")
 def kb_stats():
     return {"code": 200, **store.stats(), **memory.stats()}

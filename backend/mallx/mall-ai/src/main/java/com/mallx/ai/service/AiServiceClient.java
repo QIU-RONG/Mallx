@@ -85,8 +85,28 @@ public class AiServiceClient {
 
     /** Day 119：GET 转发（会话列表 / 消息） */
     public java.util.Map<String, Object> get(String path, Long userId) throws Exception {
-        String url = props.getServiceUrl().replaceAll("/$", "") + path + "?user_id=" + (userId == null ? 0 : userId);
+        String sep = path.contains("?") ? "&" : "?";
+        String url = props.getServiceUrl().replaceAll("/$", "") + path + sep + "user_id=" + (userId == null ? 0 : userId);
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url)).timeout(Duration.ofSeconds(10)).GET();
+        String auth = currentAuthorization();
+        if (auth != null) {
+            b.header("Authorization", auth);
+        }
+        HttpResponse<String> resp = http.send(b.build(), HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) {
+            throw new IllegalStateException("AI 服务返回 " + resp.statusCode());
+        }
+        return om.convertValue(om.readTree(resp.body()),
+                new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>() {});
+    }
+
+    /** Day 120：POST 转发（知识库重建/上传） */
+    public java.util.Map<String, Object> post(String path, java.util.Map<String, Object> body, Long userId) throws Exception {
+        String url = props.getServiceUrl().replaceAll("/$", "") + path;
+        HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(30))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(om.writeValueAsString(body)));
         String auth = currentAuthorization();
         if (auth != null) {
             b.header("Authorization", auth);
