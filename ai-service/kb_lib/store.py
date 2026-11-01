@@ -119,7 +119,7 @@ def _lexical(query: str, text: str) -> float:
     return len(qg & tg) / len(qg)
 
 
-def search(query: str, k: int = 4, min_score: float = 0.05) -> list[dict]:
+def search(query: str, k: int = 4, min_score: float = 0.02) -> list[dict]:
     rows = _load_rows()
     if not rows:
         return []
