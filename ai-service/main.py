@@ -127,7 +127,9 @@ def _build_tools(token: Optional[str]):
 
 @app.get("/health")
 def health():
-    return {"status": "UP", "model": MODEL, "baseUrl": BASE_URL, "configured": bool(API_KEY)}
+    from kb_lib import embed as _embed
+    return {"status": "UP", "model": MODEL, "baseUrl": BASE_URL, "configured": bool(API_KEY),
+            "embeddingMode": _embed.mode()}
 
 
 @app.get("/kb/search")

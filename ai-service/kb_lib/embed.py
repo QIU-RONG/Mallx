@@ -12,7 +12,7 @@ import httpx
 DIM = 384
 API_KEY = os.getenv("EMBEDDING_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
 EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
-BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
+BASE_URL = os.getenv("EMBEDDING_BASE_URL") or os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 
 
 def _hash_embed(text: str) -> list[float]:
@@ -25,6 +25,10 @@ def _hash_embed(text: str) -> list[float]:
         vec[idx] += sign
     norm = math.sqrt(sum(v * v for v in vec)) or 1.0
     return [v / norm for v in vec]
+
+
+def mode() -> str:
+    return "remote" if API_KEY else "hash"
 
 
 def embed(texts: list[str]) -> list[list[float]]:
