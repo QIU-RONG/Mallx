@@ -1,0 +1,64 @@
+name: AI Eval
+
+# 只跑不依赖大模型的检索评测：入库 → 50 题 hit@1/hit@4。
+on:
+  push:
+    paths:
+      - "ai-service/**"
+      - "backend/sql/**"
+      - ".github/workflows/ai-eval.yml"
+  workflow_dispatch:
+
+jobs:
+  retrieval:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mallx
+          POSTGRES_USER: mallx
+          POSTGRES_PASSWORD: mallx123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mallx -d mallx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_NAME: mallx
+      DB_USERNAME: mallx
+      DB_PASSWORD: mallx123
+      PGPASSWORD: mallx123
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply SQL migrations
+        run: |
+          for f in $(ls backend/sql/*.sql | sort); do
+            echo "== $f"
+            psql -h 127.0.0.1 -U mallx -d mallx -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+
+      - name: Install eval deps
+        run: pip install psycopg2-binary httpx
+
+      - name: Ingest knowledge base
+        working-directory: ai-service
+        run: python kb_ingest.py
+
+      - name: Retrieval eval (50 cases)
+        working-directory: ai-service
+        run: python eval/eval_retrieval.py
