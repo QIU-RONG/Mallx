@@ -174,7 +174,7 @@ export interface AiChatReply {
   /** 本轮执行过的工具名 */
   tools: string[]
   /** Day 110：知识库引用来源与耗时 */
-  sources?: Array<{ source: string; heading?: string }>
+  sources?: Array<{ source: string; heading?: string; snippet?: string }>
   elapsedMs?: number
   /** Day 111：会话 id 与 token 用量 */
   conversationId?: number | null

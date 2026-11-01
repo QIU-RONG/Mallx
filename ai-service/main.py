@@ -234,6 +234,12 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
                 continue
             seen.add(key)
             sources.append({"source": key[0], "heading": key[1]})
+    # Day 118：给来源补一句可展示的原文片段
+    if sources:
+        rows_by_key = {(r["source"], r["heading"]): r["content"] for r in store.search(message, k=20)}
+        for s in sources:
+            s["snippet"] = rows_by_key.get((s["source"], s["heading"]), "")[:120]
+
     reply_text = result.get("output", "")
     # Day 114：引用必须来自本轮检索结果；政策类问题没检索到可靠依据时拒答
     retrieved = {(s["source"], s["heading"]) for s in sources}

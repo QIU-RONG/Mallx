@@ -19,7 +19,7 @@ interface Msg {
   content: string
   tools?: string[]
   mock?: boolean
-  sources?: Array<{ source: string; heading?: string }>
+  sources?: Array<{ source: string; heading?: string; snippet?: string }>
   elapsedMs?: number
   conversationId?: number | null
   tokens?: number
@@ -263,6 +263,12 @@ async function streamChat(
   }
 }
 
+function clearChat() {
+  messages.value = [{ role: 'assistant', content: '你好，我是 MallX 客服小 M。想了解商品、订单还是售后？' }]
+  conversationId.value = null
+  localStorage.removeItem('mallx_ai_conv')
+}
+
 function toggle() {
   open.value = !open.value
   if (open.value) scrollToBottom()
@@ -311,7 +317,10 @@ onUnmounted(() => {
         <div class="title">小 M</div>
         <div class="subtitle">AI 客服 · 售前导购 / 售后查询</div>
       </div>
-      <span class="dot" />
+      <div class="head-actions">
+        <button class="clear-btn" type="button" @click="clearChat">清空</button>
+        <span class="dot" />
+      </div>
     </header>
 
     <div ref="listRef" class="msgs">
@@ -325,7 +334,22 @@ onUnmounted(() => {
         </div>
         <div v-if="m.sources && m.sources.length" class="sources">
           <span v-for="(s, si) in m.sources" :key="si" class="source-chip">
-            {{ s.source }}<template v-if="s.heading"> · {{ s.heading }}</template>
+            <el-popover
+              v-if="s.snippet"
+              placement="top"
+              :width="280"
+              trigger="click"
+              :content="s.snippet"
+            >
+              <template #reference>
+                <button type="button" class="source-chip source-chip--clickable">
+                  {{ s.source }}<template v-if="s.heading"> · {{ s.heading }}</template>
+                </button>
+              </template>
+            </el-popover>
+            <span v-else class="source-chip">
+              {{ s.source }}<template v-if="s.heading"> · {{ s.heading }}</template>
+            </span>
           </span>
         </div>
       </div>
@@ -360,6 +384,24 @@ onUnmounted(() => {
   gap: 6px;
   margin-top: 6px;
 }
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.clear-btn {
+  border: 1px solid var(--mx-line);
+  background: transparent;
+  color: var(--mx-ink-2);
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+.clear-btn:hover {
+  color: var(--mx-accent);
+  border-color: var(--mx-accent);
+}
 .source-chip {
   font-size: 11px;
   color: var(--mx-ink-3);
@@ -367,6 +409,13 @@ onUnmounted(() => {
   border-radius: 999px;
   padding: 1px 8px;
   background: var(--mx-line-soft);
+}
+.source-chip--clickable {
+  cursor: pointer;
+}
+.source-chip--clickable:hover {
+  border-color: var(--mx-accent);
+  color: var(--mx-accent);
 }
 
 .fab {

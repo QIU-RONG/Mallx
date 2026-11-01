@@ -74,7 +74,8 @@ public class AiServiceClient {
         json.path("tools").forEach(n -> tools.add(n.asText()));
         List<com.mallx.ai.vo.AiSource> sources = new ArrayList<>();
         json.path("sources").forEach(n -> sources.add(new com.mallx.ai.vo.AiSource(
-                n.path("source").asText(""), n.path("heading").asText(""))));
+                n.path("source").asText(""), n.path("heading").asText(""),
+                n.path("snippet").asText(""))));
         long conv = json.path("conversation_id").asLong(0);
         int tokens = json.path("tokens").path("prompt_tokens").asInt(0)
                 + json.path("tokens").path("completion_tokens").asInt(0);

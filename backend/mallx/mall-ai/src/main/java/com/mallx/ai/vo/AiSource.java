@@ -11,4 +11,6 @@ public class AiSource {
     private String source;
 
     private String heading;
+
+    private String snippet;
 }
