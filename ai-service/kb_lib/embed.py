@@ -47,7 +47,8 @@ def _local(texts: list[str]) -> list[list[float]]:
     global _LOCAL_MODEL
     if _LOCAL_MODEL is None:
         from fastembed import TextEmbedding
-        _LOCAL_MODEL = TextEmbedding(model_name=LOCAL_MODEL_NAME)
+        threads = int(os.getenv("EMBEDDING_THREADS", "1"))
+        _LOCAL_MODEL = TextEmbedding(model_name=LOCAL_MODEL_NAME, threads=threads)
     return [[float(x) for x in v] for v in _LOCAL_MODEL.embed(texts)]
 
 

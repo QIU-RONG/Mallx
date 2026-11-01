@@ -25,6 +25,19 @@ _CACHE = {"at": 0.0, "rows": []}
 _CACHE_TTL = 30
 
 
+def _pgvector_ready() -> bool:
+    try:
+        with _conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            if not cur.fetchone():
+                return False
+            cur.execute("SELECT 1 FROM information_schema.columns "
+                        "WHERE table_name='ai_kb_chunks' AND column_name='embedding_vec'")
+            return cur.fetchone() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _conn():
     return psycopg2.connect(**DB)
 
@@ -76,15 +89,25 @@ def ingest_dir(path: str) -> dict:
             if not chunks:
                 continue
             vectors = embedder.embed([c["content"] for c in chunks])
+            use_vec = _pgvector_ready()
             rows = [
-                (c["source"], c["heading"], c["content"], v)
+                (c["source"], c["heading"], c["content"], v,
+                 str([float(x) for x in v]) if use_vec and len(v) == 512 else None)
                 for c, v in zip(chunks, vectors)
             ]
-            psycopg2.extras.execute_batch(
-                cur,
-                "INSERT INTO ai_kb_chunks (source, heading, content, embedding) VALUES (%s, %s, %s, %s)",
-                rows,
-            )
+            if use_vec:
+                psycopg2.extras.execute_batch(
+                    cur,
+                    "INSERT INTO ai_kb_chunks (source, heading, content, embedding, embedding_vec)"
+                    " VALUES (%s, %s, %s, %s, %s::vector)",
+                    rows,
+                )
+            else:
+                psycopg2.extras.execute_batch(
+                    cur,
+                    "INSERT INTO ai_kb_chunks (source, heading, content, embedding) VALUES (%s, %s, %s, %s)",
+                    [r[:4] for r in rows],
+                )
             total += len(rows)
     _CACHE["at"] = 0.0
     return {"files": len(files), "chunks": total}
@@ -120,10 +143,26 @@ def _lexical(query: str, text: str) -> float:
 
 
 def search(query: str, k: int = 4, min_score: float = 0.02) -> list[dict]:
-    rows = _load_rows()
+    qv = embedder.embed([query])[0]
+    rows = None
+    if len(qv) == 512 and _pgvector_ready():
+        try:
+            with _conn() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id, source, heading, content, embedding FROM ai_kb_chunks "
+                    "WHERE embedding_vec IS NOT NULL ORDER BY embedding_vec <=> %s::vector LIMIT %s",
+                    (str([float(x) for x in qv]), max(k * 5, 20)),
+                )
+                rows = [
+                    {"id": r[0], "source": r[1], "heading": r[2], "content": r[3], "embedding": r[4]}
+                    for r in cur.fetchall()
+                ]
+        except Exception:  # noqa: BLE001
+            rows = None
+    if rows is None:
+        rows = _load_rows()
     if not rows:
         return []
-    qv = embedder.embed([query])[0]
     scored = []
     for r in rows:
         # 混合打分：向量相似度 + 字面 bigram 重叠（对「满多少免运费」这类精确词更稳）
