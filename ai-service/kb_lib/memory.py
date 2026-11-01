@@ -21,9 +21,17 @@ def _conn():
 
 
 def ensure_conversation(user_id: int | None, conversation_id: int | None) -> int:
+    """★ 越权防护：只复用「属于当前用户」的会话；别人的 id 一律新开会话。
+
+    匿名用户（user_id 为空或 0）不复用任何历史会话，避免猜 id 读到别人的上下文。
+    """
+    uid = user_id or 0
     with _conn() as conn, conn.cursor() as cur:
-        if conversation_id:
-            cur.execute("SELECT id FROM ai_conversations WHERE id = %s", (conversation_id,))
+        if conversation_id and uid:
+            cur.execute(
+                "SELECT id FROM ai_conversations WHERE id = %s AND user_id = %s",
+                (conversation_id, uid),
+            )
             row = cur.fetchone()
             if row:
                 return row[0]
