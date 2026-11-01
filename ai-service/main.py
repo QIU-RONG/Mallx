@@ -42,7 +42,16 @@ class UsageTracker(BaseCallbackHandler):
     def on_llm_end(self, response, **kwargs):
         for generations in response.generations:
             for gen in generations:
-                meta = getattr(getattr(gen, "message", None), "response_metadata", {}) or {}
+                message = getattr(gen, "message", None)
+                # 1.x 流式：usage_metadata（input_tokens/output_tokens）
+                usage_meta = getattr(message, "usage_metadata", None) or {}
+                if usage_meta:
+                    self.usage = {
+                        "prompt_tokens": usage_meta.get("input_tokens"),
+                        "completion_tokens": usage_meta.get("output_tokens"),
+                    }
+                    continue
+                meta = getattr(message, "response_metadata", {}) or {}
                 usage = meta.get("token_usage") or meta.get("usage")
                 if usage:
                     self.usage = {
@@ -52,7 +61,9 @@ class UsageTracker(BaseCallbackHandler):
 
 
 SYSTEM_PROMPT = """你是 MallX 商城的在线客服「小 M」。
-回答政策/规则类问题时，先调用 search_knowledge_base 检索知识库，并在回答末尾标注来源，格式：【来源：文件名 · 小节】。
+回答政策/规则类问题时，必须先调用 search_knowledge_base 检索知识库。
+检索结果里如果已有答案，直接按原文回答，不要声称"没有检索到"；回答末尾必须标注来源，格式：【来源：文件名 · 小节】。
+只有检索结果确实为空时，才说没有查到并建议转人工。
 只回答商品咨询、订单状态、售后进度；不编造订单号/金额/物流，不承诺未发生的事。
 涉及用户数据时必须调用工具，禁止根据提问内容猜测。"""
 
@@ -177,12 +188,37 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
                 continue
             seen.add(key)
             sources.append({"source": key[0], "heading": key[1]})
-    memory.append(conv_id, message, result.get("output", ""), tracker.usage)
+    reply_text = result.get("output", "")
+    # Day 114：引用必须来自本轮检索结果；政策类问题没检索到可靠依据时拒答
+    retrieved = {(s["source"], s["heading"]) for s in sources}
+    cited_pairs = [(m.group(1).strip(), (m.group(2) or "").strip())
+                   for m in re.finditer(r"【来源：([^·】]+)(?: · ([^】]+))?】", reply_text)]
+    invalid_refs = [p for p in cited_pairs if p not in retrieved]
+    refusal = False
+    policy_words = ("运费", "退款", "退货", "售后", "优惠券", "发票", "发货", "支付", "拆单", "取消订单")
+    is_policy = any(w in message for w in policy_words)
+    has_citation = bool(cited_pairs)
+    if invalid_refs or (is_policy and not sources):
+        reply_text = "抱歉，这个问题我暂时没找到可靠的知识库依据。你可以换个说法，或到「个人中心」查看订单详情，必要时转人工客服。"
+        sources = []
+        refusal = True
+    elif not sources and any(w in reply_text for w in ("抱歉", "不在我的服务范围", "无法回答", "只能帮")):
+        refusal = True
+    elif is_policy and sources and not has_citation:
+        # 模型没给引用：用它检索到的第一条原文兜底，保证"有依据"而不是自由发挥
+        rows = store.search(message, k=1)
+        if rows:
+            top = rows[0]
+            reply_text = f"根据知识库：\n{top['content']}\n【来源：{top['source']} · {top['heading']}】"
+        refusal = False
+    memory.append(conv_id, message, reply_text, tracker.usage)
     return {
         "code": 200,
-        "reply": result.get("output", ""),
+        "reply": reply_text,
         "tools": used,
         "sources": sources,
+        "grounded": bool(sources) and not invalid_refs and not refusal,
+        "refusal": refusal,
         "elapsed_ms": elapsed_ms,
         "conversation_id": conv_id,
         "tokens": tracker.usage,

@@ -30,6 +30,9 @@ QUESTIONS = [
     "订单超时未支付会怎样",
 ]
 
+# 知识库覆盖不到的问题：期望拒答（refusal=true 或没有任何引用）
+OUT_OF_SCOPE = ["今天美元汇率是多少", "今天天气怎么样"]
+
 
 def post_chat(base: str, question: str) -> dict:
     req = urllib.request.Request(
@@ -51,7 +54,7 @@ def main() -> int:
     known = {(r["source"], r["heading"]) for r in rows}
     known_sources = {r["source"] for r in store._load_rows()}
 
-    details, cited, bad_ref, no_cite = [], 0, 0, 0
+    details, cited, bad_ref, no_cite, refused = [], 0, 0, 0, 0
     for q in QUESTIONS:
         j = post_chat(args.base, q)
         reply = j.get("reply", "")
@@ -71,7 +74,17 @@ def main() -> int:
             "sources": j.get("sources") or [],
         })
 
-    total = len(QUESTIONS)
+    for q in OUT_OF_SCOPE:
+        j = post_chat(args.base, q)
+        reply = j.get("reply", "")
+        refs = re.findall(r"【来源：", reply)
+        ok = bool(j.get("refusal")) and not refs
+        details.append({"q": q, "reply": reply, "refs": [], "refs_valid": True,
+                        "refusal": bool(j.get("refusal")), "expected_refusal": True, "ok": ok})
+        if ok:
+            refused += 1
+
+    total = len(QUESTIONS) + len(OUT_OF_SCOPE)
     report = {
         "base": args.base,
         "cases": total,
@@ -79,6 +92,8 @@ def main() -> int:
         "no_citation": no_cite,
         "invalid_refs": bad_ref,
         "citation_rate": round(cited / total, 3),
+        "out_of_scope": len(OUT_OF_SCOPE),
+        "refusal_correct": f"{refused}/{len(OUT_OF_SCOPE)}",
         "details": details,
     }
     out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval-answers-report.json")

@@ -111,6 +111,14 @@ def _cos(a, b) -> float:
     return dot / (na * nb)
 
 
+def _lexical(query: str, text: str) -> float:
+    qg = {query[i:i + 2] for i in range(max(1, len(query) - 1))}
+    tg = {text[i:i + 2] for i in range(max(1, len(text) - 1))}
+    if not qg:
+        return 0.0
+    return len(qg & tg) / len(qg)
+
+
 def search(query: str, k: int = 4, min_score: float = 0.05) -> list[dict]:
     rows = _load_rows()
     if not rows:
@@ -118,7 +126,8 @@ def search(query: str, k: int = 4, min_score: float = 0.05) -> list[dict]:
     qv = embedder.embed([query])[0]
     scored = []
     for r in rows:
-        score = _cos(qv, list(r["embedding"]))
+        # 混合打分：向量相似度 + 字面 bigram 重叠（对「满多少免运费」这类精确词更稳）
+        score = 0.65 * _cos(qv, list(r["embedding"])) + 0.35 * _lexical(query, r["content"] + " " + (r["heading"] or ""))
         if score >= min_score:
             scored.append({
                 "id": r["id"],
