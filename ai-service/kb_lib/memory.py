@@ -77,3 +77,30 @@ def stats() -> dict:
         cur.execute("SELECT count(*), coalesce(sum(prompt_tokens),0), coalesce(sum(completion_tokens),0) FROM ai_messages")
         msgs, pt, ct = cur.fetchone()
     return {"conversations": convs, "messages": msgs, "promptTokens": pt, "completionTokens": ct}
+
+def list_conversations(user_id: int | None, limit: int = 20) -> list[dict]:
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT c.id, c.updated_at,
+                   (SELECT content FROM ai_messages m WHERE m.conversation_id = c.id AND m.role='user' ORDER BY m.id LIMIT 1) AS title,
+                   (SELECT count(*) FROM ai_messages m WHERE m.conversation_id = c.id) AS msg_count
+              FROM ai_conversations c
+             WHERE c.user_id = %s
+             ORDER BY c.updated_at DESC
+             LIMIT %s
+        """, (user_id or 0, limit))
+        rows = cur.fetchall()
+    return [{"id": r[0], "updatedAt": r[1].isoformat(sep=' ', timespec='seconds'),
+             "title": (r[2] or "新会话")[:40], "messageCount": r[3]} for r in rows]
+
+
+def get_messages(user_id: int | None, conversation_id: int) -> list[dict] | None:
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute("SELECT user_id FROM ai_conversations WHERE id = %s", (conversation_id,))
+        row = cur.fetchone()
+        if not row or row[0] != (user_id or 0):
+            return None
+        cur.execute("SELECT role, content, created_at FROM ai_messages WHERE conversation_id = %s ORDER BY id",
+                    (conversation_id,))
+        return [{"role": r[0], "content": r[1], "createdAt": r[2].isoformat(sep=' ', timespec='seconds')}
+                for r in cur.fetchall()]

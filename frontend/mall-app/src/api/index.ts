@@ -301,3 +301,16 @@ export function refundCancel(id: number) {
 export function refundShip(id: number, trackingNo: string) {
   return http.post<never, Result<void>>(`/refunds/${id}/ship`, { trackingNo })
 }
+
+/** AI 历史会话（Day 119） */
+export function aiConversations() {
+  return http.get<never, Result<{ code: number; items: Array<{ id: number; title: string; updatedAt: string; messageCount: number }> }>>(
+    '/ai/conversations',
+  )
+}
+
+export function aiConversationMessages(id: number | string) {
+  return http.get<never, Result<{ code: number; items: Array<{ role: string; content: string; createdAt: string }> }>>(
+    `/ai/conversations/${id}/messages`,
+  )
+}

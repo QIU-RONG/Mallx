@@ -56,7 +56,7 @@ class AiChatServiceImplTest {
     void setUp() {
         props = new AiProperties();
         props.setApiKey(""); // 默认 mock 模式
-        service = new AiChatServiceImpl(props, tools, llm);
+        service = new AiChatServiceImpl(props, tools, llm, null, null);
     }
 
     private static AiChatRequest req(String message) {
@@ -118,7 +118,7 @@ class AiChatServiceImplTest {
     @DisplayName("★★ 真实模型路径：history 里的 system 角色必须被丢弃（防提示注入）")
     void historyCannotInjectSystem() throws Exception {
         props.setApiKey("test-key");
-        service = new AiChatServiceImpl(props, tools, llm);
+        service = new AiChatServiceImpl(props, tools, llm, null, null);
 
         JsonNode assistant = om.readTree("{\"content\":\"你好，我是小M\"}");
         when(llm.complete(any(), any())).thenReturn(assistant);

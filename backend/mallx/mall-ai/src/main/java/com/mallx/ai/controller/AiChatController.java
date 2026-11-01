@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -36,13 +37,16 @@ import org.springframework.http.MediaType;
 public class AiChatController {
 
     private final AiChatService aiChatService;
+    private final com.mallx.ai.service.AiServiceClient aiServiceClient;
     private final AiRateLimiter rateLimiter;
     private final AiProperties props;
 
-    public AiChatController(AiChatService aiChatService, AiRateLimiter rateLimiter, AiProperties props) {
+    public AiChatController(AiChatService aiChatService, AiRateLimiter rateLimiter, AiProperties props,
+                            com.mallx.ai.service.AiServiceClient aiServiceClient) {
         this.aiChatService = aiChatService;
         this.rateLimiter = rateLimiter;
         this.props = props;
+        this.aiServiceClient = aiServiceClient;
     }
 
     @Operation(summary = "客服对话（游客可用，登录后可查订单/售后）")
@@ -68,6 +72,33 @@ public class AiChatController {
     }
 
     @Operation(summary = "客服对话 · 流式（SSE；旅客可用）")
+    @GetMapping("/conversations")
+    public Result<Object> conversations(Authentication authentication) {
+        Long userId = (authentication != null && authentication.getPrincipal() instanceof Long id) ? id : null;
+        if (userId == null) {
+            return Result.ok(java.util.Map.of("code", 401, "items", java.util.List.of()));
+        }
+        try {
+            return Result.ok(aiServiceClient.get("/conversations", userId));
+        } catch (Exception e) {
+            return Result.ok(java.util.Map.of("code", 500, "items", java.util.List.of()));
+        }
+    }
+
+    @GetMapping("/conversations/{id}/messages")
+    public Result<Object> messages(@org.springframework.web.bind.annotation.PathVariable Long id,
+                                   Authentication authentication) {
+        Long userId = (authentication != null && authentication.getPrincipal() instanceof Long uid) ? uid : null;
+        if (userId == null) {
+            return Result.ok(java.util.Map.of("code", 401, "items", java.util.List.of()));
+        }
+        try {
+            return Result.ok(aiServiceClient.get("/conversations/" + id + "/messages", userId));
+        } catch (Exception e) {
+            return Result.ok(java.util.Map.of("code", 500, "items", java.util.List.of()));
+        }
+    }
+
     @PostMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(Authentication authentication,
                              HttpServletRequest request,

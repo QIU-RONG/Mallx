@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
-import { aiChat } from '../api'
+import { ElMessage } from 'element-plus'
+import { aiChat, aiConversationMessages, aiConversations } from '../api'
 import { useAuthStore } from '../stores/auth'
 
 /**
@@ -137,6 +138,33 @@ function onResize() {
 }
 
 const conversationId = ref<number | null>(Number(localStorage.getItem('mallx_ai_conv')) || null)
+const historyVisible = ref(false)
+const conversations = ref<Array<{ id: number; title: string; updatedAt: string; messageCount: number }>>([])
+
+async function openHistory() {
+  try {
+    const j = await aiConversations()
+    conversations.value = j.data.items || []
+    historyVisible.value = true
+  } catch {
+    ElMessage.warning('登录后才能查看历史会话')
+  }
+}
+
+async function pickConversation(id: number) {
+  const j = await aiConversationMessages(id)
+  const items = j.data.items || []
+  if (!items.length) return
+  messages.value = items.map((m) => ({
+    role: m.role === 'user' ? 'user' : 'assistant',
+    content: m.content,
+    mock: false,
+  }))
+  conversationId.value = id
+  localStorage.setItem('mallx_ai_conv', String(id))
+  historyVisible.value = false
+  scrollToBottom()
+}
 const messages = ref<Msg[]>([
   {
     role: 'assistant',
@@ -310,6 +338,16 @@ onUnmounted(() => {
     <span v-if="!open" class="fab-label">客服</span>
   </button>
 
+  <el-dialog v-model="historyVisible" title="历史会话" width="420px" append-to-body>
+    <el-empty v-if="!conversations.length" description="还没有历史会话" />
+    <div v-else class="history-list">
+      <button v-for="c in conversations" :key="c.id" type="button" class="history-item" @click="pickConversation(c.id)">
+        <span class="history-title">{{ c.title }}</span>
+        <span class="history-meta">{{ c.updatedAt }} · {{ c.messageCount }} 条</span>
+      </button>
+    </div>
+  </el-dialog>
+
   <!-- 对话面板：跟随按钮位置（拖到左边就出现在左边） -->
   <div class="panel" :class="{ 'panel--open': open }" :style="panelStyle">
     <header class="panel-head">
@@ -318,6 +356,7 @@ onUnmounted(() => {
         <div class="subtitle">AI 客服 · 售前导购 / 售后查询</div>
       </div>
       <div class="head-actions">
+        <button class="clear-btn" type="button" @click="openHistory">历史</button>
         <button class="clear-btn" type="button" @click="clearChat">清空</button>
         <span class="dot" />
       </div>
@@ -378,6 +417,37 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.history-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--mx-line);
+  border-radius: 8px;
+  background: var(--mx-surface);
+  cursor: pointer;
+  text-align: left;
+}
+.history-item:hover {
+  border-color: var(--mx-accent);
+}
+.history-title {
+  font-size: 13px;
+  color: var(--mx-ink);
+}
+.history-meta {
+  font-size: 11px;
+  color: var(--mx-ink-3);
+}
+
 .sources {
   display: flex;
   flex-wrap: wrap;

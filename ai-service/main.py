@@ -135,6 +135,19 @@ def kb_search(q: str = Query(..., min_length=1), k: int = 4):
     return {"code": 200, "query": q, "chunks": store.search(q, k=k)}
 
 
+@app.get("/conversations")
+def conversations(user_id: int = 0):
+    return {"code": 200, "items": memory.list_conversations(user_id)}
+
+
+@app.get("/conversations/{conversation_id}/messages")
+def conversation_messages(conversation_id: int, user_id: int = 0):
+    rows = memory.get_messages(user_id, conversation_id)
+    if rows is None:
+        return {"code": 403, "message": "会话不存在或不属于当前用户"}
+    return {"code": 200, "items": rows}
+
+
 @app.get("/ai/stats")
 def ai_stats():
     import psycopg2
