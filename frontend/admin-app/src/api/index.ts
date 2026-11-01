@@ -369,3 +369,16 @@ export function adminAuditLogs(params: {
     total: number
   }>>('/admin/audit-logs', { params })
 }
+
+/** AI 运营指标（Day 116） */
+export function adminAiStats() {
+  return http.get<never, Result<{
+    calls: number
+    todayCalls: number
+    promptTokens: number
+    completionTokens: number
+    avgElapsedMs: number
+    refusals: number
+    refusalRate: number
+  }>>('/admin/ai/stats')
+}

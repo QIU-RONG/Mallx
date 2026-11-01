@@ -101,4 +101,29 @@
         SELECT count(*) FROM refunds WHERE status = 'APPLIED'
     </select>
 
+    <select id="countAiCalls" resultType="long">
+        SELECT count(*) FROM ai_messages WHERE role = 'assistant'
+    </select>
+
+    <select id="countAiTodayCalls" resultType="long">
+        SELECT count(*) FROM ai_messages WHERE role = 'assistant' AND created_at >= CURRENT_DATE
+    </select>
+
+    <select id="sumAiPromptTokens" resultType="long">
+        SELECT coalesce(sum(prompt_tokens), 0) FROM ai_messages
+    </select>
+
+    <select id="sumAiCompletionTokens" resultType="long">
+        SELECT coalesce(sum(completion_tokens), 0) FROM ai_messages
+    </select>
+
+    <select id="avgAiElapsedMs" resultType="java.math.BigDecimal">
+        SELECT round(coalesce(avg(elapsed_ms), 0))
+          FROM ai_messages WHERE role = 'assistant'
+    </select>
+
+    <select id="countAiRefusals" resultType="long">
+        SELECT count(*) FROM ai_messages WHERE role = 'assistant' AND refusal
+    </select>
+
 </mapper>

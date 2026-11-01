@@ -52,7 +52,8 @@ def history(conversation_id: int, limit: int = 10) -> list[dict]:
     return [{"role": r, "content": c} for r, c in rows]
 
 
-def append(conversation_id: int, user_text: str, reply: str, tokens: dict | None = None) -> None:
+def append(conversation_id: int, user_text: str, reply: str, tokens: dict | None = None,
+           elapsed_ms: int | None = None, refusal: bool = False) -> None:
     tokens = tokens or {}
     with _conn() as conn, conn.cursor() as cur:
         cur.execute(
@@ -61,9 +62,10 @@ def append(conversation_id: int, user_text: str, reply: str, tokens: dict | None
             (conversation_id, user_text),
         )
         cur.execute(
-            "INSERT INTO ai_messages (conversation_id, role, content, prompt_tokens, completion_tokens)"
-            " VALUES (%s, 'assistant', %s, %s, %s)",
-            (conversation_id, reply, tokens.get("prompt_tokens"), tokens.get("completion_tokens")),
+            "INSERT INTO ai_messages (conversation_id, role, content, prompt_tokens, completion_tokens,"
+            " elapsed_ms, refusal) VALUES (%s, 'assistant', %s, %s, %s, %s, %s)",
+            (conversation_id, reply, tokens.get("prompt_tokens"), tokens.get("completion_tokens"),
+             elapsed_ms, refusal),
         )
         cur.execute("UPDATE ai_conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = %s", (conversation_id,))
 

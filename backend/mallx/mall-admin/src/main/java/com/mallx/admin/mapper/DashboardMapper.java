@@ -74,4 +74,17 @@ public interface DashboardMapper {
 
     /** 待处理售后数（refunds.status=APPLIED，待审核） */
     long countPendingRefund();
+
+    /** Day 116：AI 运营指标 */
+    long countAiCalls();
+
+    long countAiTodayCalls();
+
+    long sumAiPromptTokens();
+
+    long sumAiCompletionTokens();
+
+    java.math.BigDecimal avgAiElapsedMs();
+
+    long countAiRefusals();
 }

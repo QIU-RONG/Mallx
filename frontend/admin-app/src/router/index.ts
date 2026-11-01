@@ -28,6 +28,7 @@ const router = createRouter({
         { path: 'users', component: () => import('../views/UserList.vue') },
         { path: 'roles', component: () => import('../views/RoleList.vue') },
         { path: 'audit-logs', component: () => import('../views/AuditLogList.vue') },
+        { path: 'ai-ops', component: () => import('../views/AiOps.vue') },
       ],
     },
   ],

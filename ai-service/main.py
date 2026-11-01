@@ -132,6 +132,27 @@ def kb_search(q: str = Query(..., min_length=1), k: int = 4):
     return {"code": 200, "query": q, "chunks": store.search(q, k=k)}
 
 
+@app.get("/ai/stats")
+def ai_stats():
+    import psycopg2
+    from kb_lib.memory import _conn
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute("""
+            SELECT count(*) FILTER (WHERE role = 'assistant'),
+                   coalesce(sum(prompt_tokens), 0),
+                   coalesce(sum(completion_tokens), 0),
+                   round(coalesce(avg(elapsed_ms), 0)),
+                   count(*) FILTER (WHERE role = 'assistant' AND refusal)
+              FROM ai_messages
+        """)
+        calls, pt, ct, avg_ms, refusals = cur.fetchone()
+        cur.execute("SELECT count(*) FROM ai_messages WHERE role='assistant' AND created_at >= CURRENT_DATE")
+        today = cur.fetchone()[0]
+    return {"code": 200, "calls": calls, "todayCalls": today, "promptTokens": pt,
+            "completionTokens": ct, "avgElapsedMs": int(avg_ms or 0),
+            "refusals": refusals, "refusalRate": round(refusals / calls, 3) if calls else 0}
+
+
 @app.get("/kb/stats")
 def kb_stats():
     return {"code": 200, **store.stats(), **memory.stats()}
@@ -211,7 +232,7 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
             top = rows[0]
             reply_text = f"根据知识库：\n{top['content']}\n【来源：{top['source']} · {top['heading']}】"
         refusal = False
-    memory.append(conv_id, message, reply_text, tracker.usage)
+    memory.append(conv_id, message, reply_text, tracker.usage, elapsed_ms, refusal)
     return {
         "code": 200,
         "reply": reply_text,

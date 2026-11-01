@@ -36,6 +36,7 @@ export const ADMIN_MENUS: AdminMenuItem[] = [
   { path: '/users', label: '用户管理', perm: 'user:list' },
   { path: '/roles', label: '角色权限', perm: 'role:list' },
   { path: '/audit-logs', label: '操作日志', perm: 'admin:list' },
+  { path: '/ai-ops', label: 'AI 运营', perm: 'dashboard:overview' },
 ]
 
 /**
