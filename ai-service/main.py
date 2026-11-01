@@ -28,6 +28,9 @@ from kb_lib import memory, store
 
 app = FastAPI(title="MallX AI Service", version="1.0.0")
 
+# 进程内问题缓存（单实例足够；多实例应换 Redis）
+_CACHE: dict = {}
+
 JAVA_BASE = os.getenv("JAVA_BASE_URL", "http://127.0.0.1:8081")
 MODEL = os.getenv("OPENAI_MODEL", "deepseek-chat")
 BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
@@ -189,13 +192,35 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
     )
     started = time.time()
     tracker = UsageTracker()
-    result = executor.invoke(
+    # Day 117：同问题缓存（仅政策类、无用户身份依赖），省 token
+    cache_key = f"{MODEL}|{message.strip()}"
+    hit = _CACHE.get(cache_key)
+    if hit and time.time() < hit["expire"]:
+        memory.append(conv_id, message, hit["reply"], hit.get("tokens"), 0, False)
+        return {**hit["payload"], "conversation_id": conv_id, "cached": True,
+                "tokens": hit.get("tokens"), "elapsed_ms": 0}
+
+    try:
+        result = executor.invoke(
         {
             "input": message,
             "history": [(m.get("role"), m.get("content")) for m in history if m.get("content")],
         },
-        config={"callbacks": [tracker]},
-    )
+            config={"callbacks": [tracker]},
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Day 117：模型失败降级到「知识库原文 + 来源」，保证有依据而不是直接报错
+        rows = store.search(message, k=1)
+        if rows:
+            top = rows[0]
+            reply_text = f"根据知识库：\n{top['content']}\n【来源：{top['source']} · {top['heading']}】"
+            memory.append(conv_id, message, reply_text, {}, int((time.time() - started) * 1000), False)
+            return {"code": 200, "reply": reply_text, "tools": ["search_knowledge_base"],
+                    "sources": [{"source": top["source"], "heading": top["heading"]}],
+                    "elapsed_ms": int((time.time() - started) * 1000),
+                    "conversation_id": conv_id, "tokens": {}, "grounded": True,
+                    "refusal": False, "fallback": True, "reason": str(exc)[:200]}
+        raise
     elapsed_ms = int((time.time() - started) * 1000)
     steps = result.get("intermediate_steps", [])
     used = [step[0].tool for step in steps]
@@ -233,6 +258,14 @@ def chat(body: dict, authorization: Optional[str] = Header(default=None)):
             reply_text = f"根据知识库：\n{top['content']}\n【来源：{top['source']} · {top['heading']}】"
         refusal = False
     memory.append(conv_id, message, reply_text, tracker.usage, elapsed_ms, refusal)
+    if is_policy and not refusal:
+        _CACHE[cache_key] = {
+            "expire": time.time() + 600,
+            "reply": reply_text,
+            "tokens": tracker.usage,
+            "payload": {"code": 200, "reply": reply_text, "tools": used,
+                        "sources": sources, "grounded": True, "refusal": False},
+        }
     return {
         "code": 200,
         "reply": reply_text,
