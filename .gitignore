@@ -68,3 +68,5 @@ replay_pid*.log
 # Python AI 服务虚拟环境
 /ai-service/.venv/
 /ai-service/.env
+# 评测产物（数字写进 docs/daily，报告不入库）
+/ai-service/eval/*-report.json
