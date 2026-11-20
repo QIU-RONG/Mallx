@@ -32,6 +32,41 @@ Java 218 文件 / 19.4k 行   ·   Controller 26 个   ·   Mapper XML 13 份   
 
 ---
 
+## 一键跑起来（外部使用者最短路径）
+
+> 只依赖 Docker Desktop + Node 18+；不需要预装 PostgreSQL/Redis/RabbitMQ。
+
+```bash
+# ① 后端 + 数据库（首次会初始化全部 SQL 并导入演示数据）
+cd deploy
+cp .env.example .env            # 必须修改 JWT_SECRET、DB_PASSWORD
+docker compose -f docker-compose.app.yml up -d --build
+curl http://127.0.0.1:8080/api/hello
+
+# ② C 端商城（5173）
+cd ../frontend/mall-app
+npm install && npm run dev
+
+# ③ 管理端（5174）
+cd ../admin-app
+npm install && npm run dev
+```
+
+| 入口 | 地址 | 演示账号 |
+|---|---|---|
+| C 端商城 | http://localhost:5173 | `demo / demo123` |
+| 管理后台 | http://localhost:5174 | `admin / admin123` |
+| 商户后台 | http://localhost:5174（登录页切「商户」） | `merchant / merchant123` |
+| 后端 API | http://127.0.0.1:8080 | — |
+
+**AI 客服（可选）**：不配置时走 mock，页面仍可用；要接真实模型见 `ai-service/README.md`（Python，端口 8008），
+再给后端加环境变量 `AI_SERVICE_URL=http://127.0.0.1:8008`。
+
+**同作者的另外两个项目**：[ai-gateway](https://github.com/QIU-RONG/ai-gateway)（LLM 网关）、
+[vision-shop](https://github.com/QIU-RONG/vision-shop)（多模态商品助手）。
+
+---
+
 ## 技术栈
 
 | 层 | 技术 | 版本 |
